@@ -1,0 +1,105 @@
+const std = @import("std");
+const zua = @import("zua");
+
+const Zua = zua.Zua;
+const Args = zua.Args;
+const Result = zua.Result;
+const Table = zua.Table;
+
+const AppState = struct {
+    next_ticket: i32,
+};
+
+pub fn main(init: std.process.Init) !void {
+    const z = try zua.Zua.init(init.gpa);
+    defer z.deinit();
+
+    var app_state = AppState{ .next_ticket = 1000 };
+    const tag_values = [_][]const u8{ "zig", "lua", "bindings" };
+
+    const globals = z.globals();
+    defer globals.pop();
+
+    globals.set("greeting", "hello");
+    globals.set("answer", 41);
+
+    const guide = z.tableFrom(.{
+        .name = "guided-tour",
+        .tags = tag_values,
+        .version = 1,
+    });
+    globals.set("guide", guide);
+    guide.pop();
+
+    globals.set("paths", .{
+        .root = "usr",
+        .segments = [_][]const u8{ "local", "bin" },
+    });
+
+    const counter = z.tableFrom(.{ .count = 2 });
+    counter.setFn("increment", increment);
+    globals.set("counter", counter);
+    counter.pop();
+
+    globals.setFn("add", add);
+    globals.setFn("join_path", joinPath);
+    globals.setFn("next_ticket", nextTicket);
+
+    const registry = z.registry();
+    defer registry.pop();
+    registry.setLightUserdata("app_state", &app_state);
+
+    try z.exec(
+        \\message = greeting .. ", world"
+        \\counter:increment(5)
+        \\path = join_path(paths.root, paths.segments[1], paths.segments[2])
+    );
+
+    const parsed = try z.eval(.{ []const u8, i32, i32, i32, []const u8, []const u8 },
+        \\return message, add(answer, 1), counter.count, next_ticket(), guide.tags[2], path
+    );
+    std.debug.print("message={s}\n", .{parsed[0]});
+    std.debug.print("sum={d}\n", .{parsed[1]});
+    std.debug.print("counter={d}\n", .{parsed[2]});
+    std.debug.print("ticket={d}\n", .{parsed[3]});
+    std.debug.print("tag={s}\n", .{parsed[4]});
+    std.debug.print("path={s}\n", .{parsed[5]});
+
+    // getStruct reads all fields in one call and returns a typed Zig struct.
+    const guide_table = try globals.get("guide", zua.Table);
+    defer guide_table.pop();
+    const guide_data = try guide_table.getStruct(struct {
+        name: []const u8,
+        version: i32,
+    });
+    std.debug.print("guide.name={s} guide.version={d}\n", .{ guide_data.name, guide_data.version });
+}
+
+fn add(z: *Zua, args: Args) Result(.{i32}) {
+    const parsed = args.parse(.{ i32, i32 }) catch return z.err(.{i32}, "add expects (i32, i32)", .{});
+    return Result(.{i32}).owned(z.allocator, .{parsed[0] + parsed[1]});
+}
+
+fn increment(z: *Zua, args: Args) Result(.{i32}) {
+    const parsed = args.parse(.{ Table, i32 }) catch return z.err(.{i32}, "counter:increment expects (self, i32)", .{});
+    const self_table = parsed[0];
+    const next_value = (self_table.get("count", i32) catch return z.err(.{i32}, "counter.count missing", .{})) + parsed[1];
+    self_table.set("count", next_value);
+    return Result(.{i32}).owned(z.allocator, .{next_value});
+}
+
+fn joinPath(z: *Zua, args: Args) Result(.{[]const u8}) {
+    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return z.err(.{[]const u8}, "join_path expects (string, string, string)", .{});
+    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch return z.err(.{[]const u8}, "out of memory", .{});
+    defer z.allocator.free(joined);
+    return Result(.{[]const u8}).owned(z.allocator, .{@as([]const u8, joined)});
+}
+
+fn nextTicket(z: *Zua, args: Args) Result(.{i32}) {
+    _ = args;
+    const registry = z.registry();
+    defer registry.pop();
+    const app = registry.getLightUserdata("app_state", AppState) catch return z.err(.{i32}, "app state missing", .{});
+    app.next_ticket += 1;
+    return Result(.{i32}).owned(z.allocator, .{app.next_ticket - 1});
+}
