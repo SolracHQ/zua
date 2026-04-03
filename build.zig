@@ -26,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-light-userdata", .path = "example/light_userdata.zig" },
         .{ .name = "example-results", .path = "example/results.zig" },
         .{ .name = "example-guided-tour", .path = "example/guided_tour.zig" },
+        .{ .name = "example-optional-args", .path = "example/optional_args.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

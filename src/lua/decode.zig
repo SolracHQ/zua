@@ -52,13 +52,51 @@ pub fn parseTuple(
     comptime types: anytype,
     table_ownership: TableOwnership,
 ) ParseError!ParseResult(types) {
-    if (value_count != types.len) return error.InvalidArity;
+    var min_arity: usize = 0;
+
+    inline for (types) |T| {
+        if (!isOptional(T)) min_arity += 1;
+    }
+
+    if (value_count < min_arity or value_count > types.len)
+        return error.InvalidArity;
 
     var values: ParseResult(types) = undefined;
 
     inline for (types, 0..) |T, index| {
-        const stack_index = start_index + @as(lua.StackIndex, @intCast(index));
-        values[index] = try decodeValue(state, allocator, stack_index, T, table_ownership);
+        if (comptime isOptional(T)) {
+            if (index >= value_count) {
+                values[index] = null;
+            } else {
+                const stack_index = start_index + @as(lua.StackIndex, @intCast(index));
+
+                if (lua.valueType(state, stack_index) == .nil) {
+                    values[index] = null;
+                } else {
+                    values[index] =
+                        try decodeValue(
+                            state,
+                            allocator,
+                            stack_index,
+                            optionalChild(T),
+                            table_ownership,
+                        );
+                }
+            }
+        } else {
+            if (index >= value_count) return error.InvalidArity;
+
+            const stack_index = start_index + @as(lua.StackIndex, @intCast(index));
+
+            values[index] =
+                try decodeValue(
+                    state,
+                    allocator,
+                    stack_index,
+                    T,
+                    table_ownership,
+                );
+        }
     }
 
     return values;
@@ -125,4 +163,14 @@ fn parseFloat(comptime T: type, state: *lua.State, index: lua.StackIndex) ParseE
 
     const value = lua.toNumber(state, index) orelse return error.InvalidType;
     return @floatCast(value);
+}
+
+// Optional type helpers
+
+fn isOptional(comptime T: type) bool {
+    return @typeInfo(T) == .optional;
+}
+
+fn optionalChild(comptime T: type) type {
+    return @typeInfo(T).optional.child;
 }

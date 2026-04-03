@@ -16,7 +16,8 @@ list-examples:
         simple-function \
         light-userdata \
         results \
-        guided-tour
+        guided-tour \
+        optional-args
 
 run-example name:
     zig build "run-example-{{name}}"
