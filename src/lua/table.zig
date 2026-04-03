@@ -1,5 +1,7 @@
 const std = @import("std");
+const Args = @import("args.zig").Args;
 const lua = @import("lua.zig");
+const Zua = @import("zua.zig").Zua;
 
 /// Errors returned by typed table reads.
 pub const Error = error{
@@ -124,9 +126,7 @@ pub const Table = struct {
 
     /// Registers a Zig callback as `table[key]`.
     pub fn setFn(self: Table, key: [:0]const u8, comptime f: anytype) void {
-        const zua_mod = @import("zua.zig");
-
-        lua.pushCFunction(self.state, zua_mod.wrap(f));
+        lua.pushCFunction(self.state, wrap(f));
         lua.setField(self.state, self.index, key);
     }
 
@@ -327,6 +327,65 @@ fn decodeValue(comptime T: type, state: *lua.State, index: lua.StackIndex) Error
         },
         else => @compileError("unsupported table get type: " ++ @typeName(T)),
     }
+}
+
+fn unwrapCallbackResultType(comptime ReturnType: type) type {
+    return switch (@typeInfo(ReturnType)) {
+        .error_union => |info| info.payload,
+        else => ReturnType,
+    };
+}
+
+fn isErrorUnionType(comptime T: type) bool {
+    return @typeInfo(T) == .error_union;
+}
+
+/// Builds the private C trampoline used by `Table.setFn`.
+///
+/// The trampoline recovers the owning `Zua`, initializes `Args`, converts
+/// `!Result(...)` callbacks into `Result.errZig(err)`, and delays `lua_error`
+/// until after Zig defers have run.
+fn wrap(comptime f: anytype) lua.CFunction {
+    const function_info = @typeInfo(@TypeOf(f)).@"fn";
+    const ReturnType = function_info.return_type orelse @compileError("callback must have a return type");
+    const CallbackResultType = unwrapCallbackResultType(ReturnType);
+
+    if (!@hasDecl(CallbackResultType, "value_types") or !@hasDecl(CallbackResultType, "value_count")) {
+        @compileError("callback must return zua.Result(T), zua.Result(.{ ... }), or an error union containing one of them");
+    }
+
+    return struct {
+        fn trampoline(state_: ?*lua.State) callconv(.c) c_int {
+            const state = state_ orelse unreachable;
+            const zua = Zua.fromState(state);
+            const baseline = lua.getTop(state);
+
+            const args = Args.init(state, zua.allocator, baseline);
+            const raw_result = f(zua, args);
+            const result: CallbackResultType = if (comptime isErrorUnionType(ReturnType))
+                raw_result catch |err| CallbackResultType.errZig(err)
+            else
+                raw_result;
+
+            if (result.failure) |failure| {
+                switch (failure) {
+                    .static_message => |message| lua.pushString(state, message),
+                    .owned_message => |message| {
+                        lua.pushString(state, message);
+                        zua.allocator.free(message);
+                    },
+                    .zig_error => |err| lua.pushString(state, @errorName(err)),
+                }
+                return lua.raiseError(state);
+            }
+
+            var success = result;
+            defer success.deinit(zua.allocator);
+            success.pushValues(state, zua.allocator);
+
+            return @intCast(CallbackResultType.value_count);
+        }
+    }.trampoline;
 }
 
 test "table set and get values" {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+
+- `Args.parse` supports optional positional parameters via `?T`
+- `Result(T)` supports single-value callback returns without the tuple wrapper ceremony
+- `Table.setFn` accepts callbacks returning either `Result(...)` or `!Result(...)`
+- The `wrap` trampoline converts Zig errors from `!Result(...)` callbacks into `Result.errZig(err)` automatically
+- `Result.errOwned` formats and allocates owned error messages directly from `fmt` and `args`
+
 ## 0.0.1
 
 First working version, extracted from memscript.
@@ -20,6 +30,6 @@ First working version, extracted from memscript.
 - `Table.pop` removes the table from the stack when done
 - `Args.parse` decodes typed callback arguments into a comptime tuple in one call
 - `Result(.{ ... })` declares callback return types and carries typed success values or Lua-facing failures
-- `zua.err(.{ ... }, ...)` allocates callback error messages with the right return shape
+- `Result.errStatic`, `Result.errOwned`, and `Result.errZig` carry callback failures without exposing `lua_error` directly
 - The `wrap` trampoline delays `lua_error` until after the Zig callback has fully returned, keeping `defer` safe inside callbacks
 - Supported types for `parse` and `set`: `i32`, `i64`, `f32`, `f64`, `[]const u8`, `bool`, `zua.Table`

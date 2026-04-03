@@ -129,16 +129,6 @@ pub const Zua = struct {
         return parsed;
     }
 
-    /// Formats and allocates a Lua-facing error message for the callback trampoline to raise.
-    /// The message is owned by the Zua allocator and freed after being pushed to Lua.
-    pub fn err(self: *Zua, comptime types: anytype, comptime fmt: []const u8, args: anytype) Result(types) {
-        const message = std.fmt.allocPrint(self.allocator, fmt, args) catch {
-            return Result(types).errStatic("out of memory");
-        };
-
-        return Result(types).errOwned(message);
-    }
-
     /// Recovers the owning Zua instance from a raw `lua_State` pointer.
     /// Called by the callback trampoline to retrieve the Zua context.
     pub fn fromState(state: *lua.State) *Zua {
@@ -150,81 +140,52 @@ pub const Zua = struct {
     }
 };
 
-/// Internal trampoline generator used by `Table.setFn`.
-pub fn wrap(comptime f: anytype) lua.CFunction {
-    const function_info = @typeInfo(@TypeOf(f)).@"fn";
-    const ReturnType = function_info.return_type orelse @compileError("callback must have a return type");
-
-    if (!@hasDecl(ReturnType, "value_types")) {
-        @compileError("callback must return zua.Result(.{ ... })");
-    }
-
-    return struct {
-        fn trampoline(state_: ?*lua.State) callconv(.c) c_int {
-            const state = state_ orelse unreachable;
-            const zua = Zua.fromState(state);
-            const baseline = lua.getTop(state);
-
-            const args = Args.init(state, zua.allocator, baseline);
-            const result = f(zua, args);
-
-            if (result.failure) |failure| {
-                switch (failure) {
-                    .static_message => |message| lua.pushString(state, message),
-                    .owned_message => |message| {
-                        lua.pushString(state, message);
-                        zua.allocator.free(message);
-                    },
-                    .zig_error => |err| lua.pushString(state, @errorName(err)),
-                }
-                return lua.raiseError(state);
-            }
-
-            var success = result;
-            defer success.deinit(zua.allocator);
-
-            inline for (ReturnType.value_types, 0..) |_, index| {
-                Table.pushValueToStack(state, zua.allocator, success.values[index]);
-            }
-
-            return @intCast(ReturnType.value_types.len);
-        }
-    }.trampoline;
-}
-
 var fail_callback_defer_ran = false;
 var registry_helper_value: i32 = 1;
 
-fn pushAnswer(zua: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{i32}) catch return zua.err(.{i32}, "pushAnswer expects (i32)", .{});
+fn pushAnswer(zua: *Zua, args: Args) Result(i32) {
+    _ = zua;
+    const parsed = args.parse(.{i32}) catch return Result(i32).errStatic("pushAnswer expects (i32)");
 
-    return Result(.{i32}).owned(zua.allocator, .{parsed[0] + 1});
+    return Result(i32).ok(parsed[0] + 1);
 }
 
 fn failWithDefer(zua: *Zua, args: Args) Result(.{}) {
+    _ = zua;
     _ = args;
     defer fail_callback_defer_ran = true;
-    return zua.err(.{}, "callback failed", .{});
+    return Result(.{}).errStatic("callback failed");
 }
 
-fn readRegistryValue(zua: *Zua, args: Args) Result(.{i32}) {
+fn readRegistryValue(zua: *Zua, args: Args) Result(i32) {
     _ = args;
 
     const registry = zua.registry();
     defer registry.pop();
 
-    const value = registry.getLightUserdata("helper_value", i32) catch return zua.err(.{i32}, "helper value missing", .{});
+    const value = registry.getLightUserdata("helper_value", i32) catch return Result(i32).errStatic("helper value missing");
     value.* += 1;
-    return Result(.{i32}).owned(zua.allocator, .{value.* - 1});
+    return Result(i32).ok(value.* - 1);
 }
 
-fn incrementMethod(zua: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ Table, i32 }) catch return zua.err(.{i32}, "counter:increment expects (self, i32)", .{});
+fn incrementMethod(zua: *Zua, args: Args) Result(i32) {
+    _ = zua;
+    const parsed = args.parse(.{ Table, i32 }) catch return Result(i32).errStatic("counter:increment expects (self, i32)");
 
     const self_table = parsed[0];
-    const next_value = (self_table.get("count", i32) catch return zua.err(.{i32}, "counter.count missing", .{})) + parsed[1];
+    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + parsed[1];
     self_table.set("count", next_value);
-    return Result(.{i32}).owned(zua.allocator, .{next_value});
+    return Result(i32).ok(next_value);
+}
+
+fn parseSingleInteger(args: Args) decode.ParseError!i32 {
+    const parsed = try args.parse(.{i32});
+    return parsed[0];
+}
+
+fn pushAnswerWithTry(_: *Zua, args: Args) !Result(i32) {
+    const value = try parseSingleInteger(args);
+    return Result(i32).ok(value + 10);
 }
 
 test "zua exec and globals interop" {
@@ -249,6 +210,18 @@ test "wrapped callbacks return pushed results" {
     globals.setFn("inc", pushAnswer);
 
     try zua.exec("answer = inc(41)");
+    try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
+}
+
+test "wrapped callbacks accept error-union results" {
+    const zua = try Zua.init(std.testing.allocator);
+    defer zua.deinit();
+
+    const globals = zua.globals();
+    defer globals.pop();
+    globals.setFn("inc_try", pushAnswerWithTry);
+
+    try zua.exec("answer = inc_try(32)");
     try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
 }
 

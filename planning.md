@@ -4,15 +4,6 @@ Future work that is still not implemented.
 
 After struggling to port the current memscript API onto zua, it became clear that I rely on a few recurring binding patterns that are still awkward to express with the current surface area. These are the main items planned for the next feature release, likely v0.2.0.
 
-## Callback ergonomics
-
-The callback path works, but it still forces some ceremony in exactly the cases where zua is supposed to remove Lua/C API friction.
-
-- Add `Result(T)` support for single-value returns so callbacks can write `Result(i32).ok(42)` instead of `Result(.{i32}).ok(.{42})`.
-- Keep tuple-style `Result(.{ T1, T2, ... })` for multi-value returns.
-- Update `Table.setFn` and the internal trampoline so callbacks may return `!Result(...)` in addition to plain `Result(...)`.
-- When a callback returns a Zig error, have `wrap` catch it and convert it to `Result.errZig(err)` automatically so callback bodies can use normal `try`-based helper calls.
-
 ## Table decode ergonomics
 
 Memscript uses option tables heavily for APIs like `proc.list`, `process.regions`, `process.scan`, and `entries.rescan`.

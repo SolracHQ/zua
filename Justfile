@@ -17,7 +17,8 @@ list-examples:
         light-userdata \
         results \
         guided-tour \
-        optional-args
+        optional-args \
+        try-callback
 
 run-example name:
     zig build "run-example-{{name}}"

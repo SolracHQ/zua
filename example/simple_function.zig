@@ -1,10 +1,10 @@
 const std = @import("std");
 const zua = @import("zua");
 
-fn add(z: *zua.Zua, args: zua.Args) zua.Result(.{i32}) {
-    const parsed = args.parse(.{ i32, i32 }) catch return z.err(.{i32}, "add expects (i32, i32)", .{});
+fn add(_: *zua.Zua, args: zua.Args) zua.Result(i32) {
+    const parsed = args.parse(.{ i32, i32 }) catch return zua.Result(i32).errStatic("add expects (i32, i32)");
 
-    return zua.Result(.{i32}).owned(z.allocator, .{parsed[0] + parsed[1]});
+    return zua.Result(i32).ok(parsed[0] + parsed[1]);
 }
 
 pub fn main(init: std.process.Init) !void {

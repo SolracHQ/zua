@@ -1,15 +1,15 @@
 const std = @import("std");
 const zua = @import("zua");
 
-fn increment(z: *zua.Zua, args: zua.Args) zua.Result(.{i32}) {
-    const parsed = args.parse(.{ zua.Table, i32 }) catch return z.err(.{i32}, "counter:increment expects (self, i32)", .{});
+fn increment(_: *zua.Zua, args: zua.Args) zua.Result(i32) {
+    const parsed = args.parse(.{ zua.Table, i32 }) catch return zua.Result(i32).errStatic("counter:increment expects (self, i32)");
 
     const counter = parsed[0];
     defer counter.pop();
 
-    const next_value = (counter.get("count", i32) catch return z.err(.{i32}, "counter.count missing", .{})) + parsed[1];
+    const next_value = (counter.get("count", i32) catch return zua.Result(i32).errStatic("counter.count missing")) + parsed[1];
     counter.set("count", next_value);
-    return zua.Result(.{i32}).owned(z.allocator, .{next_value});
+    return zua.Result(i32).ok(next_value);
 }
 
 pub fn main(init: std.process.Init) !void {

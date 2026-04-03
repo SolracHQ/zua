@@ -75,31 +75,33 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("guide.name={s} guide.version={d}\n", .{ guide_data.name, guide_data.version });
 }
 
-fn add(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ i32, i32 }) catch return z.err(.{i32}, "add expects (i32, i32)", .{});
-    return Result(.{i32}).owned(z.allocator, .{parsed[0] + parsed[1]});
+fn add(_: *Zua, args: Args) Result(i32) {
+    const parsed = args.parse(.{ i32, i32 }) catch return Result(i32).errStatic("add expects (i32, i32)");
+    return Result(i32).ok(parsed[0] + parsed[1]);
 }
 
-fn increment(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ Table, i32 }) catch return z.err(.{i32}, "counter:increment expects (self, i32)", .{});
+fn increment(_: *Zua, args: Args) Result(i32) {
+    const parsed = args.parse(.{ Table, i32 }) catch return Result(i32).errStatic("counter:increment expects (self, i32)");
     const self_table = parsed[0];
-    const next_value = (self_table.get("count", i32) catch return z.err(.{i32}, "counter.count missing", .{})) + parsed[1];
+    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + parsed[1];
     self_table.set("count", next_value);
-    return Result(.{i32}).owned(z.allocator, .{next_value});
+    return Result(i32).ok(next_value);
 }
 
-fn joinPath(z: *Zua, args: Args) Result(.{[]const u8}) {
-    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return z.err(.{[]const u8}, "join_path expects (string, string, string)", .{});
-    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch return z.err(.{[]const u8}, "out of memory", .{});
+fn joinPath(z: *Zua, args: Args) Result([]const u8) {
+    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return Result([]const u8).errStatic("join_path expects (string, string, string)");
+    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch {
+        return Result([]const u8).errStatic("out of memory");
+    };
     defer z.allocator.free(joined);
-    return Result(.{[]const u8}).owned(z.allocator, .{@as([]const u8, joined)});
+    return Result([]const u8).owned(z.allocator, joined);
 }
 
-fn nextTicket(z: *Zua, args: Args) Result(.{i32}) {
+fn nextTicket(z: *Zua, args: Args) Result(i32) {
     _ = args;
     const registry = z.registry();
     defer registry.pop();
-    const app = registry.getLightUserdata("app_state", AppState) catch return z.err(.{i32}, "app state missing", .{});
+    const app = registry.getLightUserdata("app_state", AppState) catch return Result(i32).errStatic("app state missing");
     app.next_ticket += 1;
-    return Result(.{i32}).owned(z.allocator, .{app.next_ticket - 1});
+    return Result(i32).ok(app.next_ticket - 1);
 }

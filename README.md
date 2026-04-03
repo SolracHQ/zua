@@ -42,30 +42,33 @@ std.debug.print("{s} {d}\n", .{ parsed[0], parsed[1] });
 Callbacks declare their return types in the signature. Arguments are parsed in one line, errors are returned without touching the Lua stack directly.
 
 ```zig
-fn add(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ i32, i32 }) catch return z.err(.{i32}, "add expects (i32, i32)", .{});
-    return Result(.{i32}).ok(.{parsed[0] + parsed[1]});
+fn add(_: *Zua, args: Args) Result(i32) {
+    const parsed = args.parse(.{ i32, i32 }) catch return Result(i32).errStatic("add expects (i32, i32)");
+    return Result(i32).ok(parsed[0] + parsed[1]);
 }
 ```
 
 Methods work the same way. The first argument from `:` syntax is the receiver table, decoded like any other argument.
 
 ```zig
-fn increment(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ Table, i32 }) catch return z.err(.{i32}, "counter:increment expects (self, i32)", .{});
-    const next = (parsed[0].get("count", i32) catch return z.err(.{i32}, "counter.count missing", .{})) + parsed[1];
+fn increment(_: *Zua, args: Args) Result(i32) {
+    const parsed = args.parse(.{ Table, i32 }) catch return Result(i32).errStatic("counter:increment expects (self, i32)");
+    const next = (parsed[0].get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + parsed[1];
     parsed[0].set("count", next);
-    return Result(.{i32}).ok(.{next});
+    return Result(i32).ok(next);
 }
 ```
 
 Use `owned` instead of `ok` when returning allocated strings. The trampoline frees them after pushing, so you do not track the allocation yourself.
 
 ```zig
-fn joinPath(z: *Zua, args: Args) Result(.{[]const u8}) {
-    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return z.err(.{[]const u8}, "join_path expects (string, string, string)", .{});
-    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch return z.err(.{[]const u8}, "out of memory", .{});
-    return Result(.{[]const u8}).owned(z.allocator, .{joined});
+fn joinPath(z: *Zua, args: Args) Result([]const u8) {
+    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return Result([]const u8).errStatic("join_path expects (string, string, string)");
+    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch {
+        return Result([]const u8).errStatic("out of memory");
+    };
+    defer z.allocator.free(joined);
+    return Result([]const u8).owned(z.allocator, joined);
 }
 ```
 
@@ -74,13 +77,13 @@ Light userdata is the cleanest way to pass host state into callbacks without exp
 ```zig
 zua.registry().setLightUserdata("app_state", &app_state);
 
-fn nextTicket(z: *Zua, args: Args) Result(.{i32}) {
+fn nextTicket(z: *Zua, args: Args) Result(i32) {
     _ = args;
     const registry = z.registry();
     defer registry.pop();
-    const app = registry.getLightUserdata("app_state", AppState) catch return z.err(.{i32}, "app state missing", .{});
+    const app = registry.getLightUserdata("app_state", AppState) catch return Result(i32).errStatic("app state missing");
     app.next_ticket += 1;
-    return z.Result(.{i32}).ok(.{app.next_ticket - 1});
+    return z.Result(i32).ok(app.next_ticket - 1);
 }
 ```
 
