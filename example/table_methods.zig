@@ -1,13 +1,8 @@
 const std = @import("std");
 const zua = @import("zua");
 
-fn increment(_: *zua.Zua, args: zua.Args) zua.Result(i32) {
-    const parsed = args.parse(.{ zua.Table, i32 }) catch return zua.Result(i32).errStatic("counter:increment expects (self, i32)");
-
-    const counter = parsed[0];
-    defer counter.pop();
-
-    const next_value = (counter.get("count", i32) catch return zua.Result(i32).errStatic("counter.count missing")) + parsed[1];
+fn increment(_: *zua.Zua, counter: zua.Table, delta: i32) zua.Result(i32) {
+    const next_value = (counter.get("count", i32) catch return zua.Result(i32).errStatic("counter.count missing")) + delta;
     counter.set("count", next_value);
     return zua.Result(i32).ok(next_value);
 }
@@ -21,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
 
     const counter = z.createTable(0, 2);
     counter.set("count", 0);
-    counter.setFn("increment", increment);
+    counter.setFn("increment", zua.ZuaFn.from(increment, "counter:increment expects (self, i32)"));
     globals.set("counter", counter);
     counter.pop();
 

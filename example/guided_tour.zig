@@ -2,7 +2,6 @@ const std = @import("std");
 const zua = @import("zua");
 
 const Zua = zua.Zua;
-const Args = zua.Args;
 const Result = zua.Result;
 const Table = zua.Table;
 
@@ -37,13 +36,14 @@ pub fn main(init: std.process.Init) !void {
     });
 
     const counter = z.tableFrom(.{ .count = 2 });
-    counter.setFn("increment", increment);
+    counter.setFn("increment", zua.ZuaFn.from(increment, "counter:increment expects (self, i32)"));
     globals.set("counter", counter);
     counter.pop();
 
-    globals.setFn("add", add);
-    globals.setFn("join_path", joinPath);
-    globals.setFn("next_ticket", nextTicket);
+    globals.setFn("add", zua.ZuaFn.from(add, "add expects (i32, i32)"));
+    globals.setFn("join_path", zua.ZuaFn.from(joinPath, "join_path expects (string, string, string)"));
+    globals.setFn("next_ticket", zua.ZuaFn.from(nextTicket, "next_ticket expects ()"));
+    globals.setFn("printConfig", zua.ZuaFn.pure(printConfig, "printConfig expects (table)"));
 
     const registry = z.registry();
     defer registry.pop();
@@ -53,6 +53,7 @@ pub fn main(init: std.process.Init) !void {
         \\message = greeting .. ", world"
         \\counter:increment(5)
         \\path = join_path(paths.root, paths.segments[1], paths.segments[2])
+        \\printConfig({ name = "config-example", version = 42 })
     );
 
     const parsed = try z.eval(.{ []const u8, i32, i32, i32, []const u8, []const u8 },
@@ -68,40 +69,43 @@ pub fn main(init: std.process.Init) !void {
     // getStruct reads all fields in one call and returns a typed Zig struct.
     const guide_table = try globals.get("guide", zua.Table);
     defer guide_table.pop();
-    const guide_data = try guide_table.getStruct(struct {
+    const guide_data = try zua.translation.decodeStruct(zua.Table, guide_table, struct {
         name: []const u8,
         version: i32,
     });
     std.debug.print("guide.name={s} guide.version={d}\n", .{ guide_data.name, guide_data.version });
 }
 
-fn add(_: *Zua, args: Args) Result(i32) {
-    const parsed = args.parse(.{ i32, i32 }) catch return Result(i32).errStatic("add expects (i32, i32)");
-    return Result(i32).ok(parsed[0] + parsed[1]);
+fn add(_: *Zua, a: i32, b: i32) Result(i32) {
+    return Result(i32).ok(a + b);
 }
 
-fn increment(_: *Zua, args: Args) Result(i32) {
-    const parsed = args.parse(.{ Table, i32 }) catch return Result(i32).errStatic("counter:increment expects (self, i32)");
-    const self_table = parsed[0];
-    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + parsed[1];
+fn increment(_: *Zua, self_table: Table, delta: i32) Result(i32) {
+    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + delta;
     self_table.set("count", next_value);
     return Result(i32).ok(next_value);
 }
 
-fn joinPath(z: *Zua, args: Args) Result([]const u8) {
-    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return Result([]const u8).errStatic("join_path expects (string, string, string)");
-    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch {
+fn joinPath(z: *Zua, a: []const u8, b: []const u8, c: []const u8) Result([]const u8) {
+    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ a, b, c }) catch {
         return Result([]const u8).errStatic("out of memory");
     };
     defer z.allocator.free(joined);
     return Result([]const u8).owned(z.allocator, joined);
 }
 
-fn nextTicket(z: *Zua, args: Args) Result(i32) {
-    _ = args;
+fn nextTicket(z: *Zua) Result(i32) {
     const registry = z.registry();
     defer registry.pop();
     const app = registry.getLightUserdata("app_state", AppState) catch return Result(i32).errStatic("app state missing");
     app.next_ticket += 1;
     return Result(i32).ok(app.next_ticket - 1);
+}
+
+fn printConfig(config: struct {
+    name: []const u8,
+    version: i32,
+}) Result(.{}) {
+    std.debug.print("config.name={s} config.version={d}\n", .{ config.name, config.version });
+    return Result(.{}).ok(.{});
 }

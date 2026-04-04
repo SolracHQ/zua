@@ -12,10 +12,10 @@
 
 const std = @import("std");
 const lua = @import("lua.zig");
-const Args = @import("args.zig").Args;
-const decode = @import("decode.zig");
 const Table = @import("table.zig").Table;
 const result_module = @import("result.zig");
+const translation = @import("translation.zig");
+const ZuaFn = @import("zua_fn.zig");
 
 const zua_registry_key: [:0]const u8 = "zua_zua";
 
@@ -87,8 +87,8 @@ pub const Zua = struct {
     /// Array elements become integer keys; struct fields become string keys.
     /// Nested structs/arrays are converted recursively.
     pub fn tableFrom(self: *Zua, value: anytype) Table {
-        const table = self.createTable(Table.inferArrayCapacity(value), Table.inferRecordCapacity(value));
-        table.fill(value);
+        const table = self.createTable(translation.inferArrayCapacity(value), translation.inferRecordCapacity(value));
+        translation.fillTable(Table, table, value);
         return table;
     }
 
@@ -107,7 +107,7 @@ pub const Zua = struct {
 
     /// Executes a Lua chunk and decodes its return values into a typed tuple.
     /// Example: `const (num, msg) = try zua.eval(.{i32, []const u8}, "return 42, 'ok'")`.
-    pub fn eval(self: *Zua, comptime types: anytype, source: []const u8) (lua.Error || decode.ParseError)!decode.ParseResult(types) {
+    pub fn eval(self: *Zua, comptime types: anytype, source: []const u8) (lua.Error || translation.ParseError)!translation.ParseResult(types) {
         const previous_top = lua.getTop(self.state);
         errdefer lua.setTop(self.state, previous_top);
 
@@ -117,7 +117,8 @@ pub const Zua = struct {
         try lua.loadString(self.state, chunk);
         try lua.protectedCall(self.state, 0, lua.MULT_RETURN, 0);
 
-        const parsed = try decode.parseTuple(
+        const parsed = try translation.parseTuple(
+            Table,
             self.state,
             self.allocator,
             previous_top + 1,
@@ -143,23 +144,16 @@ pub const Zua = struct {
 var fail_callback_defer_ran = false;
 var registry_helper_value: i32 = 1;
 
-fn pushAnswer(zua: *Zua, args: Args) Result(i32) {
-    _ = zua;
-    const parsed = args.parse(.{i32}) catch return Result(i32).errStatic("pushAnswer expects (i32)");
-
-    return Result(i32).ok(parsed[0] + 1);
+fn pushAnswer(_: *Zua, value: i32) Result(i32) {
+    return Result(i32).ok(value + 1);
 }
 
-fn failWithDefer(zua: *Zua, args: Args) Result(.{}) {
-    _ = zua;
-    _ = args;
+fn failWithDefer(_: *Zua) Result(.{}) {
     defer fail_callback_defer_ran = true;
     return Result(.{}).errStatic("callback failed");
 }
 
-fn readRegistryValue(zua: *Zua, args: Args) Result(i32) {
-    _ = args;
-
+fn readRegistryValue(zua: *Zua) Result(i32) {
     const registry = zua.registry();
     defer registry.pop();
 
@@ -168,24 +162,19 @@ fn readRegistryValue(zua: *Zua, args: Args) Result(i32) {
     return Result(i32).ok(value.* - 1);
 }
 
-fn incrementMethod(zua: *Zua, args: Args) Result(i32) {
-    _ = zua;
-    const parsed = args.parse(.{ Table, i32 }) catch return Result(i32).errStatic("counter:increment expects (self, i32)");
-
-    const self_table = parsed[0];
-    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + parsed[1];
+fn incrementMethod(_: *Zua, self_table: Table, delta: i32) Result(i32) {
+    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + delta;
     self_table.set("count", next_value);
     return Result(i32).ok(next_value);
 }
 
-fn parseSingleInteger(args: Args) decode.ParseError!i32 {
-    const parsed = try args.parse(.{i32});
-    return parsed[0];
+fn parseSingleInteger(value: i32) translation.ParseError!i32 {
+    return value;
 }
 
-fn pushAnswerWithTry(_: *Zua, args: Args) !Result(i32) {
-    const value = try parseSingleInteger(args);
-    return Result(i32).ok(value + 10);
+fn pushAnswerWithTry(_: *Zua, value: i32) !Result(i32) {
+    const parsed = try parseSingleInteger(value);
+    return Result(i32).ok(parsed + 10);
 }
 
 test "zua exec and globals interop" {
@@ -207,7 +196,7 @@ test "wrapped callbacks return pushed results" {
 
     const globals = zua.globals();
     defer globals.pop();
-    globals.setFn("inc", pushAnswer);
+    globals.setFn("inc", ZuaFn.from(pushAnswer, "inc expects (i32)"));
 
     try zua.exec("answer = inc(41)");
     try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
@@ -219,7 +208,7 @@ test "wrapped callbacks accept error-union results" {
 
     const globals = zua.globals();
     defer globals.pop();
-    globals.setFn("inc_try", pushAnswerWithTry);
+    globals.setFn("inc_try", ZuaFn.from(pushAnswerWithTry, "inc_try expects (i32)"));
 
     try zua.exec("answer = inc_try(32)");
     try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
@@ -231,7 +220,7 @@ test "wrapped callbacks surface Lua errors after Zig defers run" {
 
     const globals = zua.globals();
     defer globals.pop();
-    globals.setFn("fail", failWithDefer);
+    globals.setFn("fail", ZuaFn.from(failWithDefer, "fail expects ()"));
 
     fail_callback_defer_ran = false;
     try std.testing.expectError(lua.Error.Runtime, zua.exec("fail()"));
@@ -250,7 +239,7 @@ test "wrapped callbacks count results after deferred cleanup" {
 
     const globals = zua.globals();
     defer globals.pop();
-    globals.setFn("next_value", readRegistryValue);
+    globals.setFn("next_value", ZuaFn.from(readRegistryValue, "next_value expects ()"));
 
     try zua.exec(
         \\first = next_value()
@@ -272,7 +261,7 @@ test "wrapped method callbacks receive self without popping it" {
 
     const counter = zua.createTable(0, 2);
     counter.set("count", 0);
-    counter.setFn("increment", incrementMethod);
+    counter.setFn("increment", ZuaFn.from(incrementMethod, "counter:increment expects (self, i32)"));
     globals.set("counter", counter);
     counter.pop();
 

@@ -4,11 +4,13 @@
 
 ### Added
 
-- `Args.parse` supports optional positional parameters via `?T`
+- Callbacks decode arguments directly from the Zig function signature, including optional positional parameters via `?T`
 - `Result(T)` supports single-value callback returns without the tuple wrapper ceremony
 - `Table.setFn` accepts callbacks returning either `Result(...)` or `!Result(...)`
 - The `wrap` trampoline converts Zig errors from `!Result(...)` callbacks into `Result.errZig(err)` automatically
 - `Result.errOwned` formats and allocates owned error messages directly from `fmt` and `args`
+- `Table.get` and `Table.getStruct` support optional fields like `?T`
+- `Table.getStruct` supports recursive nested table decoding for struct fields
 
 ## 0.0.1
 

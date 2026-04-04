@@ -1,6 +1,6 @@
 const std = @import("std");
 const lua = @import("lua.zig");
-const decode = @import("decode.zig");
+const translation = @import("translation.zig");
 const Table = @import("table.zig").Table;
 
 /// Failure reason for a callback result.
@@ -104,7 +104,7 @@ fn SingleResult(comptime T: type) type {
 
         /// Pushes the successful value onto the Lua stack.
         pub fn pushValues(self: @This(), state: *lua.State, allocator: std.mem.Allocator) void {
-            Table.pushValueToStack(state, allocator, self.value);
+            translation.pushValue(Table, state, allocator, self.value);
         }
 
         /// Releases any owned memory associated with this result.
@@ -119,7 +119,7 @@ fn MultiResult(comptime types: anytype) type {
     return struct {
         pub const value_types = types;
         pub const value_count = types.len;
-        pub const ValueTuple = decode.ParseResult(types);
+        pub const ValueTuple = translation.ParseResult(types);
 
         failure: ?Failure = null,
         values: ValueTuple = undefined,
@@ -169,7 +169,7 @@ fn MultiResult(comptime types: anytype) type {
         /// Pushes all successful values onto the Lua stack.
         pub fn pushValues(self: @This(), state: *lua.State, allocator: std.mem.Allocator) void {
             inline for (types, 0..) |_, index| {
-                Table.pushValueToStack(state, allocator, self.values[index]);
+                translation.pushValue(Table, state, allocator, self.values[index]);
             }
         }
 

@@ -18,7 +18,8 @@ list-examples:
         results \
         guided-tour \
         optional-args \
-        try-callback
+        try-callback \
+        decode-ergonomics
 
 run-example name:
     zig build "run-example-{{name}}"
