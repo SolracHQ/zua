@@ -45,6 +45,9 @@ That is the whole model. The rest is details.
 ## Status
 
 - `Zua` owns the Lua state and allocator, heap-allocated so its pointer is stable across callbacks.
+- Type translation strategies: declare `pub const ZUA_TRANSLATION_STRATEGY` on a struct to choose `.object` (userdata with metatable), `.zig_ptr` (light userdata), or `.table` (Lua table, default).
+- Methods and metamethods: declare `pub const ZUA_METHODS` struct with methods; metamethods (names starting with `__`) are placed on the metatable, regular methods in `__index`.
+- Metatable caching: `Zua.metatable_cache` stores built metatables; `getOrCreateMetatable(T)` builds on first call and caches thereafter.
 - `ZuaFn.from` and `ZuaFn.pure` register Zig functions. Arguments are decoded directly from the function signature.
 - `ZuaFnErrorConfig` customizes parse error text and Zig error formatting for callback wrappers.
 - `Result(T)` and `Result(.{ T1, T2 })` carry typed return values and Lua-facing failures back through the trampoline.

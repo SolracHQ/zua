@@ -1,21 +1,10 @@
-//! The main Zig wrapper over Lua 5.4, built to avoid the stack discipline pain.
-//!
-//! Zua (Zig + Lua) is the heart of the wrapper.
-//! It owns the Lua state and allocator, providing ergonomic APIs for:
-//! - Executing Lua code and decoding results into typed tuples
-//! - Registering Zig callbacks that receive typed arguments and return typed values
-//! - Building and manipulating Lua tables with absolute indexes (no -1 magic)
-//! - Threading host state through the VM via `setLightUserdata` and the registry
-//!
-//! The key difference from the raw C API: `longjmp` (from `lua_error`) happens after
-//! your callback fully returns, so `defer` cleanup always runs before the error propagates.
-
 const std = @import("std");
 const lua = @import("lua.zig");
 const Table = @import("table.zig").Table;
 const result_module = @import("result.zig");
 const translation = @import("translation.zig");
 const ZuaFn = @import("zua_fn.zig");
+const metatable = @import("metatable.zig");
 
 const zua_registry_key: [:0]const u8 = "zua_zua";
 
@@ -42,6 +31,8 @@ pub const Zua = struct {
 
     allocator: std.mem.Allocator,
     state: *lua.State,
+    // Maps @typeName(T) to a LUA_REGISTRYINDEX ref for the cached metatable.
+    metatable_cache: std.StringHashMap(c_int),
 
     /// Creates a heap-allocated Zua instance, opens Lua standard libraries, and stores the pointer in the registry.
     /// The returned pointer is stable and safe to capture in callbacks.
@@ -55,6 +46,7 @@ pub const Zua = struct {
         self.* = .{
             .allocator = allocator,
             .state = state,
+            .metatable_cache = std.StringHashMap(c_int).init(allocator),
         };
 
         lua.openLibs(state);
@@ -66,14 +58,34 @@ pub const Zua = struct {
 
     /// Closes the Lua state and frees the Zua allocation.
     pub fn deinit(self: *Zua) void {
+        var it = self.metatable_cache.valueIterator();
+        while (it.next()) |ref| {
+            lua.unref(self.state, lua.REGISTRY_INDEX, ref.*);
+        }
+        self.metatable_cache.deinit();
+
         lua.pushNil(self.state);
         lua.setField(self.state, lua.REGISTRY_INDEX, zua_registry_key);
         lua.deinit(self.state);
         self.allocator.destroy(self);
     }
 
-    /// Pushes the Lua global table onto the stack and returns an absolute-indexed handle.
-    /// Always call `defer handle.pop()` to clean up the stack afterward.
+    /// Pushes the cached metatable for T onto the stack, creating it on first call.
+    pub fn getOrCreateMetatable(self: *Zua, comptime T: type) void {
+        const key = @typeName(T);
+
+        if (self.metatable_cache.get(key)) |ref| {
+            _ = lua.rawGetI(self.state, lua.REGISTRY_INDEX, ref);
+            return;
+        }
+
+        metatable.buildMetatable(self, T);
+
+        lua.pushValue(self.state, -1);
+        const ref = lua.ref(self.state, lua.REGISTRY_INDEX);
+        self.metatable_cache.put(key, ref) catch @panic("out of memory storing metatable ref");
+    }
+
     pub fn globals(self: *Zua) Table {
         _ = lua.getIndex(self.state, lua.REGISTRY_INDEX, lua.RIDX_GLOBALS);
         return Table.fromStack(self, -1);

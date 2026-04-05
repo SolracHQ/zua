@@ -24,7 +24,8 @@ list-examples:
         optional-args \
         try-callback \
         decode-ergonomics \
-        error-traceback
+        error-traceback \
+        userdata-objects
 
 run-example name:
     zig build "run-example-{{name}}"

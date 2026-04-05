@@ -4,34 +4,24 @@ const lua = @import("lua.zig");
 const Zua = @import("zua.zig").Zua;
 const Table = @import("table.zig").Table;
 
-/// Translation helpers for converting between Zig values and Lua stack values.
-///
-/// These helpers are used by zua to decode Lua arguments into typed Zig values,
-/// encode Zig values back onto the Lua stack, and build Lua tables from Zig
-/// structs, arrays, tuples, and slices.
 pub const ParseError = error{
     InvalidArity,
     InvalidType,
 };
 
-/// Ownership model for decoded Lua table handles.
-///
-/// `owned` returns a table handle that owns the stack slot and may pop it later.
-/// `borrowed` returns a handle that refers to an existing stack slot without
-/// taking ownership.
 pub const TableOwnership = enum {
     owned,
     borrowed,
 };
 
-/// Lua translation Strategy for a given Zig type.
-///
-/// `zig_ptr` types are translated as light userdata pointers.
-/// `object` types are translated as Lua heavy userdata objects with metatables.
-/// `table` types are translated as Lua tables with fields for each struct member.
-///
-/// If the given type do not have `pub const ZUA_TRANSLATION_STRATEGY: Strategy` field, the default translation strategy is `table`.
 pub const Strategy = enum { zig_ptr, object, table };
+
+pub fn strategyOf(comptime T: type) Strategy {
+    if (@hasDecl(T, "ZUA_TRANSLATION_STRATEGY")) {
+        return T.ZUA_TRANSLATION_STRATEGY;
+    }
+    return .table;
+}
 
 pub fn ParseResult(comptime types: anytype) type {
     comptime var field_types: [types.len]type = undefined;
@@ -43,14 +33,6 @@ pub fn ParseResult(comptime types: anytype) type {
     return std.meta.Tuple(&field_types);
 }
 
-/// Parses a contiguous range of values from the Lua stack into a typed tuple.
-///
-/// `TableType` is the concrete Lua table wrapper type used for nested table values.
-/// `types` describes the expected Zig types for each decoded value.
-/// `table_ownership` controls whether nested table handles are owned or borrowed.
-///
-/// Returns `ParseError.InvalidArity` when the number of values is outside the
-/// expected range, or `ParseError.InvalidType` when a value cannot be decoded.
 pub fn parseTuple(
     z: *Zua,
     start_index: lua.StackIndex,
@@ -104,58 +86,90 @@ pub fn parseTuple(
     return values;
 }
 
-/// Decodes a single Lua stack value into the requested Zig type.
-///
-/// Supports optional values, boolean, integer, float, string, table handles, and
-/// nested struct decoding from borrowed Lua tables.
 pub fn decodeValue(
     z: *Zua,
     index: lua.StackIndex,
     comptime T: type,
     table_ownership: TableOwnership,
 ) ParseError!T {
-    if (@typeInfo(T) == .optional) {
+    if (comptime isOptional(T)) {
         if (lua.valueType(z.state, index) == .nil) return null;
         return try decodeValue(z, index, optionalChild(T), table_ownership);
     }
 
-    if (T == Table) {
-        if (lua.valueType(z.state, index) != .table) return error.InvalidType;
+    switch (comptime @typeInfo(T)) {
+        .pointer => |ptr_info| {
+            if (ptr_info.size == .one) {
+                const Pointee = ptr_info.child;
 
-        return switch (table_ownership) {
-            .owned => Table.fromStack(z, index),
-            .borrowed => Table.fromBorrowed(z, index),
-        };
+                if (@typeInfo(Pointee) == .@"struct") {
+                    const strategy = comptime strategyOf(Pointee);
+
+                    if (strategy == .object) {
+                        if (lua.valueType(z.state, index) != .userdata) return error.InvalidType;
+                        const raw = lua.toUserdata(z.state, index) orelse return error.InvalidType;
+                        return @ptrCast(@alignCast(raw));
+                    }
+
+                    if (strategy == .zig_ptr) {
+                        if (lua.valueType(z.state, index) != .light_userdata) return error.InvalidType;
+                        const raw = lua.toLightUserdata(z.state, index) orelse return error.InvalidType;
+                        return @ptrCast(@alignCast(raw));
+                    }
+
+                    return error.InvalidType;
+                }
+            }
+
+            // Non-single or non-struct pointer: fall through to string/slice checks below.
+        },
+        .@"struct" => {
+            const strategy = comptime strategyOf(T);
+
+            if (strategy == .object) {
+                if (lua.valueType(z.state, index) != .userdata) return error.InvalidType;
+                const raw = lua.toUserdata(z.state, index) orelse return error.InvalidType;
+                const typed: *T = @ptrCast(@alignCast(raw));
+                return typed.*;
+            }
+
+            if (strategy == .zig_ptr) {
+                if (lua.valueType(z.state, index) != .light_userdata) return error.InvalidType;
+                const raw = lua.toLightUserdata(z.state, index) orelse return error.InvalidType;
+                const typed: *T = @ptrCast(@alignCast(raw));
+                return typed.*;
+            }
+
+            if (T == Table) {
+                if (lua.valueType(z.state, index) != .table) return error.InvalidType;
+                return switch (table_ownership) {
+                    .owned => Table.fromStack(z, index),
+                    .borrowed => Table.fromBorrowed(z, index),
+                };
+            }
+
+            // .table strategy: decode by field name from a Lua table.
+            if (lua.valueType(z.state, index) != .table) return error.InvalidType;
+            const table = Table.fromBorrowed(z, index);
+            return decodeStruct(Table, table, T);
+        },
+        .bool => {
+            if (lua.valueType(z.state, index) != .boolean) return error.InvalidType;
+            return lua.toBoolean(z.state, index);
+        },
+        .int => return parseInteger(T, z.state, index),
+        .float => return parseFloat(T, z.state, index),
+        else => {},
     }
 
-    if (@typeInfo(T) == .@"struct") {
-        if (lua.valueType(z.state, index) != .table) return error.InvalidType;
-
-        const table = Table.fromBorrowed(z, index);
-        return decodeStruct(Table, table, T);
-    }
-
-    if (T == bool) {
-        if (lua.valueType(z.state, index) != .boolean) return error.InvalidType;
-        return lua.toBoolean(z.state, index);
-    }
-
-    if (T == []const u8 or T == [:0]const u8) {
+    if (comptime isStringValueType(T)) {
         if (lua.valueType(z.state, index) != .string) return error.InvalidType;
         return lua.toString(z.state, index) orelse error.InvalidType;
     }
 
-    return switch (@typeInfo(T)) {
-        .int => parseInteger(T, z.state, index),
-        .float => parseFloat(T, z.state, index),
-        else => @compileError("unsupported decode type: " ++ @typeName(T)),
-    };
+    @compileError("unsupported decode type: " ++ @typeName(T));
 }
 
-/// Decodes a borrowed Lua table into a Zig struct by reading fields by name.
-///
-/// This is used for nested struct decoding when the expected type is a Zig
-/// struct and the Lua value is a table.
 pub fn decodeStruct(comptime TableType: type, table: TableType, comptime T: type) ParseError!T {
     var result: T = undefined;
 
@@ -166,14 +180,10 @@ pub fn decodeStruct(comptime TableType: type, table: TableType, comptime T: type
     return result;
 }
 
-/// Pushes a Zig value onto the Lua stack.
-///
-/// Nested structs, arrays, tuples, and slices are converted into Lua tables.
-/// Strings, numbers, and booleans are pushed as the corresponding Lua values.
 pub fn pushValue(zua: *Zua, value: anytype) void {
     const T = @TypeOf(value);
 
-    if (@typeInfo(T) == .optional) {
+    if (comptime isOptional(T)) {
         if (value) |unwrapped| {
             pushValue(zua, unwrapped);
         } else {
@@ -187,41 +197,85 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
         return;
     }
 
-    if (T == bool) {
-        lua.pushBoolean(zua.state, value);
-        return;
-    }
-
     if (comptime isStringValueType(T)) {
         lua.pushString(zua.state, value);
         return;
     }
 
-    if (comptime isTableConvertibleType(T)) {
-        lua.createTable(zua.state, inferArrayCapacity(value), inferRecordCapacity(value));
-        const nested = Table.fromStack(zua, -1);
-        fillTable(nested, value);
-        return;
-    }
-
-    switch (@typeInfo(T)) {
+    switch (comptime @typeInfo(T)) {
+        .bool => {
+            lua.pushBoolean(zua.state, value);
+        },
         .int, .comptime_int => {
             lua.pushInteger(zua.state, std.math.cast(lua.Integer, value) orelse @panic("integer value out of range for Lua"));
-            return;
         },
         .float, .comptime_float => {
             lua.pushNumber(zua.state, @as(lua.Number, value));
-            return;
         },
-        else => @compileError("unsupported table value type: " ++ @typeName(T)),
+        .pointer => |ptr_info| {
+            if (ptr_info.size == .one) {
+                const Pointee = ptr_info.child;
+
+                if (@typeInfo(Pointee) == .@"struct") {
+                    const strategy = comptime strategyOf(Pointee);
+
+                    if (strategy == .object) {
+                        @compileError("cannot push *T where T is .object: the metatable would be lost. Return T by value instead");
+                    }
+
+                    if (strategy == .zig_ptr) {
+                        lua.pushLightUserdata(zua.state, value);
+                        return;
+                    }
+
+                    // .table single pointer: fall through to the compile error below.
+                    @compileError("cannot push pointer to .table type");
+                }
+            }
+
+            if (ptr_info.size == .slice and !isStringValueType(T)) {
+                lua.createTable(zua.state, std.math.cast(i32, value.len) orelse @panic("slice too large"), 0);
+                const nested = Table.fromStack(zua, -1);
+                fillTable(nested, value);
+                return;
+            }
+
+            @compileError("unsupported push type: " ++ @typeName(T));
+        },
+        .@"struct" => {
+            const strategy = comptime strategyOf(T);
+
+            std.debug.print("pushing struct of type {s} with strategy {any} has attribute {}\n", .{ @typeName(T), strategy, @hasDecl(T, "ZUA_TRANSLATION_STRATEGY") });
+
+            if (strategy == .object) {
+                const mt = @import("metatable.zig");
+                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(zua.state, @sizeOf(T))));
+                ptr.* = value;
+                mt.attachMetatable(zua, T);
+                return;
+            }
+
+            if (strategy == .zig_ptr) {
+                @compileError("cannot push .zig_ptr type by value: push a *T instead");
+            }
+
+            // .table strategy (including anonymous structs)
+            lua.createTable(zua.state, inferArrayCapacity(value), inferRecordCapacity(value));
+            const nested = Table.fromStack(zua, -1);
+            fillTable(nested, value);
+
+            const mt = @import("metatable.zig");
+            mt.attachMetatable(zua, T);
+        },
+        .array => {
+            lua.createTable(zua.state, inferArrayCapacity(value), 0);
+            const nested = Table.fromStack(zua, -1);
+            fillTable(nested, value);
+        },
+        else => @compileError("unsupported push type: " ++ @typeName(T)),
     }
 }
 
-/// Fills a Lua table from a Zig value that can be table-converted.
-///
-/// Structs are converted into string-keyed records, tuples into array values, and
-/// slices/arrays into integer-keyed arrays. Nested convertible values are
-/// converted recursively.
 pub fn fillTable(table: Table, value: anytype) void {
     const T = @TypeOf(value);
 
@@ -259,10 +313,6 @@ pub fn fillTable(table: Table, value: anytype) void {
     }
 }
 
-/// Returns an array-part capacity hint for table creation based on the value.
-///
-/// This is used by `Zua.tableFrom` to preallocate Lua table array storage when
-/// converting arrays, tuples, and slices.
 pub fn inferArrayCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 
@@ -280,10 +330,6 @@ pub fn inferArrayCapacity(value: anytype) i32 {
     };
 }
 
-/// Returns a record-part capacity hint for table creation based on the value.
-///
-/// Structs with named fields reserve capacity for record fields. Tuples, arrays,
-/// and slices do not contribute record-part capacity.
 pub fn inferRecordCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 
@@ -321,7 +367,7 @@ fn isStringValueType(comptime T: type) bool {
 
     return switch (@typeInfo(T)) {
         .pointer => |pointer| switch (pointer.size) {
-            .one => @typeInfo(pointer.child) == .array,
+            .one => @typeInfo(pointer.child) == .array and @typeInfo(@typeInfo(pointer.child).array.child) == .int,
             .slice => pointer.child == u8 and pointer.is_const,
             else => false,
         },

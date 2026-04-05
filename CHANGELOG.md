@@ -4,6 +4,14 @@
 
 ### Added
 
+- Type translation strategies: `.object` (userdata with metatable), `.zig_ptr` (light userdata pointer), and `.table` (Lua table, default)
+- `ZUA_TRANSLATION_STRATEGY` declaration on types to select strategy; defaults to `.table` if not declared
+- `ZUA_METHODS` struct declaration for exposing methods and metamethods on userdata and table-strategy types
+- Metatable caching system: `Zua.metatable_cache` stores built metatables by type name; `Zua.getOrCreateMetatable(T)` builds and caches on first call
+- Metamethods (field names starting with `__` like `__tostring`, `__index`) are placed directly on the metatable; regular methods go in the `__index` table
+- `metatable.buildMetatable` constructs metatables with optional `__name` field and optional methods table
+- `metatable.attachMetatable` attaches cached metatable to userdata after `lua_newuserdata`
+- Full method wrapping via `ZuaFn` trampoline system; methods receive `*Zua` or `self: *T`/`self: T` as first parameter
 - Callbacks decode arguments directly from the Zig function signature, including optional positional parameters via `?T`
 - `Result(T)` supports single-value callback returns without the tuple wrapper ceremony
 - `Table.setFn` accepts callbacks returning either `Result(...)` or `!Result(...)`
