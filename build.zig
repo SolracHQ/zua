@@ -29,6 +29,8 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-optional-args", .path = "example/optional_args.zig" },
         .{ .name = "example-try-callback", .path = "example/try_callback.zig" },
         .{ .name = "example-decode-ergonomics", .path = "example/decode_ergonomics.zig" },
+        .{ .name = "example-error-traceback", .path = "example/error_traceback.zig" },
+        .{ .name = "example-userdata-objects", .path = "example/userdata_objects.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

@@ -26,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.pop();
-    globals.setFn("next_value", zua.ZuaFn.from(nextValue, "next_value expects ()"));
+    globals.setFn("next_value", zua.ZuaFn.from(nextValue, .{ .parse_error = "next_value expects ()" }));
 
     try z.exec(
         \\print(next_value())

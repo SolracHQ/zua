@@ -11,6 +11,8 @@
 - `Result.errOwned` formats and allocates owned error messages directly from `fmt` and `args`
 - `Table.get` and `Table.getStruct` support optional fields like `?T`
 - `Table.getStruct` supports recursive nested table decoding for struct fields
+- Added `ZuaFnErrorConfig.zig_err_fmt` to customize Zig error formatting in callback wrappers
+- Added `execTraceback` for Lua runtime failures with stack trace results
 
 ## 0.0.1
 

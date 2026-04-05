@@ -1,29 +1,43 @@
 const std = @import("std");
 const lua = @import("lua.zig");
 const translation = @import("translation.zig");
+const Zua = @import("zua.zig").Zua;
 
 const CallbackKind = enum {
     with_zua,
     pure,
 };
 
-/// Wraps a Zig function callback that receives `*Vm` as the first parameter.
+pub const ZuaFnErrorConfig = struct {
+    /// parse_error is a static error message used when Lua argument decoding fails.
+    parse_error: []const u8 = "invalid arguments",
+    /// zig_err_fmt is a format string used to format Zig errors returned from the wrapped function.
+    /// It receives the Zig error name as a single `{s}` argument.
+    zig_err_fmt: ?[]const u8 = "Zig error: {s}",
+    /// zig_err_hook takes precedence over zig_err_fmt if both are provided
+    ///
+    /// result should be an allocator-owned string describing the error
+    /// Zua will free the string after pushing it to Lua
+    zig_err_hook: ?fn (*Zua, anyerror) []const u8 = null,
+};
+
+/// Wraps a Zig function callback that receives `*Zua` as the first parameter.
 ///
 /// The returned wrapper exposes a `.trampoline` function that can be registered
 /// with Lua via `Table.setFn`.
-pub fn from(comptime function: anytype, comptime parse_error: []const u8) Wrapped(function, .with_zua, parse_error) {
+pub fn from(comptime function: anytype, comptime error_config: ZuaFnErrorConfig) ZuaFn(function, .with_zua, error_config) {
     return .{};
 }
 
-/// Wraps a Zig function callback that does not receive `*Vm`.
+/// Wraps a Zig function callback that does not receive `*Zua`.
 ///
 /// The returned wrapper exposes a `.trampoline` function that can be registered
 /// with Lua via `Table.setFn`.
-pub fn pure(comptime function: anytype, comptime parse_error: []const u8) Wrapped(function, .pure, parse_error) {
+pub fn pure(comptime function: anytype, comptime error_config: ZuaFnErrorConfig) ZuaFn(function, .pure, error_config) {
     return .{};
 }
 
-fn Wrapped(comptime function: anytype, comptime kind: CallbackKind, comptime parse_error: []const u8) type {
+fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error_config: ZuaFnErrorConfig) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
     const ReturnType = function_info.return_type orelse @compileError("callback must have a return type");
@@ -36,14 +50,14 @@ fn Wrapped(comptime function: anytype, comptime kind: CallbackKind, comptime par
         ///
         /// The trampoline decodes Lua arguments, calls the wrapped Zig function,
         /// and pushes the callback result back onto the Lua stack.
-        pub fn trampoline(comptime VmType: type, comptime TableType: type) lua.CFunction {
-            validateSignature(VmType);
+        pub fn trampoline() lua.CFunction {
+            validateSignature();
 
             return struct {
                 fn trampoline(state_: ?*lua.State) callconv(.c) c_int {
                     const state = state_ orelse unreachable;
-                    const vm = VmType.fromState(state);
-                    var result = execute(VmType, TableType, vm, state);
+                    const vm = Zua.fromState(state);
+                    var result = execute(vm);
 
                     if (result.failure) |failure| {
                         switch (failure) {
@@ -52,28 +66,44 @@ fn Wrapped(comptime function: anytype, comptime kind: CallbackKind, comptime par
                                 lua.pushString(state, message);
                                 vm.allocator.free(message);
                             },
-                            .zig_error => |err| lua.pushString(state, @errorName(err)),
+                            .zig_error => |err| {
+                                if (error_config.zig_err_hook) |hook| {
+                                    const message = hook(vm, err) catch {
+                                        lua.pushString(state, @errorName(err));
+                                        return lua.raiseError(state);
+                                    };
+                                    lua.pushString(state, message);
+                                    vm.allocator.free(message);
+                                } else if (error_config.zig_err_fmt) |fmt| {
+                                    const message = std.fmt.allocPrint(vm.allocator, fmt, .{@errorName(err)}) catch {
+                                        lua.pushString(state, @errorName(err));
+                                        return lua.raiseError(state);
+                                    };
+                                    lua.pushString(state, message);
+                                    vm.allocator.free(message);
+                                } else {
+                                    lua.pushString(state, @errorName(err));
+                                }
+                            },
                         }
                         return lua.raiseError(state);
                     }
 
-                    defer result.deinit(vm.allocator);
-                    result.pushValues(state, vm.allocator);
+                    defer result.deinit(vm);
+                    result.pushValues(vm);
 
                     return @intCast(CallbackResultType.value_count);
                 }
 
-                fn execute(comptime VmType_: type, comptime TableType_: type, vm: *VmType_, state: *lua.State) CallbackResultType {
+                fn execute(vm: *Zua) CallbackResultType {
                     const decoded_types = comptime decodedParameterTypes();
                     const decoded_values = translation.parseTuple(
-                        TableType_,
-                        state,
-                        vm.allocator,
+                        vm,
                         1,
-                        lua.getTop(state),
+                        lua.getTop(vm.state),
                         decoded_types,
                         .borrowed,
-                    ) catch return CallbackResultType.errStatic(parse_error);
+                    ) catch return CallbackResultType.errStatic(error_config.parse_error);
 
                     var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
 
@@ -96,7 +126,7 @@ fn Wrapped(comptime function: anytype, comptime kind: CallbackKind, comptime par
             }.trampoline;
         }
 
-        fn validateSignature(comptime VmType: type) void {
+        fn validateSignature() void {
             if (comptime kind == .with_zua) {
                 if (function_info.params.len == 0) {
                     @compileError("ZuaFn.from callbacks must accept *Vm as the first parameter");
@@ -105,7 +135,7 @@ fn Wrapped(comptime function: anytype, comptime kind: CallbackKind, comptime par
                 const first_param = function_info.params[0].type orelse
                     @compileError("callback parameters must have concrete types");
 
-                if (first_param != *VmType) {
+                if (first_param != *Zua) {
                     @compileError("ZuaFn.from callbacks must accept *Vm as the first parameter");
                 }
             }

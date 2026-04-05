@@ -36,14 +36,15 @@ pub fn main(init: std.process.Init) !void {
     });
 
     const counter = z.tableFrom(.{ .count = 2 });
-    counter.setFn("increment", zua.ZuaFn.from(increment, "counter:increment expects (self, i32)"));
+    const counter_increment = zua.ZuaFn.from(increment, .{ .parse_error = "counter:increment expects (self, i32)" });
+    counter.setFn("increment", counter_increment);
     globals.set("counter", counter);
     counter.pop();
 
-    globals.setFn("add", zua.ZuaFn.from(add, "add expects (i32, i32)"));
-    globals.setFn("join_path", zua.ZuaFn.from(joinPath, "join_path expects (string, string, string)"));
-    globals.setFn("next_ticket", zua.ZuaFn.from(nextTicket, "next_ticket expects ()"));
-    globals.setFn("printConfig", zua.ZuaFn.pure(printConfig, "printConfig expects (table)"));
+    globals.setFn("add", zua.ZuaFn.from(add, .{ .parse_error = "add expects (i32, i32)" }));
+    globals.setFn("join_path", zua.ZuaFn.from(joinPath, .{ .parse_error = "join_path expects (string, string, string)" }));
+    globals.setFn("next_ticket", zua.ZuaFn.from(nextTicket, .{ .parse_error = "next_ticket expects ()" }));
+    globals.setFn("printConfig", zua.ZuaFn.pure(printConfig, .{ .parse_error = "printConfig expects (table)" }));
 
     const registry = z.registry();
     defer registry.pop();
@@ -91,7 +92,7 @@ fn joinPath(z: *Zua, a: []const u8, b: []const u8, c: []const u8) Result([]const
         return Result([]const u8).errStatic("out of memory");
     };
     defer z.allocator.free(joined);
-    return Result([]const u8).owned(z.allocator, joined);
+    return Result([]const u8).owned(z, joined);
 }
 
 fn nextTicket(z: *Zua) Result(i32) {

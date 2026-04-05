@@ -37,7 +37,11 @@ pub fn main(init: std.process.Init) !void {
 
     const proc_api = z.createTable(0, 1);
     defer proc_api.pop();
-    proc_api.setFn("list", zua.ZuaFn.from(listProcesses, "proc.list expects an optional options table"));
+    const proc_list = zua.ZuaFn.from(listProcesses, .{
+        .parse_error = "proc.list expects an optional options table",
+        .zig_err_fmt = "proc.list failed with error: {s}",
+    });
+    proc_api.setFn("list", proc_list);
     globals.set("proc", proc_api);
 
     try z.exec(
@@ -108,20 +112,32 @@ fn entrySet(self: Table, value: f64) Result(.{}) {
 fn buildProcessTable(z: *Zua, name: []const u8) Table {
     const process = z.createTable(0, 2);
     process.set("name", name);
-    process.setFn("scan", zua.ZuaFn.from(processScan, "process.scan expects (self, options)"));
+    const process_scan = zua.ZuaFn.from(processScan, .{
+        .parse_error = "process.scan expects (self, options)",
+        .zig_err_fmt = "process.scan failed with error: {s}",
+    });
+    process.setFn("scan", process_scan);
     return process;
 }
 
 fn buildEntryList(z: *Zua, type_name: []const u8, value: f64) Table {
     const entries = z.createTable(1, 1);
-    entries.setFn("rescan", zua.ZuaFn.from(entryListRescan, "entries.rescan expects (self, options)"));
+    entries.setFn("rescan", zua.ZuaFn.from(entryListRescan, .{ .parse_error = "entries.rescan expects (self, options)" }));
 
     const entry = z.createTable(0, 4);
     defer entry.pop();
     entry.set("type", type_name);
     entry.set("value", value);
-    entry.setFn("get", zua.ZuaFn.pure(entryGet, "entry.get expects self"));
-    entry.setFn("set", zua.ZuaFn.pure(entrySet, "entry.set expects (self, value)"));
+    const entry_get = zua.ZuaFn.pure(entryGet, .{
+        .parse_error = "entry.get expects self",
+        .zig_err_fmt = "entry.get failed with error: {s}",
+    });
+    const entry_set = zua.ZuaFn.pure(entrySet, .{
+        .parse_error = "entry.set expects (self, value)",
+        .zig_err_fmt = "entry.set failed with error: {s}",
+    });
+    entry.setFn("get", entry_get);
+    entry.setFn("set", entry_set);
 
     entries.set(1, entry);
     return entries;

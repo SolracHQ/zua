@@ -33,7 +33,7 @@ You can also attach a hidden pointer directly to a table you return to Lua. This
 const entry_table = z.createTable(0, 3);
 entry_table.set("address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
-entry_table.setFn("get", ZuaFn.from(entryGet, "entry:get takes no arguments"));
+entry_table.setFn("get", ZuaFn.from(entryGet, .{ .parse_error = "entry:get takes no arguments" }));
 ```
 
 Inside the method:

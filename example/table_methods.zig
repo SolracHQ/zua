@@ -16,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
 
     const counter = z.createTable(0, 2);
     counter.set("count", 0);
-    counter.setFn("increment", zua.ZuaFn.from(increment, "counter:increment expects (self, i32)"));
+    counter.setFn("increment", zua.ZuaFn.from(increment, .{ .parse_error = "counter:increment expects (self, i32)" }));
     globals.set("counter", counter);
     counter.pop();
 

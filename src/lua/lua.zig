@@ -169,6 +169,13 @@ pub fn pushValue(state: *State, index: StackIndex) void {
     c.lua_pushvalue(state, index);
 }
 
+/// Pushes the standard Lua traceback helper onto the stack.
+pub fn pushTracebackFunction(state: *State) void {
+    _ = getGlobal(state, "debug");
+    _ = getField(state, -1, "traceback");
+    remove(state, -2);
+}
+
 /// Ensures there is room for at least `extra_slots` more stack values.
 pub fn checkStack(state: *State, extra_slots: StackCount) bool {
     return c.lua_checkstack(state, extra_slots) != 0;
@@ -328,6 +335,11 @@ pub fn pop(state: *State, count: StackCount) void {
 pub fn remove(state: *State, index: StackIndex) void {
     c.lua_rotate(state, index, -1);
     pop(state, 1);
+}
+
+/// Inserts the top stack value at the given index.
+pub fn insert(state: *State, index: StackIndex) void {
+    c.lua_insert(state, index);
 }
 
 /// Pushes a new empty table onto the stack.

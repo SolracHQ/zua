@@ -42,7 +42,7 @@ fn increment(_: *Zua, self: Table, delta: i32) Result(i32) {
 
 const counter = z.tableFrom(.{ .count = 0 });
 defer counter.pop();
-counter.setFn("increment", ZuaFn.from(increment, "counter:increment expects (i32)"));
+counter.setFn("increment", ZuaFn.from(increment, .{ .parse_error = "counter:increment expects (i32)" }));
 globals.set("counter", counter);
 ```
 

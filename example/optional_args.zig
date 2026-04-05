@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.pop();
 
-    globals.setFn("f", zua.ZuaFn.from(fn_with_optional_args, "f expects (i32, ?i32, ?i32)"));
+    globals.setFn("f", zua.ZuaFn.from(fn_with_optional_args, .{ .parse_error = "f expects (i32, ?i32, ?i32)" }));
 
     const result = try z.eval(.{ i32, i32, i32 },
         \\return f(10), f(10, 5), f(10, 5, 2)

@@ -31,7 +31,11 @@ defer z.deinit();
 const globals = z.globals();
 defer globals.pop();
 
-globals.setFn("add", ZuaFn.pure(add, "add expects (i32, i32)"));
+const add_fn = ZuaFn.pure(add, .{
+    .parse_error = "add expects (i32, i32)",
+    .zig_err_fmt = "Zig error at add: {s}",
+});
+globals.setFn("add", add_fn);
 
 try z.exec("print(add(1, 2))");
 ```
@@ -42,6 +46,7 @@ That is the whole model. The rest is details.
 
 - `Zua` owns the Lua state and allocator, heap-allocated so its pointer is stable across callbacks.
 - `ZuaFn.from` and `ZuaFn.pure` register Zig functions. Arguments are decoded directly from the function signature.
+- `ZuaFnErrorConfig` customizes parse error text and Zig error formatting for callback wrappers.
 - `Result(T)` and `Result(.{ T1, T2 })` carry typed return values and Lua-facing failures back through the trampoline.
 - `Table` handles wrap Lua tables with absolute stack indexes so -1 and -2 never appear in your code.
 - `tableFrom` converts Zig structs, arrays, and tuples to Lua tables in one call.

@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.pop();
-    globals.setFn("add", zua.ZuaFn.from(add, "add expects (i32, i32)"));
+    globals.setFn("add", zua.ZuaFn.from(add, .{ .parse_error = "add expects (i32, i32)" }));
 
     try z.exec(
         \\local result = add(20, 22)

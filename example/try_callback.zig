@@ -11,7 +11,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.pop();
 
-    globals.setFn("add_ten", zua.ZuaFn.from(addTen, "add_ten expects (i32)"));
+    globals.setFn("add_ten", zua.ZuaFn.from(addTen, .{ .parse_error = "add_ten expects (i32)" }));
 
     const result = try z.eval(.{i32}, "return add_ten(32)");
     try std.testing.expectEqual(@as(i32, 42), result[0]);

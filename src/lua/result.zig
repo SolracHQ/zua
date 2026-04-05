@@ -1,7 +1,7 @@
 const std = @import("std");
 const lua = @import("lua.zig");
 const translation = @import("translation.zig");
-const Table = @import("table.zig").Table;
+const Zua = @import("zua.zig").Zua;
 
 /// Failure reason for a callback result.
 /// - `static_message`: borrowed string constant (commonly error messages from trampoline logic)
@@ -68,12 +68,12 @@ fn SingleResult(comptime T: type) type {
         }
 
         /// Creates a successful single-value callback result, cloning owned string values.
-        pub fn owned(allocator: std.mem.Allocator, value: T) @This() {
+        pub fn owned(z: *Zua, value: T) @This() {
             if (comptime !isOwnedResultValueType(T)) {
                 return .{ .value = value };
             }
 
-            const cloned = cloneResultValue(T, allocator, value) catch {
+            const cloned = cloneResultValue(T, z.allocator, value) catch {
                 return @This().errStatic("out of memory");
             };
 
@@ -89,8 +89,8 @@ fn SingleResult(comptime T: type) type {
         }
 
         /// Creates a failed callback result with an allocator-owned formatted error message.
-        pub fn errOwned(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) @This() {
-            const message = std.fmt.allocPrint(allocator, fmt, args) catch {
+        pub fn errOwned(z: *Zua, comptime fmt: []const u8, args: anytype) @This() {
+            const message = std.fmt.allocPrint(z.allocator, fmt, args) catch {
                 return @This().errStatic("out of memory");
             };
 
@@ -103,14 +103,14 @@ fn SingleResult(comptime T: type) type {
         }
 
         /// Pushes the successful value onto the Lua stack.
-        pub fn pushValues(self: @This(), state: *lua.State, allocator: std.mem.Allocator) void {
-            translation.pushValue(Table, state, allocator, self.value);
+        pub fn pushValues(self: @This(), z: *Zua) void {
+            translation.pushValue(z, self.value);
         }
 
         /// Releases any owned memory associated with this result.
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        pub fn deinit(self: *@This(), z: *Zua) void {
             if (!self.owns_value) return;
-            freeResultValue(T, allocator, self.value);
+            freeResultValue(T, z.allocator, self.value);
         }
     };
 }
@@ -131,13 +131,13 @@ fn MultiResult(comptime types: anytype) type {
         }
 
         /// Creates a successful multi-value callback result, cloning owned string values.
-        pub fn owned(allocator: std.mem.Allocator, values: ValueTuple) @This() {
+        pub fn owned(z: *Zua, values: ValueTuple) @This() {
             var result = @This().ok(values);
 
             inline for (types, 0..) |T, index| {
                 if (comptime isOwnedResultValueType(T)) {
-                    result.values[index] = cloneResultValue(T, allocator, values[index]) catch {
-                        result.deinit(allocator);
+                    result.values[index] = cloneResultValue(T, z.allocator, values[index]) catch {
+                        result.deinit(z);
                         return @This().errStatic("out of memory");
                     };
                     result.owned_values[index] = true;
@@ -153,8 +153,8 @@ fn MultiResult(comptime types: anytype) type {
         }
 
         /// Creates a failed callback result with an allocator-owned formatted error message.
-        pub fn errOwned(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) @This() {
-            const message = std.fmt.allocPrint(allocator, fmt, args) catch {
+        pub fn errOwned(z: *Zua, comptime fmt: []const u8, args: anytype) @This() {
+            const message = std.fmt.allocPrint(z.allocator, fmt, args) catch {
                 return @This().errStatic("out of memory");
             };
 
@@ -167,17 +167,17 @@ fn MultiResult(comptime types: anytype) type {
         }
 
         /// Pushes all successful values onto the Lua stack.
-        pub fn pushValues(self: @This(), state: *lua.State, allocator: std.mem.Allocator) void {
+        pub fn pushValues(self: @This(), z: *Zua) void {
             inline for (types, 0..) |_, index| {
-                translation.pushValue(Table, state, allocator, self.values[index]);
+                translation.pushValue(z, self.values[index]);
             }
         }
 
         /// Releases any owned memory associated with this result.
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+        pub fn deinit(self: *@This(), z: *Zua) void {
             inline for (types, 0..) |T, index| {
                 if (self.owned_values[index]) {
-                    freeResultValue(T, allocator, self.values[index]);
+                    freeResultValue(T, z.allocator, self.values[index]);
                 }
             }
         }
