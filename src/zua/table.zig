@@ -1,5 +1,5 @@
 const std = @import("std");
-const lua = @import("lua.zig");
+const lua = @import("../lua/lua.zig");
 const translation = @import("translation.zig");
 const Zua = @import("zua.zig").Zua;
 

@@ -6,13 +6,12 @@ const Result = zua.Result;
 const ZuaFn = zua.ZuaFn;
 
 const Entry = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .object;
-    pub const ZUA_METHODS = .{
+    pub const ZUA_META = zua.meta.Object(Entry, .{
         .get = get,
         .set = set,
         .address = getAddress,
         .__tostring = toString,
-    };
+    });
 
     address: u64,
     value: f64,
@@ -41,11 +40,10 @@ const Entry = struct {
 };
 
 const EntryTable = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .table;
-    pub const ZUA_METHODS = .{
+    pub const ZUA_META = zua.meta.Table(EntryTable, .{
         .get = get,
         .set = set,
-    };
+    });
 
     address: u64,
     value: f64,
@@ -61,7 +59,7 @@ const EntryTable = struct {
 };
 
 const Context = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .zig_ptr;
+    pub const ZUA_META = zua.meta.Ptr(Context);
 
     multiplier: f64,
 };

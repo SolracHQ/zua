@@ -1,39 +1,25 @@
 const std = @import("std");
-const lua = @import("lua.zig");
+const lua = @import("../lua/lua.zig");
+const meta = @import("meta.zig");
 
 const Zua = @import("zua.zig").Zua;
 const Table = @import("table.zig").Table;
+const Strategy = meta.Strategy;
 
+/// Errors returned by typed value decoding and parsing.
 pub const ParseError = error{
     InvalidArity,
     InvalidType,
     OutOfMemory,
 };
 
+/// Ownership mode used when decoding tables into `zua.Table` handles.
 pub const TableOwnership = enum {
     owned,
     borrowed,
 };
 
-pub const Strategy = enum { zig_ptr, object, table };
-
-pub fn strategyOf(comptime T: type) Strategy {
-    if (@hasDecl(T, "ZUA_TRANSLATION_STRATEGY")) {
-        return T.ZUA_TRANSLATION_STRATEGY;
-    }
-    return .table;
-}
-
-pub fn hasEncodeHook(comptime T: type) bool {
-    const info = @typeInfo(T);
-    return (info == .@"struct" or info == .@"enum") and @hasDecl(T, "ZUA_ENCODE_CUSTOM_HOOK");
-}
-
-pub fn hasDecodeHook(comptime T: type) bool {
-    const info = @typeInfo(T);
-    return (info == .@"struct" or info == .@"enum") and @hasDecl(T, "ZUA_DECODE_CUSTOM_HOOK");
-}
-
+/// Tuple type used to hold decoded callback arguments.
 pub fn ParseResult(comptime types: anytype) type {
     comptime var field_types: [types.len]type = undefined;
 
@@ -44,6 +30,10 @@ pub fn ParseResult(comptime types: anytype) type {
     return std.meta.Tuple(&field_types);
 }
 
+/// Parses a sequence of Lua stack values into a typed Zig tuple.
+///
+/// Supports optional trailing arguments and returns `error.InvalidArity` when
+/// the provided values do not match the requested tuple shape.
 pub fn parseTuple(
     z: *Zua,
     start_index: lua.StackIndex,
@@ -97,6 +87,8 @@ pub fn parseTuple(
     return values;
 }
 
+/// Decodes a Lua value from the stack at `index` into type `T`.
+/// Supports strings, numbers, booleans, tables, userdata, pointers, and optional values.
 pub fn decodeValue(
     z: *Zua,
     index: lua.StackIndex,
@@ -109,9 +101,9 @@ pub fn decodeValue(
     }
 
     // Check for custom decode hook first
-    if (comptime hasDecodeHook(T)) {
+    if (comptime meta.hasDecodeHook(T)) {
         const kind = lua.valueType(z.state, index);
-        return T.ZUA_DECODE_CUSTOM_HOOK(z, index, kind) catch return error.InvalidType;
+        return T.ZUA_META.decode_hook(z, index, kind) catch return error.InvalidType;
     }
 
     switch (comptime @typeInfo(T)) {
@@ -120,7 +112,7 @@ pub fn decodeValue(
                 const Pointee = ptr_info.child;
 
                 if (@typeInfo(Pointee) == .@"struct") {
-                    const strategy = comptime strategyOf(Pointee);
+                    const strategy = comptime meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         if (lua.valueType(z.state, index) != .userdata) return error.InvalidType;
@@ -148,7 +140,7 @@ pub fn decodeValue(
             // Non-single or non-struct pointer: fall through to string/slice checks below.
         },
         .@"struct" => {
-            const strategy = comptime strategyOf(T);
+            const strategy = comptime meta.strategyOf(T);
 
             if (strategy == .object) {
                 if (lua.valueType(z.state, index) != .userdata) return error.InvalidType;
@@ -175,7 +167,7 @@ pub fn decodeValue(
             // .table strategy: decode by field name from a Lua table.
             if (lua.valueType(z.state, index) != .table) return error.InvalidType;
             const table = Table.fromBorrowed(z, index);
-            return decodeStruct(Table, table, T);
+            return decodeStruct(table, T);
         },
         .@"enum" => {
             if (lua.valueType(z.state, index) != .integer) return error.InvalidType;
@@ -199,7 +191,8 @@ pub fn decodeValue(
     @compileError("unsupported decode type: " ++ @typeName(T));
 }
 
-pub fn decodeStruct(comptime TableType: type, table: TableType, comptime T: type) ParseError!T {
+/// Decodes a Lua table into a Zig struct by field name.
+pub fn decodeStruct(table: Table, comptime T: type) ParseError!T {
     var result: T = undefined;
 
     inline for (@typeInfo(T).@"struct".fields) |field| {
@@ -256,6 +249,10 @@ fn cleanupValue(z: *Zua, comptime T: type, value: T) void {
     }
 }
 
+/// Pushes a Zig value onto the Lua stack.
+///
+/// The value is converted according to its compile-time type, including
+/// custom encode hooks and table/object strategies.
 pub fn pushValue(zua: *Zua, value: anytype) void {
     const T = @TypeOf(value);
 
@@ -269,8 +266,8 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
     }
 
     // Check for custom encode hook first
-    if (comptime hasEncodeHook(T)) {
-        const encoded = T.ZUA_ENCODE_CUSTOM_HOOK(value);
+    if (comptime meta.hasEncodeHook(T)) {
+        const encoded = T.ZUA_META.encode_hook(value);
         pushValue(zua, encoded);
         return;
     }
@@ -303,7 +300,7 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
                 const Pointee = ptr_info.child;
 
                 if (@typeInfo(Pointee) == .@"struct") {
-                    const strategy = comptime strategyOf(Pointee);
+                    const strategy = comptime meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         @compileError("cannot push *T where T is .object: the metatable would be lost. Return T by value instead");
@@ -329,7 +326,7 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
             @compileError("unsupported push type: " ++ @typeName(T));
         },
         .@"struct" => {
-            const strategy = comptime strategyOf(T);
+            const strategy = comptime meta.strategyOf(T);
 
             if (strategy == .object) {
                 const mt = @import("metatable.zig");
@@ -360,6 +357,7 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
     }
 }
 
+/// Recursively fills a Lua table from a Zig struct, array, tuple, or slice.
 pub fn fillTable(table: Table, value: anytype) void {
     const T = @TypeOf(value);
 
@@ -397,6 +395,7 @@ pub fn fillTable(table: Table, value: anytype) void {
     }
 }
 
+/// Infers the array portion capacity for a Lua table representation of `value`.
 pub fn inferArrayCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 
@@ -414,6 +413,7 @@ pub fn inferArrayCapacity(value: anytype) i32 {
     };
 }
 
+/// Infers the record portion capacity for a Lua table representation of `value`.
 pub fn inferRecordCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 

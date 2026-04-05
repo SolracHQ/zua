@@ -20,19 +20,11 @@ pub fn build(b: *std.Build) void {
         name: []const u8,
         path: []const u8,
     }{
-        .{ .name = "example-simple-table", .path = "example/simple_table.zig" },
-        .{ .name = "example-table-methods", .path = "example/table_methods.zig" },
-        .{ .name = "example-simple-function", .path = "example/simple_function.zig" },
-        .{ .name = "example-light-userdata", .path = "example/light_userdata.zig" },
-        .{ .name = "example-results", .path = "example/results.zig" },
-        .{ .name = "example-guided-tour", .path = "example/guided_tour.zig" },
-        .{ .name = "example-optional-args", .path = "example/optional_args.zig" },
-        .{ .name = "example-try-callback", .path = "example/try_callback.zig" },
-        .{ .name = "example-decode-ergonomics", .path = "example/decode_ergonomics.zig" },
-        .{ .name = "example-error-traceback", .path = "example/error_traceback.zig" },
-        .{ .name = "example-userdata-objects", .path = "example/userdata_objects.zig" },
-        .{ .name = "example-array-decoding", .path = "example/array_decoding.zig" },
-        .{ .name = "example-custom-hooks", .path = "example/custom_hooks.zig" },
+        .{ .name = "example-introduction", .path = "example/introduction.zig" },
+        .{ .name = "example-functions", .path = "example/functions.zig" },
+        .{ .name = "example-data-structures", .path = "example/data-structures.zig" },
+        .{ .name = "example-custom-types", .path = "example/custom-types.zig" },
+        .{ .name = "example-guided-tour", .path = "example/guided-tour.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");
