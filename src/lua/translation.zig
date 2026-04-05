@@ -245,8 +245,6 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
         .@"struct" => {
             const strategy = comptime strategyOf(T);
 
-            std.debug.print("pushing struct of type {s} with strategy {any} has attribute {}\n", .{ @typeName(T), strategy, @hasDecl(T, "ZUA_TRANSLATION_STRATEGY") });
-
             if (strategy == .object) {
                 const mt = @import("metatable.zig");
                 const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(zua.state, @sizeOf(T))));
