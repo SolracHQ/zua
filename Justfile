@@ -9,6 +9,10 @@ test:
 examples:
     zig build examples
 
+all:
+    just test
+    just examples
+
 list-examples:
     @printf '%s\n' \
         simple-table \
@@ -16,7 +20,13 @@ list-examples:
         simple-function \
         light-userdata \
         results \
-        guided-tour
+        guided-tour \
+        optional-args \
+        try-callback \
+        decode-ergonomics \
+        error-traceback \
+        userdata-objects \
+        array-decoding
 
 run-example name:
     zig build "run-example-{{name}}"

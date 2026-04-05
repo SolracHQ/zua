@@ -169,6 +169,13 @@ pub fn pushValue(state: *State, index: StackIndex) void {
     c.lua_pushvalue(state, index);
 }
 
+/// Pushes the standard Lua traceback helper onto the stack.
+pub fn pushTracebackFunction(state: *State) void {
+    _ = getGlobal(state, "debug");
+    _ = getField(state, -1, "traceback");
+    remove(state, -2);
+}
+
 /// Ensures there is room for at least `extra_slots` more stack values.
 pub fn checkStack(state: *State, extra_slots: StackCount) bool {
     return c.lua_checkstack(state, extra_slots) != 0;
@@ -224,6 +231,21 @@ pub fn toLightUserdata(state: *State, index: StackIndex) ?*anyopaque {
     return c.lua_touserdata(state, index);
 }
 
+/// Converts the value at `index` to a light or full userdata pointer.
+pub fn toUserdata(state: *State, index: StackIndex) ?*anyopaque {
+    return c.lua_touserdata(state, index);
+}
+
+/// Pushes a new userdata block onto the stack and returns the raw pointer.
+pub fn newUserdata(state: *State, size: usize) *anyopaque {
+    return c.lua_newuserdata(state, size).?;
+}
+
+/// Pushes a Lua function pointer onto the stack.
+pub fn pushFunction(state: *State, function: CFunction) void {
+    pushCFunction(state, function);
+}
+
 /// Pushes the named global onto the stack and returns its Lua type.
 pub fn getGlobal(state: *State, name: [:0]const u8) Type {
     return @enumFromInt(c.lua_getglobal(state, name.ptr));
@@ -254,6 +276,11 @@ pub fn getIndex(state: *State, index: StackIndex, key: Integer) Type {
     return @enumFromInt(c.lua_geti(state, index, key));
 }
 
+/// Pushes `table[key]` for an integer key onto the stack without metamethods.
+pub fn rawGetI(state: *State, index: StackIndex, key: Integer) Type {
+    return @enumFromInt(c.lua_rawgeti(state, index, key));
+}
+
 /// Creates a table with optional array and hash capacity hints.
 pub fn createTable(state: *State, array_capacity: c_int, record_capacity: c_int) void {
     c.lua_createtable(state, array_capacity, record_capacity);
@@ -277,6 +304,16 @@ pub fn arith(state: *State, op: ArithOp) void {
 /// Opens all standard Lua libraries in the given state.
 pub fn openLibs(state: *State) void {
     c.luaL_openlibs(state);
+}
+
+/// Creates a reference to the value on top of the stack and stores it in the table at `index`.
+pub fn ref(state: *State, index: StackIndex) c_int {
+    return c.luaL_ref(state, index);
+}
+
+/// Releases the reference `ref` previously created with `ref`.
+pub fn unref(state: *State, index: StackIndex, _ref: c_int) void {
+    c.luaL_unref(state, index, _ref);
 }
 
 /// Checks that argument `arg_index` is an integer and returns it.
@@ -328,6 +365,11 @@ pub fn pop(state: *State, count: StackCount) void {
 pub fn remove(state: *State, index: StackIndex) void {
     c.lua_rotate(state, index, -1);
     pop(state, 1);
+}
+
+/// Inserts the top stack value at the given index.
+pub fn insert(state: *State, index: StackIndex) void {
+    c.lua_insert(state, index);
 }
 
 /// Pushes a new empty table onto the stack.

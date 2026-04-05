@@ -5,15 +5,13 @@ const AppState = struct {
     next: i32,
 };
 
-fn nextValue(z: *zua.Zua, args: zua.Args) zua.Result(.{i32}) {
-    _ = args;
-
+fn nextValue(z: *zua.Zua) zua.Result(i32) {
     const registry = z.registry();
     defer registry.pop();
 
-    const app = registry.getLightUserdata("app_context", AppState) catch return z.err(.{i32}, "app context missing", .{});
+    const app = registry.getLightUserdata("app_context", AppState) catch return zua.Result(i32).errStatic("app context missing");
     app.next += 1;
-    return zua.Result(.{i32}).owned(z.allocator, .{app.next - 1});
+    return zua.Result(i32).ok(app.next - 1);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -28,7 +26,7 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.pop();
-    globals.setFn("next_value", nextValue);
+    globals.setFn("next_value", zua.ZuaFn.from(nextValue, .{ .parse_error = "next_value expects ()" }));
 
     try z.exec(
         \\print(next_value())

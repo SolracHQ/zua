@@ -8,7 +8,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.pop();
 
-    const config = zua.createTable(0, 3);
+    const config = z.createTable(0, 3);
     config.set("name", "zua");
     config.set("version", 1);
     config.set("enabled", true);
@@ -16,7 +16,7 @@ pub fn main(init: std.process.Init) !void {
     globals.set("config", config);
     config.pop();
 
-    try zua.exec(
+    try z.exec(
         \\print(config.name)
         \\print(config.version)
         \\print(config.enabled)

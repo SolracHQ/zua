@@ -1,37 +1,31 @@
 const std = @import("std");
 const lua = @import("lua.zig");
+const translation = @import("translation.zig");
+const Zua = @import("zua.zig").Zua;
 
 /// Errors returned by typed table reads.
-pub const Error = error{
-    InvalidKeyType,
-    InvalidValueType,
-    InvalidType,
-    MissingField,
-    OutOfRange,
-};
+pub const Error = translation.ParseError;
 
 /// Handle to a Lua table currently live on the stack.
 pub const Table = struct {
-    state: *lua.State,
-    allocator: std.mem.Allocator,
+    z: *Zua,
     index: lua.StackIndex,
     owns_stack_slot: bool,
 
     /// Creates an owning table handle for a stack slot pushed by the wrapper.
-    pub fn fromStack(state: *lua.State, allocator: std.mem.Allocator, index: lua.StackIndex) Table {
-        return fromStackWithOwnership(state, allocator, index, true);
+    pub fn fromStack(z: *Zua, index: lua.StackIndex) Table {
+        return fromStackWithOwnership(z, index, true);
     }
 
     /// Creates a borrowed table handle for a stack slot owned by some other API operation.
-    pub fn fromBorrowed(state: *lua.State, allocator: std.mem.Allocator, index: lua.StackIndex) Table {
-        return fromStackWithOwnership(state, allocator, index, false);
+    pub fn fromBorrowed(z: *Zua, index: lua.StackIndex) Table {
+        return fromStackWithOwnership(z, index, false);
     }
 
-    fn fromStackWithOwnership(state: *lua.State, allocator: std.mem.Allocator, index: lua.StackIndex, owns_stack_slot: bool) Table {
+    fn fromStackWithOwnership(z: *Zua, index: lua.StackIndex, owns_stack_slot: bool) Table {
         return .{
-            .state = state,
-            .allocator = allocator,
-            .index = lua.absIndex(state, index),
+            .z = z,
+            .index = lua.absIndex(z.state, index),
             .owns_stack_slot = owns_stack_slot,
         };
     }
@@ -42,52 +36,14 @@ pub const Table = struct {
 
         if (comptime isStringKeyType(Key)) {
             const key_text = coerceStringKey(key);
-            pushValueToStack(self.state, self.allocator, value);
-            lua.setField(self.state, self.index, key_text);
+            translation.pushValue(self.z, value);
+            lua.setField(self.z.state, self.index, key_text);
             return;
         }
 
         const key_value = coerceIntegerKey(key);
-        pushValueToStack(self.state, self.allocator, value);
-        lua.setIndex(self.state, self.index, key_value);
-    }
-
-    /// Populates this table from a Zig struct, array, tuple, or non-string slice.
-    pub fn fill(self: Table, value: anytype) void {
-        const T = @TypeOf(value);
-
-        switch (@typeInfo(T)) {
-            .@"struct" => |info| {
-                if (info.is_tuple) {
-                    inline for (value, 0..) |item, index| {
-                        self.set(index + 1, item);
-                    }
-                    return;
-                }
-
-                inline for (info.fields) |field| {
-                    self.set(field.name, @field(value, field.name));
-                }
-            },
-            .array => {
-                for (value, 0..) |item, index| {
-                    self.set(index + 1, item);
-                }
-            },
-            .pointer => |pointer| switch (pointer.size) {
-                .slice => {
-                    if (comptime isStringValueType(T)) {
-                        @compileError("string-like values must be stored as Lua strings, not table fills");
-                    }
-
-                    for (value, 0..) |item, index| {
-                        self.set(index + 1, item);
-                    }
-                },
-                else => @compileError("unsupported table fill type: " ++ @typeName(T)),
-            },
-            else => @compileError("unsupported table fill type: " ++ @typeName(T)),
-        }
+        translation.pushValue(self.z, value);
+        lua.setIndex(self.z.state, self.index, key_value);
     }
 
     /// Reads `table[key]` and converts it to `T`.
@@ -95,143 +51,71 @@ pub const Table = struct {
         const Key = @TypeOf(key);
 
         if (comptime isStringKeyType(Key)) {
-            _ = lua.getField(self.state, self.index, coerceStringKey(key));
+            _ = lua.getField(self.z.state, self.index, coerceStringKey(key));
         } else {
-            _ = lua.getIndex(self.state, self.index, coerceIntegerKey(key));
+            _ = lua.getIndex(self.z.state, self.index, coerceIntegerKey(key));
         }
 
         if (T == Table) {
-            if (lua.valueType(self.state, -1) != .table) {
-                lua.pop(self.state, 1);
+            if (lua.valueType(self.z.state, -1) != .table) {
+                lua.pop(self.z.state, 1);
                 return error.InvalidType;
             }
 
-            return Table.fromStack(self.state, self.allocator, -1);
+            return Table.fromStack(self.z, -1);
         }
 
-        defer lua.pop(self.state, 1);
-        if (lua.valueType(self.state, -1) == .none or lua.valueType(self.state, -1) == .nil) return error.MissingField;
-        return decodeValue(T, self.state, -1);
-    }
-
-    pub fn getStruct(self: Table, comptime T: type) Error!T {
-        var result: T = undefined;
-        inline for (@typeInfo(T).@"struct".fields) |field| {
-            @field(result, field.name) = try self.get(field.name, field.type);
+        defer lua.pop(self.z.state, 1);
+        if (lua.valueType(self.z.state, -1) == .none or lua.valueType(self.z.state, -1) == .nil) {
+            if (comptime @typeInfo(T) == .optional) {
+                return null;
+            } else {
+                return error.InvalidType;
+            }
         }
-        return result;
+        return translation.decodeValue(self.z, -1, T, .borrowed);
     }
 
     /// Registers a Zig callback as `table[key]`.
-    pub fn setFn(self: Table, key: [:0]const u8, comptime f: anytype) void {
-        const zua_mod = @import("zua.zig");
+    pub fn setFn(self: Table, key: [:0]const u8, zuaFn: anytype) void {
+        const ZuaFn = @TypeOf(zuaFn);
 
-        lua.pushCFunction(self.state, zua_mod.wrap(f));
-        lua.setField(self.state, self.index, key);
+        if (!@hasDecl(ZuaFn, "trampoline")) {
+            @compileError("setFn expects a value returned by zua.ZuaFn.from(...) or zua.ZuaFn.pure(...)");
+        }
+
+        lua.pushCFunction(self.z.state, ZuaFn.trampoline());
+        lua.setField(self.z.state, self.index, key);
     }
 
     /// Stores a light userdata pointer under `key`.
     pub fn setLightUserdata(self: Table, key: [:0]const u8, ptr: anytype) void {
-        lua.pushLightUserdata(self.state, ptr);
-        lua.setField(self.state, self.index, key);
+        lua.pushLightUserdata(self.z.state, ptr);
+        lua.setField(self.z.state, self.index, key);
     }
 
     /// Loads a light userdata pointer from `key` and casts it to `*T`.
     pub fn getLightUserdata(self: Table, key: [:0]const u8, comptime T: type) Error!*T {
-        _ = lua.getField(self.state, self.index, key);
-        defer lua.pop(self.state, 1);
+        _ = lua.getField(self.z.state, self.index, key);
+        defer lua.pop(self.z.state, 1);
 
-        const value_type = lua.valueType(self.state, -1);
-        if (value_type == .none or value_type == .nil) return error.MissingField;
+        const value_type = lua.valueType(self.z.state, -1);
+        if (value_type == .none or value_type == .nil) return error.InvalidType;
 
-        const ptr = lua.toLightUserdata(self.state, -1) orelse return error.InvalidType;
+        const ptr = lua.toLightUserdata(self.z.state, -1) orelse return error.InvalidType;
         return @ptrCast(@alignCast(ptr));
     }
 
     /// Sets `mt` as the metatable for this table.
     pub fn setMetatable(self: Table, mt: Table) void {
-        lua.pushValue(self.state, mt.index);
-        _ = lua.setMetatable(self.state, self.index);
+        lua.pushValue(self.z.state, mt.index);
+        _ = lua.setMetatable(self.z.state, self.index);
     }
 
     /// Removes this table from the stack when the handle owns that stack slot.
     pub fn pop(self: Table) void {
         if (!self.owns_stack_slot) return;
-        lua.remove(self.state, self.index);
-    }
-
-    /// Pushes a Zig value onto the Lua stack using the same conversion rules as `set`.
-    pub fn pushValueToStack(state: *lua.State, allocator: std.mem.Allocator, value: anytype) void {
-        const T = @TypeOf(value);
-
-        if (@typeInfo(T) == .optional) {
-            if (value) |unwrapped| {
-                pushValueToStack(state, allocator, unwrapped);
-            } else {
-                lua.pushNil(state);
-            }
-            return;
-        }
-
-        if (T == Table) {
-            lua.pushValue(state, value.index);
-            return;
-        }
-
-        if (T == bool) {
-            lua.pushBoolean(state, value);
-            return;
-        }
-
-        if (comptime isStringValueType(T)) {
-            lua.pushString(state, value);
-            return;
-        }
-
-        if (comptime isTableConvertibleType(T)) {
-            lua.createTable(state, Table.inferArrayCapacity(value), Table.inferRecordCapacity(value));
-            const nested = Table.fromStack(state, allocator, -1);
-            nested.fill(value);
-            return;
-        }
-
-        switch (@typeInfo(T)) {
-            .int, .comptime_int => {
-                lua.pushInteger(state, std.math.cast(lua.Integer, value) orelse @panic("integer value out of range for Lua"));
-                return;
-            },
-            .float, .comptime_float => {
-                lua.pushNumber(state, @as(lua.Number, value));
-                return;
-            },
-            else => @compileError("unsupported table value type: " ++ @typeName(T)),
-        }
-    }
-
-    /// Infers the array capacity for a Zig value that can be converted into a Lua table.
-    pub fn inferArrayCapacity(value: anytype) i32 {
-        const T = @TypeOf(value);
-
-        return switch (@typeInfo(T)) {
-            .@"struct" => |info| if (info.is_tuple) @intCast(info.fields.len) else 0,
-            .array => @intCast(value.len),
-            .pointer => |pointer| switch (pointer.size) {
-                .slice => if (comptime isStringValueType(T)) @compileError("string-like values are not table-convertible") else std.math.cast(i32, value.len) orelse @panic("slice too large for Lua table"),
-                else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
-            },
-            else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
-        };
-    }
-
-    /// Infers the record capacity for a Zig value that can be converted into a Lua table.
-    pub fn inferRecordCapacity(value: anytype) i32 {
-        const T = @TypeOf(value);
-
-        return switch (@typeInfo(T)) {
-            .@"struct" => |info| if (info.is_tuple) 0 else @intCast(info.fields.len),
-            .array, .pointer => 0,
-            else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
-        };
+        lua.remove(self.z.state, self.index);
     }
 };
 
@@ -272,61 +156,6 @@ fn coerceIntegerKey(key: anytype) lua.Integer {
         .comptime_int, .int => std.math.cast(lua.Integer, key) orelse @panic("table integer key out of range"),
         else => @compileError("unsupported table key type: " ++ @typeName(T)),
     };
-}
-
-fn isStringValueType(comptime T: type) bool {
-    if (T == []const u8 or T == [:0]const u8) return true;
-
-    return switch (@typeInfo(T)) {
-        .pointer => |pointer| switch (pointer.size) {
-            .one => @typeInfo(pointer.child) == .array,
-            .slice => pointer.child == u8 and pointer.is_const,
-            else => false,
-        },
-        else => false,
-    };
-}
-
-// Table construction helpers
-
-fn isTableConvertibleType(comptime T: type) bool {
-    return switch (@typeInfo(T)) {
-        .@"struct" => true,
-        .array => true,
-        .pointer => |pointer| pointer.size == .slice and !isStringValueType(T),
-        else => false,
-    };
-}
-
-fn decodeValue(comptime T: type, state: *lua.State, index: lua.StackIndex) Error!T {
-    if (T == bool) {
-        if (lua.valueType(state, index) != .boolean) return error.InvalidType;
-        return lua.toBoolean(state, index);
-    }
-
-    if (T == []const u8) {
-        if (lua.valueType(state, index) != .string) return error.InvalidType;
-        return lua.toString(state, index) orelse error.InvalidType;
-    }
-
-    if (T == [:0]const u8) {
-        if (lua.valueType(state, index) != .string) return error.InvalidType;
-        return lua.toString(state, index) orelse error.InvalidType;
-    }
-
-    switch (@typeInfo(T)) {
-        .int => {
-            if (!lua.isInteger(state, index)) return error.InvalidType;
-            const value = lua.toInteger(state, index) orelse return error.InvalidType;
-            return std.math.cast(T, value) orelse error.OutOfRange;
-        },
-        .float => {
-            if (!lua.isNumber(state, index)) return error.InvalidType;
-            const value = lua.toNumber(state, index) orelse return error.InvalidType;
-            return std.math.cast(T, value) orelse error.OutOfRange;
-        },
-        else => @compileError("unsupported table get type: " ++ @typeName(T)),
-    }
 }
 
 test "table set and get values" {

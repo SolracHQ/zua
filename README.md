@@ -1,87 +1,85 @@
 # zua (Zig + Lua)
 
-zua is a small Zig wrapper over the Lua C API, born from the mess of writing [memscript](https://github.com/solracHQ/memscript).
+zua lets you write Zig and call it from Lua.
 
-The Lua C API is not bad. It is just easy to get wrong. Stack indexes drift, push/pop balance breaks in non-obvious ways, and `lua_error` calls `longjmp` which silently skips any cleanup you set up with `defer`. When you come back to the code after a week you have to reconstruct the whole stack discipline in your head before you can change anything.
+You define functions and types in Zig, register them with the VM, and zua handles the boundary. No stack indexes. No push/pop accounting. No longjmp surprises. You write Zig, Lua calls it.
 
-zua puts a thin layer over all of that. Tables get absolute indexes so -1 and -2 never appear in your binding code. Callbacks are plain Zig functions that receive typed arguments and return a typed `Result`. The `longjmp` only fires after your function has fully returned, so `defer` works the way you expect.
+Born from [memscript](https://github.com/solracHQ/memscript), where the original Lua binding code was a wall of manual stack arithmetic that was impossible to read a week after writing it.
 
-It is not a binding generator. It does not serialize Zig structs automatically or manage coroutines. Everything you can do with the raw C API you can still do, you just do not have to think about the stack while you do it.
+This project mostly exists to simplify my work on memscript, which means I only add features as memscript needs them. If you want to use it for something else and find something missing, open an issue or a PR.
 
-This project mostly exists to simplify my work on memscript, that means that I will only add features as I need them for memscript. If you want to use it for something else and find a missing feature, open an issue or a PR and I will take a look when I can.
+## How it works
+
+A `Zua` instance owns the Lua state. You register Zig functions and data on it. Lua scripts call them. zua generates the C trampoline that sits between Lua and your Zig code, decodes arguments from the Lua stack into typed Zig values, and converts your return values back. The `longjmp` that `lua_error` uses only fires after your Zig function has fully returned, so `defer` works the way you expect.
+
+## What it looks like
+
+Define a Zig function with typed parameters:
+
+```zig
+fn add(a: i32, b: i32) Result(i32) {
+    return Result(i32).ok(a + b);
+}
+```
+
+Register it and run a script:
+
+```zig
+const z = try Zua.init(allocator);
+defer z.deinit();
+
+const globals = z.globals();
+defer globals.pop();
+
+const add_fn = ZuaFn.pure(add, .{
+    .parse_error = "add expects (i32, i32)",
+    .zig_err_fmt = "Zig error at add: {s}",
+});
+globals.setFn("add", add_fn);
+
+try z.exec("print(add(1, 2))");
+```
+
+That is the whole model. The rest is details.
 
 ## Status
 
-- `Zua` owns the Lua state and the allocator, heap-allocated so its pointer is stable inside callbacks.
-- `Table` handles wrap stack positions with absolute indexes.
-- `tableFrom` converts plain Zig structs, arrays, and tuples into Lua tables recursively.
-- `Args.parse` decodes typed callback arguments in one call.
-- `Result(.{T})` carries typed return values and an optional error through the trampoline without exposing `longjmp` to calling code.
-- `zua.err` allocates a formatted error message and hands ownership to the trampoline.
-- `zua.eval` runs a chunk and decodes return values directly into a typed tuple with no intermediate handle.
-- `registry()` and `getLightUserdata` cover the common pattern of threading host state through callbacks.
+- `Zua` owns the Lua state and allocator, heap-allocated so its pointer is stable across callbacks.
+- Type translation strategies: declare `pub const ZUA_TRANSLATION_STRATEGY` on a struct to choose `.object` (userdata with metatable), `.zig_ptr` (light userdata), or `.table` (Lua table, default).
+- Methods and metamethods: declare `pub const ZUA_METHODS` struct with methods; metamethods (names starting with `__`) are placed on the metatable, regular methods in `__index`.
+- Metatable caching: `Zua.metatable_cache` stores built metatables; `getOrCreateMetatable(T)` builds on first call and caches thereafter.
+- `ZuaFn.from` and `ZuaFn.pure` register Zig functions. Arguments are decoded directly from the function signature.
+- `ZuaFnErrorConfig` customizes parse error text and Zig error formatting for callback wrappers.
+- `Result(T)` and `Result(.{ T1, T2 })` carry typed return values and Lua-facing failures back through the trampoline.
+- `Table` handles wrap Lua tables with absolute stack indexes so -1 and -2 never appear in your code.
+- `tableFrom` converts Zig structs, arrays, and tuples to Lua tables in one call.
+- `Table.getStruct` decodes a Lua table into a typed Zig struct, with support for optional and nested fields.
+- `Zua.eval` runs a Lua chunk and decodes return values directly into a typed Zig tuple.
+- `registry()` and `getLightUserdata` thread hidden host state through callbacks without exposing it to Lua.
+- Slice support: callbacks can decode `[]T` arrays from Lua tables; allocated memory is cleaned up automatically after callback returns.
+- REPL helpers: `checkChunk` distinguishes complete from incomplete Lua input; `canLoadAsExpression` detects expressions vs statements; `loadChunk` and `callLoadedChunk` control chunk loading and execution.
+- File execution: `execFile`, `evalFile`, `execFileTraceback` load and execute Lua scripts without manual file I/O.
 
-## Usage
+## Handbook
+
+Worked examples and patterns live in `handbook/`. Start with `functions.md`.
+
+## Minimal example
 
 ```zig
-const z = try zua.Zua.init(allocator);
+const z = try Zua.init(allocator);
 defer z.deinit();
 
 const globals = z.globals();
 defer globals.pop();
 
 globals.set("greeting", "hello");
-globals.setFn("add", add);
+globals.setFn("add", ZuaFn.pure(add, "add expects (i32, i32)"));
 
 try z.exec("message = greeting .. ', world'");
 
 const parsed = try z.eval(.{ []const u8, i32 }, "return message, add(1, 2)");
 std.debug.print("{s} {d}\n", .{ parsed[0], parsed[1] });
-```
-
-Callbacks declare their return types in the signature. Arguments are parsed in one line, errors are returned without touching the Lua stack directly.
-
-```zig
-fn add(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ i32, i32 }) catch return z.err(.{i32}, "add expects (i32, i32)", .{});
-    return Result(.{i32}).ok(.{parsed[0] + parsed[1]});
-}
-```
-
-Methods work the same way. The first argument from `:` syntax is the receiver table, decoded like any other argument.
-
-```zig
-fn increment(z: *Zua, args: Args) Result(.{i32}) {
-    const parsed = args.parse(.{ Table, i32 }) catch return z.err(.{i32}, "counter:increment expects (self, i32)", .{});
-    const next = (parsed[0].get("count", i32) catch return z.err(.{i32}, "counter.count missing", .{})) + parsed[1];
-    parsed[0].set("count", next);
-    return Result(.{i32}).ok(.{next});
-}
-```
-
-Use `owned` instead of `ok` when returning allocated strings. The trampoline frees them after pushing, so you do not track the allocation yourself.
-
-```zig
-fn joinPath(z: *Zua, args: Args) Result(.{[]const u8}) {
-    const parsed = args.parse(.{ []const u8, []const u8, []const u8 }) catch return z.err(.{[]const u8}, "join_path expects (string, string, string)", .{});
-    const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ parsed[0], parsed[1], parsed[2] }) catch return z.err(.{[]const u8}, "out of memory", .{});
-    return Result(.{[]const u8}).owned(z.allocator, .{joined});
-}
-```
-
-Light userdata is the cleanest way to pass host state into callbacks without exposing it as a normal Lua value.
-
-```zig
-zua.registry().setLightUserdata("app_state", &app_state);
-
-fn nextTicket(z: *Zua, args: Args) Result(.{i32}) {
-    _ = args;
-    const registry = z.registry();
-    defer registry.pop();
-    const app = registry.getLightUserdata("app_state", AppState) catch return z.err(.{i32}, "app state missing", .{});
-    app.next_ticket += 1;
-    return z.Result(.{i32}).ok(.{app.next_ticket - 1});
-}
 ```
 
 ## Installation
@@ -104,7 +102,7 @@ const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
 exe.root_module.addImport("zua", zua.module("zua"));
 ```
 
-Requires Lua 5.4 headers and a system Lua library. 
+Requires Lua 5.4 headers and a system Lua library.
 
 On Debian/Ubuntu:
 
