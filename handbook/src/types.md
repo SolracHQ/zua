@@ -1,10 +1,10 @@
 # Types
 
-Tables are good for DTOs, plain data you want Lua to read and write. But sometimes you need a Zig value that has identity, methods, and a lifetime that Lua does not control. That is what translation strategies and the `ZUA_*` markers are for.
+Tables are good for DTOs, plain data you want Lua to read and write. But sometimes you need a Zig value that has identity, methods, and a lifetime that Lua does not control. That is what translation strategies and the `ZUA_META` declaration are for.
 
 ## Translation strategies
 
-Declare `ZUA_TRANSLATION_STRATEGY` on a struct to tell zua how to represent it in Lua. There are three options.
+Declare `ZUA_META` on a struct to tell zua how to represent it in Lua. There are three options.
 
 ### `.object` - userdata with methods
 
@@ -12,12 +12,11 @@ The struct is allocated as Lua userdata with a metatable. Methods receive `self:
 
 ```zig
 const Entry = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .object;
-    pub const ZUA_METHODS = .{
+    pub const ZUA_META = zua.meta.Object(Entry, .{
         .get = get,
         .set = set,
         .__tostring = toString,
-    };
+    });
 
     address: u64,
     value: f64,
@@ -53,10 +52,9 @@ Fields become table keys. Lua code can read and write them directly. Methods rec
 
 ```zig
 const Point = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .table;
-    pub const ZUA_METHODS = .{
+    pub const ZUA_META = zua.meta.Table(Point, .{
         .distance = distance,
-    };
+    });
 
     x: f64,
     y: f64,
@@ -82,7 +80,8 @@ Light userdata. No methods, no metatable. Lua can hold the value and pass it bac
 
 ```zig
 const Context = struct {
-    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .zig_ptr;
+    pub const ZUA_META = zua.meta.Ptr(Context);
+
     multiplier: f64,
 };
 
@@ -98,13 +97,17 @@ print(scale(ctx, 10))
 
 ## Methods and metamethods
 
-Methods are declared in `ZUA_METHODS` as a comptime tuple of name-function pairs. Names starting with `__` are metamethods and go directly on the metatable. Everything else goes in `__index`.
+Methods are declared in the `ZUA_META` via `meta.Object()`, `meta.Table()` etc. as a comptime tuple of name-function pairs. Names starting with `__` are metamethods and go directly on the metatable. Everything else goes in `__index`.
 
 ```zig
-pub const ZUA_METHODS = .{
-    .normalize = normalize,
-    .__tostring = toString,
-    .__add = add,
+const T = struct {
+    pub const ZUA_META = zua.meta.Object(T, .{
+        .normalize = normalize,
+        .__tostring = toString,
+        .__add = add,
+    });
+    
+    // ...
 };
 ```
 
@@ -115,9 +118,32 @@ The first parameter of a method determines how `self` is received:
 
 Metamethods follow the same rules. `__tostring` and binary operators like `__add` and `__mul` work as you would expect from the Lua manual.
 
+### Customizing method error handling
+
+Methods can be wrapped in `ZuaFn` to customize error handling. Instead of a bare function, use `ZuaFn.from()` or `ZuaFn.pure()` with a `ZuaFnErrorConfig` to control how Zig errors are reported to Lua:
+
+```zig
+const Counter = struct {
+    pub const ZUA_META = zua.meta.Object(Counter, .{
+        .increment = zua.ZuaFn.pure(increment, .{
+            .zig_err_fmt = "increment failed: {s}",
+        }),
+    });
+
+    count: i32 = 0,
+
+    pub fn increment(self: *Counter, amount: i32) Result(.{}) {
+        self.count += amount;
+        return Result(.{}).ok(.{});
+    }
+};
+```
+
+This is powerful for debugging: you can provide context-specific error messages without relying on stack traces.
+
 ## Custom hooks
 
-Sometimes you need control over how a type encodes to Lua or decodes from Lua. The two markers for this are `ZUA_ENCODE_CUSTOM_HOOK` and `ZUA_DECODE_CUSTOM_HOOK`.
+Sometimes you need control over how a type encodes to Lua or decodes from Lua. Use `.withEncode()` and `.withDecode()` builder methods on the `ZUA_META` declaration.
 
 ### Encode hooks
 
@@ -129,7 +155,8 @@ const Status = enum(u8) {
     running = 1,
     stopped = 2,
 
-    pub const ZUA_ENCODE_CUSTOM_HOOK = encodeAsString;
+    pub const ZUA_META = zua.meta.Table(Status, .{})
+        .withEncode([]const u8, encodeAsString);
 
     fn encodeAsString(status: Status) []const u8 {
         return switch (status) {
@@ -145,15 +172,16 @@ The hook must return a different type than its input. This is enforced to preven
 
 ### Decode hooks
 
-A decode hook lets a type accept multiple Lua value types and convert them. Useful when you want a flexible API that accepts an address as an integer, a hex string, or an existing handle:
+A decode hook lets a type accept multiple Lua value types and convert them. Useful when you want a flexible API that accepts an address as an integer or an existing handle:
 
 ```zig
 const Address = struct {
+
+    pub const ZUA_META = zua.meta.Table(Address, .{}).withDecode(decodeHook);
+
     value: u64,
 
-    pub const ZUA_DECODE_CUSTOM_HOOK = decode;
-
-    fn decode(z: *zua.Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
+    fn decodeHook(z: *zua.Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
         return switch (kind) {
             .number => blk: {
                 const n = zua.lua.toInteger(z.state, index) orelse return error.InvalidType;

@@ -15,19 +15,11 @@ all:
 
 list-examples:
     @printf '%s\n' \
-        simple-table \
-        table-methods \
-        simple-function \
-        light-userdata \
-        results \
         guided-tour \
-        optional-args \
-        try-callback \
-        decode-ergonomics \
-        error-traceback \
-        userdata-objects \
-        array-decoding \
-        custom-hooks
+        introduction \
+        functions \
+        data-structures \
+        custom-types
 
 run-example name:
     zig build "run-example-{{name}}"

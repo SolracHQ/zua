@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- `ZUA_META` builder API for centralized type metadata: `meta.Object()`, `meta.Table()`, `meta.Ptr()`, `meta.strEnum()`
+- `.withEncode()` and `.withDecode()` builder methods for custom encode/decode hooks on `ZUA_META`
+- `ZuaFnErrorConfig.parse_err_hook` to customize error messages when Lua argument parsing fails
+- Automatic detection and reuse of pre-wrapped ZuaFn methods in metatables (check for `__IsZuaFn` marker)
+- `zua.meta` becomes the single source of truth for all type metadata queries
+
+### Changed
+
+- Removed old magic markers: `ZUA_TRANSLATION_STRATEGY`, `ZUA_ENCODE_CUSTOM_HOOK`, `ZUA_DECODE_CUSTOM_HOOK`, `ZUA_METHODS`
+- Types may now declare `pub const ZUA_META = zua.meta.<strategy>(...)` with appropriate builder chain to customize behavior; defaults to `.table` if not declared
+- `translation.zig` now imports and uses metadata helpers from `meta.zig` exclusively
+- Simplified internal API: centralized `strategyOf()`, `hasEncodeHook()`, `hasDecodeHook()`, `methodsOf()` in `meta.zig`
+
 ## 0.3.0
 
 ### Added

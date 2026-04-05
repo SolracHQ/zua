@@ -14,15 +14,16 @@ pub const Status = enum(u8) {
     running = 1,
     stopped = 2,
 
-    pub const ZUA_ENCODE_CUSTOM_HOOK = encodeStatusAsString;
-
-    fn encodeStatusAsString(status: Status) []const u8 {
+    fn encodeAsString(status: Status) []const u8 {
         return switch (status) {
             .idle => "idle",
             .running => "running",
             .stopped => "stopped",
         };
     }
+
+    pub const ZUA_META = zua.meta.strEnum(Status, .{})
+        .withEncode([]const u8, encodeAsString);
 };
 
 // Example 3: Direction enum with custom encode
@@ -32,9 +33,7 @@ pub const Direction = enum(u8) {
     south = 2,
     west = 3,
 
-    pub const ZUA_ENCODE_CUSTOM_HOOK = encodeDirectionAsString;
-
-    fn encodeDirectionAsString(dir: Direction) []const u8 {
+    fn encodeAsString(dir: Direction) []const u8 {
         return switch (dir) {
             .north => "north",
             .east => "east",
@@ -42,14 +41,15 @@ pub const Direction = enum(u8) {
             .west => "west",
         };
     }
+
+    pub const ZUA_META = zua.meta.strEnum(Direction, .{})
+        .withEncode([]const u8, encodeAsString);
 };
 
 // Example 4: Address type with custom decode hook
 // Accepts integer (memory address) or userdata (existing handle)
 pub const Address = struct {
     value: u64,
-
-    pub const ZUA_DECODE_CUSTOM_HOOK = decodeAddressHook;
 
     fn decodeAddressHook(z: *zua.Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
         const value: u64 = switch (kind) {
@@ -68,6 +68,9 @@ pub const Address = struct {
         };
         return Address{ .value = value };
     }
+
+    pub const ZUA_META = zua.meta.Table(Address, .{})
+        .withDecode(decodeAddressHook);
 };
 
 // Return types for Lua callbacks

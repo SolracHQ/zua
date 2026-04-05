@@ -1,5 +1,5 @@
 const std = @import("std");
-const lua = @import("lua.zig");
+const lua = @import("../lua/lua.zig");
 const translation = @import("translation.zig");
 const Zua = @import("zua.zig").Zua;
 
@@ -8,6 +8,7 @@ const CallbackKind = enum {
     pure,
 };
 
+/// Configuration for `ZuaFn.from` and `ZuaFn.pure` error handling.
 pub const ZuaFnErrorConfig = struct {
     /// parse_error is a static error message used when Lua argument decoding fails.
     parse_error: []const u8 = "invalid arguments",
@@ -19,6 +20,12 @@ pub const ZuaFnErrorConfig = struct {
     /// result should be an allocator-owned string describing the error
     /// Zua will free the string after pushing it to Lua
     zig_err_hook: ?fn (*Zua, anyerror) []const u8 = null,
+    /// parse_err_hook is called when argument decoding fails
+    /// Takes precedence over parse_error if provided
+    ///
+    /// result should be an allocator-owned string describing the error
+    /// Zua will free the string after pushing it to Lua
+    parse_err_hook: ?fn (*Zua, []const lua.Type, lua.StackIndex) anyerror![]const u8 = null,
 };
 
 /// Wraps a Zig function callback that receives `*Zua` as the first parameter.
@@ -46,6 +53,9 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
     validateResultType(CallbackResultType);
 
     return struct {
+        /// Marker field to allow detection of ZuaFn types at compile time.
+        pub const __IsZuaFn = true;
+
         /// Returns the C-compatible Lua trampoline function for this callback.
         ///
         /// The trampoline decodes Lua arguments, calls the wrapped Zig function,
@@ -103,7 +113,15 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                         lua.getTop(vm.state),
                         decoded_types,
                         .borrowed,
-                    ) catch return CallbackResultType.errStatic(error_config.parse_error);
+                    ) catch {
+                        if (error_config.parse_err_hook) |hook| {
+                            const message = hook(vm, &decoded_types, 1) catch {
+                                return CallbackResultType.errStatic(error_config.parse_error);
+                            };
+                            return CallbackResultType.errOwned(message);
+                        }
+                        return CallbackResultType.errStatic(error_config.parse_error);
+                    };
                     defer translation.cleanupDecodedValues(vm, decoded_types, decoded_values);
 
                     var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
