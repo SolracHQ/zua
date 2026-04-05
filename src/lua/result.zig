@@ -67,18 +67,15 @@ fn SingleResult(comptime T: type) type {
             return .{ .value = value };
         }
 
-        /// Creates a successful single-value callback result, cloning owned string values.
-        pub fn owned(z: *Zua, value: T) @This() {
+        /// Creates a successful single-value callback result, taking ownership of allocated values.
+        /// The value must be allocated with z.allocator. It will be freed after the callback returns.
+        pub fn owned(value: T) @This() {
             if (comptime !isOwnedResultValueType(T)) {
                 return .{ .value = value };
             }
 
-            const cloned = cloneResultValue(T, z.allocator, value) catch {
-                return @This().errStatic("out of memory");
-            };
-
             return .{
-                .value = cloned,
+                .value = value,
                 .owns_value = true,
             };
         }
@@ -130,16 +127,13 @@ fn MultiResult(comptime types: anytype) type {
             return .{ .values = values };
         }
 
-        /// Creates a successful multi-value callback result, cloning owned string values.
-        pub fn owned(z: *Zua, values: ValueTuple) @This() {
+        /// Creates a successful multi-value callback result, taking ownership of allocated string values.
+        /// String values must be allocated with z.allocator. They will be freed after the callback returns.
+        pub fn owned(values: ValueTuple) @This() {
             var result = @This().ok(values);
 
             inline for (types, 0..) |T, index| {
                 if (comptime isOwnedResultValueType(T)) {
-                    result.values[index] = cloneResultValue(T, z.allocator, values[index]) catch {
-                        result.deinit(z);
-                        return @This().errStatic("out of memory");
-                    };
                     result.owned_values[index] = true;
                 }
             }

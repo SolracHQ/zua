@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- Enum support: `.table` mode encodes/decodes enums as integers; `.object` mode wraps in userdata with metatable
+- `ZUA_ENCODE_CUSTOM_HOOK` declaration on types to customize encoding (e.g., enums to strings)
+- `ZUA_DECODE_CUSTOM_HOOK` declaration on types to support multiple Lua input types with low-level decoding
+- Custom decode hooks enable flexible input handling: examine `lua.Type` and decode directly from stack using Lua C API functions
+- Encode hook transparently converts types before pushing to Lua stack
+
+### Changed
+
+- `Result.owned(value)` signature simplified: removed unused `z` parameter. `Result.owned()` now only marks ownership; the value must already be allocated with `z.allocator`
+
 ## 0.2.0
 
 ### Added

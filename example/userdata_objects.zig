@@ -36,8 +36,7 @@ const Entry = struct {
             "Entry(address=0x{X}, value={d})",
             .{ self.address, self.value },
         ) catch return Result([]const u8).errStatic("out of memory");
-        defer z.allocator.free(display);
-        return Result([]const u8).owned(z, display);
+        return Result([]const u8).owned(display);
     }
 };
 

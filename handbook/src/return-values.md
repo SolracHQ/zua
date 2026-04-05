@@ -29,12 +29,12 @@ fn logMessage(_: *Zua, msg: []const u8) Result(.{}) {
 
 ## Allocated strings
 
-For ordinary values `ok` is enough. When the success value is an allocated string, use `owned`. The trampoline clones and frees the string after pushing it, so you do not track the allocation yourself.
+For ordinary values `ok` is enough. When the success value is an allocated string, use `owned`. The trampoline takes ownership of the string and frees it after pushing it to Lua, so you do not track the allocation yourself.
 
 ```zig
 fn format(z: *Zua, value: i32) Result([]const u8) {
     const text = std.fmt.allocPrint(z.allocator, "value={d}", .{value}) catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(z.allocator, text);
+    return Result([]const u8).owned(text);
 }
 ```
 

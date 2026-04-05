@@ -91,8 +91,7 @@ fn joinPath(z: *Zua, a: []const u8, b: []const u8, c: []const u8) Result([]const
     const joined = std.fmt.allocPrint(z.allocator, "{s}/{s}/{s}", .{ a, b, c }) catch {
         return Result([]const u8).errStatic("out of memory");
     };
-    defer z.allocator.free(joined);
-    return Result([]const u8).owned(z, joined);
+    return Result([]const u8).owned(joined);
 }
 
 fn nextTicket(z: *Zua) Result(i32) {
