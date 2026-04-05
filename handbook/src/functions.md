@@ -29,7 +29,7 @@ Use `ZuaFn.from` for functions that need the VM, for example to access the alloc
 ```zig
 fn greet(z: *Zua, name: []const u8) Result([]const u8) {
     const msg = std.fmt.allocPrint(z.allocator, "hello, {s}", .{name}) catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(z.allocator, msg);
+    return Result([]const u8).owned(msg);
 }
 
 const greet_fn = ZuaFn.from(greet, .{
@@ -56,7 +56,7 @@ Callbacks may return `!Result(T)`. Zig errors are converted to Lua-facing failur
 ```zig
 fn readFile(z: *Zua, path: []const u8) !Result([]const u8) {
     const contents = try std.fs.cwd().readFileAlloc(z.allocator, path, 1024 * 1024);
-    return Result([]const u8).owned(z.allocator, contents);
+    return Result([]const u8).owned(contents);
 }
 ```
 

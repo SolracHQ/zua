@@ -24,6 +24,16 @@ pub fn strategyOf(comptime T: type) Strategy {
     return .table;
 }
 
+pub fn hasEncodeHook(comptime T: type) bool {
+    const info = @typeInfo(T);
+    return (info == .@"struct" or info == .@"enum") and @hasDecl(T, "ZUA_ENCODE_CUSTOM_HOOK");
+}
+
+pub fn hasDecodeHook(comptime T: type) bool {
+    const info = @typeInfo(T);
+    return (info == .@"struct" or info == .@"enum") and @hasDecl(T, "ZUA_DECODE_CUSTOM_HOOK");
+}
+
 pub fn ParseResult(comptime types: anytype) type {
     comptime var field_types: [types.len]type = undefined;
 
@@ -98,6 +108,12 @@ pub fn decodeValue(
         return try decodeValue(z, index, optionalChild(T), table_ownership);
     }
 
+    // Check for custom decode hook first
+    if (comptime hasDecodeHook(T)) {
+        const kind = lua.valueType(z.state, index);
+        return T.ZUA_DECODE_CUSTOM_HOOK(z, index, kind) catch return error.InvalidType;
+    }
+
     switch (comptime @typeInfo(T)) {
         .pointer => |ptr_info| {
             if (ptr_info.size == .one) {
@@ -160,6 +176,11 @@ pub fn decodeValue(
             if (lua.valueType(z.state, index) != .table) return error.InvalidType;
             const table = Table.fromBorrowed(z, index);
             return decodeStruct(Table, table, T);
+        },
+        .@"enum" => {
+            if (lua.valueType(z.state, index) != .integer) return error.InvalidType;
+            const value = lua.toInteger(z.state, index) orelse return error.InvalidType;
+            return std.meta.intToEnum(T, std.math.cast(std.meta.Tag(T), value) orelse return error.InvalidType) catch return error.InvalidType;
         },
         .bool => {
             if (lua.valueType(z.state, index) != .boolean) return error.InvalidType;
@@ -247,6 +268,13 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
         return;
     }
 
+    // Check for custom encode hook first
+    if (comptime hasEncodeHook(T)) {
+        const encoded = T.ZUA_ENCODE_CUSTOM_HOOK(value);
+        pushValue(zua, encoded);
+        return;
+    }
+
     if (T == Table) {
         lua.pushValue(zua.state, value.index);
         return;
@@ -266,6 +294,9 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
         },
         .float, .comptime_float => {
             lua.pushNumber(zua.state, @as(lua.Number, value));
+        },
+        .@"enum" => {
+            lua.pushInteger(zua.state, @intFromEnum(value));
         },
         .pointer => |ptr_info| {
             if (ptr_info.size == .one) {

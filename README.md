@@ -1,90 +1,275 @@
 # zua (Zig + Lua)
 
-zua lets you write Zig and call it from Lua.
+zua lets you write Zig and call it from Lua, seamlessly. No stack indexes. No push/pop accounting. No longjmp surprises. You define typed Zig functions, register them, and Lua calls them. That's it.
 
-You define functions and types in Zig, register them with the VM, and zua handles the boundary. No stack indexes. No push/pop accounting. No longjmp surprises. You write Zig, Lua calls it.
+The goal is to eliminate manual Lua crafting. Instead of wrestling with the C API, you declare what you want in Zig and zua handles the boundary.
 
-Born from [memscript](https://github.com/solracHQ/memscript), where the original Lua binding code was a wall of manual stack arithmetic that was impossible to read a week after writing it.
-
-This project mostly exists to simplify my work on memscript, which means I only add features as memscript needs them. If you want to use it for something else and find something missing, open an issue or a PR.
+Born from [memscript](https://github.com/solracHQ/memscript), where binding code was impossible to maintain. This project adds features as memscript needs them. It's practical, not comprehensive.
 
 ## How it works
 
-A `Zua` instance owns the Lua state. You register Zig functions and data on it. Lua scripts call them. zua generates the C trampoline that sits between Lua and your Zig code, decodes arguments from the Lua stack into typed Zig values, and converts your return values back. The `longjmp` that `lua_error` uses only fires after your Zig function has fully returned, so `defer` works the way you expect.
+A `Zua` instance owns the Lua state. You register Zig functions and data. Lua scripts call them. zua generates the C trampoline between Lua and your code:
 
-## What it looks like
+- Decodes Lua arguments into typed Zig values before your function sees them
+- Converts your Zig return values back into Lua values
+- Fires `lua_error` only after your Zig function returns completely, so `defer` is safe
 
-Define a Zig function with typed parameters:
+The result is clean Zig code that doesn't think about Lua mechanics.
+
+## Examples
+
+### Type-safe functions
+
+Lua arguments match your Zig function signature. No checking. No casting. No mistakes.
 
 ```zig
 fn add(a: i32, b: i32) Result(i32) {
     return Result(i32).ok(a + b);
 }
+
+// Register it
+globals.setFn("add", ZuaFn.pure(add, .{
+    .parse_error = "add expects (i32, i32)",
+}));
 ```
 
-Register it and run a script:
+Now Lua just calls it:
+
+```lua
+print(add(1, 2))  -- 3
+print(add("oops"))  -- error: add expects (i32, i32)
+```
+
+See [functions.md](handbook/src/functions.md) for more patterns.
+
+### Struct parameters and return values
+
+Pass Lua tables to Zig as typed structs. Return Zig data as tables.
 
 ```zig
-const z = try Zua.init(allocator);
-defer z.deinit();
+const Config = struct {
+    name: []const u8,
+    version: i32,
+};
 
-const globals = z.globals();
-defer globals.pop();
-
-const add_fn = ZuaFn.pure(add, .{
-    .parse_error = "add expects (i32, i32)",
-    .zig_err_fmt = "Zig error at add: {s}",
-});
-globals.setFn("add", add_fn);
-
-try z.exec("print(add(1, 2))");
+fn printConfig(_: *Zua, config: Config) Result(.{}) {
+    std.debug.print("{s} v{d}\n", .{ config.name, config.version });
+    return Result(.{}).ok(.{});
+}
 ```
 
-That is the whole model. The rest is details.
+Lua passes a table:
 
-## Status
+```lua
+printConfig({ name = "myapp", version = 1 })
+```
 
-- `Zua` owns the Lua state and allocator, heap-allocated so its pointer is stable across callbacks.
-- Type translation strategies: declare `pub const ZUA_TRANSLATION_STRATEGY` on a struct to choose `.object` (userdata with metatable), `.zig_ptr` (light userdata), or `.table` (Lua table, default).
-- Methods and metamethods: declare `pub const ZUA_METHODS` struct with methods; metamethods (names starting with `__`) are placed on the metatable, regular methods in `__index`.
-- Metatable caching: `Zua.metatable_cache` stores built metatables; `getOrCreateMetatable(T)` builds on first call and caches thereafter.
-- `ZuaFn.from` and `ZuaFn.pure` register Zig functions. Arguments are decoded directly from the function signature.
-- `ZuaFnErrorConfig` customizes parse error text and Zig error formatting for callback wrappers.
-- `Result(T)` and `Result(.{ T1, T2 })` carry typed return values and Lua-facing failures back through the trampoline.
-- `Table` handles wrap Lua tables with absolute stack indexes so -1 and -2 never appear in your code.
-- `tableFrom` converts Zig structs, arrays, and tuples to Lua tables in one call.
-- `Table.getStruct` decodes a Lua table into a typed Zig struct, with support for optional and nested fields.
-- `Zua.eval` runs a Lua chunk and decodes return values directly into a typed Zig tuple.
-- `registry()` and `getLightUserdata` thread hidden host state through callbacks without exposing it to Lua.
-- Slice support: callbacks can decode `[]T` arrays from Lua tables; allocated memory is cleaned up automatically after callback returns.
-- REPL helpers: `checkChunk` distinguishes complete from incomplete Lua input; `canLoadAsExpression` detects expressions vs statements; `loadChunk` and `callLoadedChunk` control chunk loading and execution.
-- File execution: `execFile`, `evalFile`, `execFileTraceback` load and execute Lua scripts without manual file I/O.
+See [passing-data-in.md](handbook/src/passing-data-in.md) and [passing-data-out.md](handbook/src/passing-data-out.md).
+
+### Methods and types
+
+Expose Zig types with methods and metamethods. Choose how they map: immutable Lua tables, mutable userdata objects, or opaque pointers.
+
+```zig
+const Vector = struct {
+    pub const ZUA_TRANSLATION_STRATEGY: zua.translation.Strategy = .object;
+    pub const ZUA_METHODS = .{
+        .length = length,
+        .__add = add,
+        .__tostring = toString,
+    };
+
+    x: f64,
+    y: f64,
+
+    fn length(self: *Vector) Result(f64) {
+        const len = std.math.sqrt(self.x * self.x + self.y * self.y);
+        return Result(f64).ok(len);
+    }
+
+    fn add(z: *Zua, a: *Vector, b: *Vector) Result(Vector) {
+        return Result(Vector).ok(.{ .x = a.x + b.x, .y = a.y + b.y });
+    }
+
+    fn toString(z: *Zua, self: *Vector) Result([]const u8) {
+        const msg = try std.fmt.allocPrint(z.allocator, "Vector({d}, {d})", .{self.x, self.y});
+        return Result([]const u8).owned(msg);
+    }
+};
+```
+
+Lua uses it naturally:
+
+```lua
+local v1 = makeVector(3, 4)
+print(v1:length())  -- 5
+print(v1 + makeVector(1, 0))  -- Vector(4, 4)
+```
+
+See [exposing-zig-types.md](handbook/src/exposing-zig-types.md) and [userdata-objects.zig](example/userdata_objects.zig).
+
+### Custom hooks for type translation
+
+Enums encode as integers by default, but you can customize how any type translates to and from Lua.
+
+```zig
+const Status = enum(u8) {
+    idle = 0,
+    running = 1,
+    stopped = 2,
+
+    pub const ZUA_ENCODE_CUSTOM_HOOK = encodeStatusAsString;
+
+    fn encodeStatusAsString(status: Status) []const u8 {
+        return switch (status) {
+            .idle => "idle",
+            .running => "running",
+            .stopped => "stopped",
+        };
+    }
+};
+
+fn getStatus(_: *Zua) Result(Status) {
+    return Result(Status).ok(.running);
+}
+```
+
+Lua receives a string instead of a number:
+
+```lua
+local status = getStatus()
+print(status)  -- "running"
+```
+
+Decode hooks let you accept multiple Lua value types and convert them:
+
+```zig
+const Address = struct {
+    value: u64,
+
+    pub const ZUA_DECODE_CUSTOM_HOOK = decodeAddressHook;
+
+    fn decodeAddressHook(z: *Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
+        return switch (kind) {
+            .number => Address{ .value = @intCast(zua.lua.toInteger(z.state, index) orelse 0) },
+            .userdata => Address{ .value = // ... extract from userdata ... },
+            else => error.InvalidType,
+        };
+    }
+};
+```
+
+Now `testAddress` accepts both numbers and handles:
+
+```lua
+testAddress(0xdeadbeef)  -- works
+testAddress(myHandle)    -- also works
+```
+
+See [custom-hooks.md](handbook/src/custom-hooks.md) and [custom_hooks.zig](example/custom_hooks.zig).
+
+### Memory management
+
+Decoded slices are allocated and cleaned up automatically. Owned strings from Lua are tracked. No manual freeing after callbacks return.
+
+```zig
+fn processItems(_: *Zua, items: []const u8) Result(i32) {
+    // items is a slice allocated from z.allocator
+    // it's freed after this function returns
+    return Result(i32).ok(@intCast(items.len));
+}
+```
+
+> **Warning**: When you call `Result.owned(value)`, the value must be allocated with `z.allocator`. If it comes from a different allocator, the cleanup will fail. Stick with `z.allocator` for simplicity.
+
+### Error handling
+
+Return errors from Zig, they become Lua errors automatically.
+
+```zig
+fn readFile(z: *Zua, path: []const u8) !Result([]const u8) {
+    const contents = try std.fs.cwd().readFileAlloc(z.allocator, path, 1024 * 1024);
+    return Result([]const u8).owned(contents);
+}
+```
+
+If the file doesn't exist, Lua gets an error with your message.
+
+### Running Lua code
+
+You have full control over when and how Lua code executes. Use `exec` for side effects, `eval` for typed return values, and `execFile` for loading scripts.
+
+```zig
+// Execute code for side effects
+try z.exec("print('hello')");
+
+// Evaluate code and decode return values
+const result = try z.eval(i32, "return 1 + 2");
+std.debug.print("{d}\n", .{result});  // prints: 3
+
+// Load and execute a script file
+try z.execFile("script.lua");
+
+// Evaluate a file and decode results
+const data = try z.evalFile(.{ []const u8, i32 }, "config.lua");
+```
+
+Errors in Lua code become Zig errors. Catch them or propagate with `try`:
+
+```zig
+z.exec("bad lua") catch |err| {
+    std.debug.print("Error: {}\n", .{err});
+};
+```
+
+For interactive use, the library includes REPL helpers: `checkChunk` detects incomplete input, `loadChunk` loads without executing, `callLoadedChunk` executes.
+
+See [running-lua.md](handbook/src/running-lua.md) for patterns like building Lua REPLs and working with traceback information.
 
 ## Handbook
 
-Worked examples and patterns live in `handbook/`. Start with `functions.md`.
+Start with [functions.md](handbook/src/functions.md) for worked examples. All chapters are in `handbook/src/`.
 
-## Minimal example
+The handbook is built with [mdbook](https://rust-lang.github.io/mdBook/). To read it in your browser:
 
-```zig
-const z = try Zua.init(allocator);
-defer z.deinit();
-
-const globals = z.globals();
-defer globals.pop();
-
-globals.set("greeting", "hello");
-globals.setFn("add", ZuaFn.pure(add, "add expects (i32, i32)"));
-
-try z.exec("message = greeting .. ', world'");
-
-const parsed = try z.eval(.{ []const u8, i32 }, "return message, add(1, 2)");
-std.debug.print("{s} {d}\n", .{ parsed[0], parsed[1] });
+```sh
+cd handbook
+mdbook serve
 ```
+
+Then open http://localhost:3000. Changes to chapter files update live.
+
+## Philosophy
+
+zua adds features when memscript or other projects need them. The goal is not maximum feature coverage, but rather a tight integration that works well for my use cases. If you need something that's missing, open an issue or PR and I'll take a look when I have time.
+
+> Note: I'm not super experienced in Zig, so bugs and edge cases may exist. If you find something broken or unexpected, please open an issue. I can't test all the comptime paths, so reports help a lot.
+
+## Platforms
+
+I develop on Linux (Fedora and Ubuntu WSL). Both are well-tested. Windows and macOS might work, but I don't actively support them. If you hit issues on other platforms, let me know.
 
 ## Installation
 
-Add zua as a dependency in your `build.zig.zon`:
+### Using zig fetch (recommended for latest)
+
+The easiest way to get the latest version:
+
+```sh
+cd your-project
+zig fetch --save git+https://github.com/SolracHQ/zua
+```
+
+Then in `build.zig`:
+
+```zig
+const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
+exe.root_module.addImport("zua", zua.module("zua"));
+```
+
+### Manual version pinning
+
+Or add zua to `build.zig.zon` with a specific commit:
 
 ```zig
 .dependencies = .{
@@ -95,25 +280,18 @@ Add zua as a dependency in your `build.zig.zon`:
 },
 ```
 
-Then in `build.zig`:
+### System requirements
 
-```zig
-const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
-exe.root_module.addImport("zua", zua.module("zua"));
-```
-
-Requires Lua 5.4 headers and a system Lua library.
-
-On Debian/Ubuntu:
-
-```sh
-apt install liblua5.4-dev
-```
+You need Lua 5.4 headers and library.
 
 On Fedora:
-
 ```sh
 dnf install lua-devel
+```
+
+On Debian/Ubuntu:
+```sh
+apt install liblua5.4-dev
 ```
 
 ## License

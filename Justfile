@@ -26,7 +26,8 @@ list-examples:
         decode-ergonomics \
         error-traceback \
         userdata-objects \
-        array-decoding
+        array-decoding \
+        custom-hooks
 
 run-example name:
     zig build "run-example-{{name}}"
