@@ -190,6 +190,61 @@ pub const Zua = struct {
         return parsed;
     }
 
+    /// Executes a Lua file and decodes its return values into a typed tuple.
+    /// Similar to eval but loads and executes from a file path.
+    pub fn evalFile(self: *Zua, comptime types: anytype, file_path: [:0]const u8) (lua.Error || translation.ParseError)!translation.ParseResult(types) {
+        const previous_top = lua.getTop(self.state);
+        errdefer lua.setTop(self.state, previous_top);
+
+        try lua.loadFile(self.state, .{ .path = file_path });
+        try lua.protectedCall(self.state, 0, lua.MULT_RETURN, 0);
+
+        const parsed = try translation.parseTuple(
+            self,
+            previous_top + 1,
+            lua.getTop(self.state) - previous_top,
+            types,
+            .borrowed,
+        );
+        lua.setTop(self.state, previous_top);
+        return parsed;
+    }
+
+    /// Executes a Lua file for side effects, ignoring any returned values.
+    /// Useful for loading configuration or initialization scripts.
+    pub fn execFile(self: *Zua, file_path: [:0]const u8) !void {
+        const previous_top = lua.getTop(self.state);
+        errdefer lua.setTop(self.state, previous_top);
+
+        try lua.loadFile(self.state, .{ .path = file_path });
+        try lua.protectedCall(self.state, 0, 0, 0);
+    }
+
+    /// Executes a Lua file and returns the Lua error message with traceback on failure.
+    pub fn execFileTraceback(self: *Zua, file_path: [:0]const u8) !TraceBackResult {
+        const previous_top = lua.getTop(self.state);
+        errdefer lua.setTop(self.state, previous_top);
+
+        try lua.loadFile(self.state, .{ .path = file_path });
+        lua.pushTracebackFunction(self.state);
+        lua.insert(self.state, -2);
+        const errfunc = lua.absIndex(self.state, -2);
+        const status = lua.pcall(self.state, 0, 0, errfunc);
+        if (status == lua.c.LUA_OK) return .Ok;
+
+        const raw_message = lua.toDisplayString(self.state, -1) orelse "unknown error";
+        const message = try self.allocator.dupe(u8, raw_message);
+
+        return switch (status) {
+            lua.c.LUA_ERRRUN => .{ .Runtime = message },
+            lua.c.LUA_ERRSYNTAX => .{ .Syntax = message },
+            lua.c.LUA_ERRMEM => .{ .OutOfMemory = message },
+            lua.c.LUA_ERRERR => .{ .MessageHandler = message },
+            lua.c.LUA_ERRFILE => .{ .File = message },
+            else => .{ .Unknown = message },
+        };
+    }
+
     /// Recovers the owning Zua instance from a raw `lua_State` pointer.
     /// Called by the callback trampoline to retrieve the Zua context.
     pub fn fromState(state: *lua.State) *Zua {
@@ -198,6 +253,72 @@ pub const Zua = struct {
 
         const ptr = lua.toLightUserdata(state, -1) orelse unreachable;
         return @ptrCast(@alignCast(ptr));
+    }
+
+    /// Checks if source is a complete Lua chunk (not needing more input).
+    /// Returns true if complete and valid, false if incomplete, or error on syntax error.
+    /// Useful for REPL implementations to detect when multiline input is needed.
+    pub fn checkChunk(self: *Zua, source: []const u8) lua.Error!bool {
+        const previous_top = lua.getTop(self.state);
+        defer lua.setTop(self.state, previous_top);
+
+        const chunk = try self.allocator.dupeZ(u8, source);
+        defer self.allocator.free(chunk);
+
+        lua.loadString(self.state, chunk) catch |err| {
+            // Check if the error is due to incomplete input
+            if (lua.toString(self.state, -1)) |msg| {
+                const msg_str = std.mem.span(msg);
+                if (std.mem.endsWith(u8, msg_str, "<eof>")) {
+                    return false; // Not complete, need more input
+                }
+            }
+            return err; // Actual syntax error or other error
+        };
+
+        return true; // Complete and valid
+    }
+
+    /// Attempts to load source as an expression by wrapping it with "return ".
+    /// Returns true if it parses as an expression, false if it's not valid as expression.
+    /// Useful for REPL to distinguish expressions from statements.
+    pub fn canLoadAsExpression(self: *Zua, source: []const u8) !bool {
+        const previous_top = lua.getTop(self.state);
+        defer lua.setTop(self.state, previous_top);
+
+        const prefix = "return ";
+        const wrapped = try self.allocator.alloc(u8, prefix.len + source.len + 1);
+        defer self.allocator.free(wrapped);
+
+        @memcpy(wrapped[0..prefix.len], prefix);
+        @memcpy(wrapped[prefix.len .. prefix.len + source.len], source);
+        wrapped[wrapped.len - 1] = 0;
+
+        lua.loadString(self.state, wrapped[0 .. wrapped.len - 1 :0]) catch |err| {
+            return switch (err) {
+                error.Syntax => false,
+                else => err,
+            };
+        };
+
+        return true;
+    }
+
+    /// Loads a Lua chunk from source code without executing it.
+    /// The loaded function is left on the top of the stack for later use.
+    /// Caller must pop the result when done, or use callLoadedChunk to execute it.
+    pub fn loadChunk(self: *Zua, source: []const u8) lua.Error!void {
+        const chunk = try self.allocator.dupeZ(u8, source);
+        defer self.allocator.free(chunk);
+
+        try lua.loadString(self.state, chunk);
+    }
+
+    /// Calls a loaded Lua chunk function that is on the top of the stack.
+    /// Leaves return values on the stack for inspection or further processing.
+    /// Pass lua.MULT_RETURN for num_results to get all returned values.
+    pub fn callLoadedChunk(self: *Zua, num_results: i32) lua.Error!void {
+        try lua.protectedCall(self.state, 0, num_results, 0);
     }
 };
 

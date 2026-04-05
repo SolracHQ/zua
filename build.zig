@@ -31,6 +31,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-decode-ergonomics", .path = "example/decode_ergonomics.zig" },
         .{ .name = "example-error-traceback", .path = "example/error_traceback.zig" },
         .{ .name = "example-userdata-objects", .path = "example/userdata_objects.zig" },
+        .{ .name = "example-array-decoding", .path = "example/array_decoding.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

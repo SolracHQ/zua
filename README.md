@@ -56,6 +56,9 @@ That is the whole model. The rest is details.
 - `Table.getStruct` decodes a Lua table into a typed Zig struct, with support for optional and nested fields.
 - `Zua.eval` runs a Lua chunk and decodes return values directly into a typed Zig tuple.
 - `registry()` and `getLightUserdata` thread hidden host state through callbacks without exposing it to Lua.
+- Slice support: callbacks can decode `[]T` arrays from Lua tables; allocated memory is cleaned up automatically after callback returns.
+- REPL helpers: `checkChunk` distinguishes complete from incomplete Lua input; `canLoadAsExpression` detects expressions vs statements; `loadChunk` and `callLoadedChunk` control chunk loading and execution.
+- File execution: `execFile`, `evalFile`, `execFileTraceback` load and execute Lua scripts without manual file I/O.
 
 ## Handbook
 

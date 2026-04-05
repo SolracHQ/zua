@@ -104,6 +104,7 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                         decoded_types,
                         .borrowed,
                     ) catch return CallbackResultType.errStatic(error_config.parse_error);
+                    defer translation.cleanupDecodedValues(vm, decoded_types, decoded_values);
 
                     var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
 

@@ -7,6 +7,7 @@ const Table = @import("table.zig").Table;
 pub const ParseError = error{
     InvalidArity,
     InvalidType,
+    OutOfMemory,
 };
 
 pub const TableOwnership = enum {
@@ -121,6 +122,13 @@ pub fn decodeValue(
                 }
             }
 
+            // Handle non-string slices: decode from Lua array table
+            if (comptime ptr_info.size == .slice and !isStringValueType(T)) {
+                if (lua.valueType(z.state, index) != .table) return error.InvalidType;
+                const table = Table.fromBorrowed(z, index);
+                return try decodeSlice(T, z, table);
+            }
+
             // Non-single or non-struct pointer: fall through to string/slice checks below.
         },
         .@"struct" => {
@@ -178,6 +186,53 @@ pub fn decodeStruct(comptime TableType: type, table: TableType, comptime T: type
     }
 
     return result;
+}
+
+/// Decodes a Lua array table into a typed slice.
+/// Allocates memory from the Zua allocator; caller must track for cleanup via cleanupDecodedValues.
+fn decodeSlice(comptime T: type, z: *Zua, table: Table) ParseError!T {
+    const ptr_info = @typeInfo(T).pointer;
+    const Element = ptr_info.child;
+
+    // Get array length from Lua table
+    const len = lua.rawLen(z.state, table.index);
+
+    // Allocate slice
+    const slice = try z.allocator.alloc(Element, @intCast(len));
+    errdefer z.allocator.free(slice);
+
+    // Decode each element from the table
+    for (0..@intCast(len)) |i| {
+        slice[i] = try table.get(@as(i64, @intCast(i + 1)), Element);
+    }
+
+    return slice;
+}
+
+/// Cleanup function that frees allocated slices in a decoded values tuple.
+/// Call this after the callback returns to avoid memory leaks from decoded slices.
+pub fn cleanupDecodedValues(z: *Zua, comptime types: anytype, values: ParseResult(types)) void {
+    inline for (types, 0..) |T, index| {
+        cleanupValue(z, T, values[index]);
+    }
+}
+
+/// Recursively cleans up allocated slices, handling nested slice types.
+fn cleanupValue(z: *Zua, comptime T: type, value: T) void {
+    if (comptime @typeInfo(T) == .pointer) {
+        const ptr_info = @typeInfo(T).pointer;
+        if (ptr_info.size == .slice and !isStringValueType(T)) {
+            const Element = ptr_info.child;
+
+            // Recursively clean up each element if it's also a slice
+            for (value) |elem| {
+                cleanupValue(z, Element, elem);
+            }
+
+            // Free the outer slice
+            z.allocator.free(value);
+        }
+    }
 }
 
 pub fn pushValue(zua: *Zua, value: anytype) void {

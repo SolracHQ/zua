@@ -21,6 +21,11 @@
 - `Table.getStruct` supports recursive nested table decoding for struct fields
 - Added `ZuaFnErrorConfig.zig_err_fmt` to customize Zig error formatting in callback wrappers
 - Added `execTraceback` for Lua runtime failures with stack trace results
+- Slice decoding: `[]T` types are automatically decoded from Lua array tables with automatic memory allocation
+- ZuaFn callbacks track and clean up allocated slices automatically via `cleanupDecodedValues` (recursive cleanup for nested types)
+- REPL support helpers: `checkChunk` detects incomplete vs complete Lua input; `canLoadAsExpression` distinguishes expressions from statements
+- `loadChunk` loads Lua source without execution; `callLoadedChunk` executes a loaded chunk and leaves results on stack
+- File execution helpers: `execFile`, `evalFile`, `execFileTraceback` for loading and executing Lua scripts without manual file I/O
 
 ## 0.0.1
 
