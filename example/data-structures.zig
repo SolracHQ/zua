@@ -22,7 +22,7 @@ fn createConfig(_: *zua.Zua, name: []const u8, value: i32, enabled: bool) zua.Re
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa);
+    const z = try zua.Zua.init(init.gpa, init.io);
     defer z.deinit();
 
     const globals = z.globals();

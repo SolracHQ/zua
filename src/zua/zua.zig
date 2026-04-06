@@ -33,10 +33,12 @@ pub const Zua = struct {
     state: *lua.State,
     // Maps @typeName(T) to a LUA_REGISTRYINDEX ref for the cached metatable.
     metatable_cache: std.StringHashMap(c_int),
+    /// Io interface for basically anything since zif 0.16.0
+    io: std.Io,
 
     /// Creates a heap-allocated Zua instance, opens Lua standard libraries, and stores the pointer in the registry.
     /// The returned pointer is stable and safe to capture in callbacks.
-    pub fn init(allocator: std.mem.Allocator) !*Zua {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !*Zua {
         const self = try allocator.create(Zua);
         errdefer allocator.destroy(self);
 
@@ -47,6 +49,7 @@ pub const Zua = struct {
             .allocator = allocator,
             .state = state,
             .metatable_cache = std.StringHashMap(c_int).init(allocator),
+            .io = io,
         };
 
         lua.openLibs(state);
@@ -361,7 +364,7 @@ fn pushAnswerWithTry(_: *Zua, value: i32) !Result(i32) {
 }
 
 test "zua exec and globals interop" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const globals = zua.globals();
@@ -374,7 +377,7 @@ test "zua exec and globals interop" {
 }
 
 test "wrapped callbacks return pushed results" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const globals = zua.globals();
@@ -387,7 +390,7 @@ test "wrapped callbacks return pushed results" {
 }
 
 test "wrapped callbacks accept error-union results" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const globals = zua.globals();
@@ -400,7 +403,7 @@ test "wrapped callbacks accept error-union results" {
 }
 
 test "wrapped callbacks surface Lua errors after Zig defers run" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const globals = zua.globals();
@@ -414,7 +417,7 @@ test "wrapped callbacks surface Lua errors after Zig defers run" {
 }
 
 test "wrapped callbacks count results after deferred cleanup" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     registry_helper_value = 1;
@@ -440,7 +443,7 @@ test "wrapped callbacks count results after deferred cleanup" {
 }
 
 test "wrapped method callbacks receive self without popping it" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const globals = zua.globals();
@@ -464,7 +467,7 @@ test "wrapped method callbacks receive self without popping it" {
 }
 
 test "typed eval decodes returned values directly" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const parsed = try zua.eval(.{ i32, bool, []const u8 }, "return 41, true, 'ok'");
@@ -474,7 +477,7 @@ test "typed eval decodes returned values directly" {
 }
 
 test "execTraceback returns a traceback string for Lua runtime failures" {
-    const zua = try Zua.init(std.testing.allocator);
+    const zua = try Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     try std.testing.expectError(lua.Error.Runtime, zua.exec("error('boom')"));
