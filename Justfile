@@ -19,7 +19,9 @@ list-examples:
         introduction \
         functions \
         data-structures \
-        custom-types
+        custom-types \
+        object-slices \
+        userdata-objects
 
 run-example name:
     zig build "run-example-{{name}}"

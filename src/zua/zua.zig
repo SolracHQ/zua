@@ -269,14 +269,12 @@ pub const Zua = struct {
         defer self.allocator.free(chunk);
 
         lua.loadString(self.state, chunk) catch |err| {
-            // Check if the error is due to incomplete input
             if (lua.toString(self.state, -1)) |msg| {
-                const msg_str = std.mem.span(msg);
-                if (std.mem.endsWith(u8, msg_str, "<eof>")) {
-                    return false; // Not complete, need more input
+                if (std.mem.endsWith(u8, msg, "<eof>")) {
+                    return false;
                 }
             }
-            return err; // Actual syntax error or other error
+            return err;
         };
 
         return true; // Complete and valid

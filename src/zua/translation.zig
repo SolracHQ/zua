@@ -327,8 +327,8 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
         .@"enum" => {
             lua.pushInteger(zua.state, @intFromEnum(value));
         },
-        .pointer => |ptr_info| {
-            if (ptr_info.size == .one) {
+        .pointer => |ptr_info| switch (ptr_info.size) {
+            .one => {
                 const Pointee = ptr_info.child;
 
                 if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union") {
@@ -343,19 +343,22 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
                         return;
                     }
 
-                    // .table single pointer: fall through to the compile error below.
                     @compileError("cannot push pointer to .table type");
                 }
-            }
 
-            if (ptr_info.size == .slice and !isStringValueType(T)) {
+                @compileError("unsupported push type: " ++ @typeName(T));
+            },
+            .slice => {
+                if (comptime isStringValueType(T)) {
+                    @compileError("unsupported push type: " ++ @typeName(T));
+                }
+
                 lua.createTable(zua.state, std.math.cast(i32, value.len) orelse @panic("slice too large"), 0);
                 const nested = Table.fromStack(zua, -1);
                 fillTable(nested, value);
                 return;
-            }
-
-            @compileError("unsupported push type: " ++ @typeName(T));
+            },
+            else => @compileError("unsupported push type: " ++ @typeName(T)),
         },
         .@"struct" => {
             const strategy = comptime meta.strategyOf(T);
@@ -524,4 +527,40 @@ fn isTableConvertibleType(comptime T: type) bool {
         .pointer => |pointer| pointer.size == .slice and !isStringValueType(T),
         else => false,
     };
+}
+
+test "pushValue supports slices of object types" {
+    const zua_mod = @import("zua.zig");
+
+    const Item = struct {
+        const Self = @This();
+
+        pub const ZUA_META = meta.Object(Self, .{
+            .getName = getName,
+        });
+
+        name: []const u8,
+
+        fn getName(self: *Self) @import("result.zig").Result([]const u8) {
+            return @import("result.zig").Result([]const u8).ok(self.name);
+        }
+    };
+
+    const z = try zua_mod.Zua.init(std.testing.allocator, std.testing.io);
+    defer z.deinit();
+
+    const items = [_]Item{
+        .{ .name = "one" },
+        .{ .name = "two" },
+    };
+
+    pushValue(z, items[0..items.len]);
+    const table = Table.fromStack(z, -1);
+    defer table.pop();
+
+    const first = try table.get(1, Item);
+    const second = try table.get(2, Item);
+
+    try std.testing.expectEqualStrings("one", first.name);
+    try std.testing.expectEqualStrings("two", second.name);
 }
