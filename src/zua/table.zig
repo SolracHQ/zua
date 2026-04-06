@@ -161,7 +161,7 @@ fn coerceIntegerKey(key: anytype) lua.Integer {
 test "table set and get values" {
     const zua_mod = @import("zua.zig");
 
-    const zua = try zua_mod.Zua.init(std.testing.allocator);
+    const zua = try zua_mod.Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const table = zua.createTable(0, 4);
@@ -179,7 +179,7 @@ test "table set and get values" {
 test "table round-trips light userdata" {
     const zua_mod = @import("zua.zig");
 
-    const zua = try zua_mod.Zua.init(std.testing.allocator);
+    const zua = try zua_mod.Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     var value: i32 = 7;
@@ -195,7 +195,7 @@ test "table round-trips light userdata" {
 test "table fill converts structs and nested arrays" {
     const zua_mod = @import("zua.zig");
 
-    const zua = try zua_mod.Zua.init(std.testing.allocator);
+    const zua = try zua_mod.Zua.init(std.testing.allocator, std.testing.io);
     defer zua.deinit();
 
     const tag_values = [_][]const u8{ "zig", "lua", "bindings" };

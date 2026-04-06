@@ -71,7 +71,7 @@ fn makeCounter(_: *zua.Zua) Result(Counter) {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa);
+    const z = try zua.Zua.init(init.gpa, init.io);
     defer z.deinit();
 
     const globals = z.globals();
