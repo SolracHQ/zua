@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2
+
+### Added
+
+- `Result(T).owned(value)` now supports single-return pointer values in addition to strings.
+  Slices are released with `allocator.free` and single-item pointers with `allocator.destroy`
+  after the callback returns. This makes APIs like `Result([]T)` practical when the outer
+  container is allocated with `z.allocator`.
+
+### Fixed
+
+- `translation.pushValue` now handles slices of `.object` types correctly instead of tripping
+  compile-time errors from unrelated pointer branches during generic instantiation.
+- `Zua.checkChunk` no longer calls `std.mem.span` on sentinel-terminated slices.
+
 ## 0.4.1
 
 ### Added

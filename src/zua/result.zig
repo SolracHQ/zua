@@ -14,7 +14,10 @@ pub const Failure = union(enum) {
 };
 
 fn isOwnedResultValueType(comptime T: type) bool {
-    return T == []const u8 or T == [:0]const u8;
+    return switch (@typeInfo(T)) {
+        .pointer => true,
+        else => false,
+    };
 }
 
 fn cloneResultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T {
@@ -24,8 +27,13 @@ fn cloneResultValue(comptime T: type, allocator: std.mem.Allocator, value: T) !T
 }
 
 fn freeResultValue(comptime T: type, allocator: std.mem.Allocator, value: T) void {
-    if (T == []const u8 or T == [:0]const u8) {
-        allocator.free(value);
+    switch (@typeInfo(T)) {
+        .pointer => |pointer| switch (pointer.size) {
+            .one => allocator.destroy(value),
+            .slice => allocator.free(value),
+            else => @compileError("Result.owned does not support pointer type: " ++ @typeName(T)),
+        },
+        else => {},
     }
 }
 
@@ -67,8 +75,9 @@ fn SingleResult(comptime T: type) type {
             return .{ .value = value };
         }
 
-        /// Creates a successful single-value callback result, taking ownership of allocated values.
-        /// The value must be allocated with z.allocator. It will be freed after the callback returns.
+        /// Creates a successful single-value callback result, taking ownership of pointer values.
+        /// The value must be allocated with z.allocator. Slices are freed with `allocator.free`,
+        /// single-item pointers with `allocator.destroy`, after the callback returns.
         pub fn owned(value: T) @This() {
             if (comptime !isOwnedResultValueType(T)) {
                 return .{ .value = value };

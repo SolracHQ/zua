@@ -25,6 +25,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-data-structures", .path = "example/data-structures.zig" },
         .{ .name = "example-custom-types", .path = "example/custom-types.zig" },
         .{ .name = "example-guided-tour", .path = "example/guided-tour.zig" },
+        .{ .name = "example-object-slices", .path = "example/object-slices.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");
