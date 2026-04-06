@@ -15,10 +15,18 @@ pub const Strategy = enum {
     zig_ptr,
 };
 
-fn assertStructOrEnum(comptime T: type) void {
+fn assertStructEnumOrUnion(comptime T: type) void {
     switch (@typeInfo(T)) {
-        .@"struct", .@"enum" => {},
-        else => @compileError(@typeName(T) ++ " must be a struct or enum"),
+        .@"struct", .@"enum", .@"union" => {},
+        else => @compileError(@typeName(T) ++ " must be a struct, enum, or union"),
+    }
+}
+
+fn assertTaggedIfUnion(comptime T: type) void {
+    if (@typeInfo(T) == .@"union") {
+        if (@typeInfo(T).@"union".tag_type == null) {
+            @compileError(@typeName(T) ++ " is an untagged union, use meta.Object or meta.Ptr instead");
+        }
     }
 }
 
@@ -95,19 +103,20 @@ fn MetaValue(
 
 /// Declares `T` as an object strategy type with userdata and metatable methods.
 pub fn Object(comptime T: type, comptime methods: anytype) MetaValue(T, .object, methods, void, void) {
-    assertStructOrEnum(T);
+    assertStructEnumOrUnion(T);
     return .{ .methods = methods };
 }
 
 /// Declares `T` as a table strategy type with Lua table representation and optional methods.
 pub fn Table(comptime T: type, comptime methods: anytype) MetaValue(T, .table, methods, void, void) {
-    assertStructOrEnum(T);
+    assertStructEnumOrUnion(T);
+    assertTaggedIfUnion(T);
     return .{ .methods = methods };
 }
 
 /// Declares `T` as an opaque pointer strategy type represented as Lua light userdata.
 pub fn Ptr(comptime T: type) MetaValue(T, .zig_ptr, .{}, void, void) {
-    assertStructOrEnum(T);
+    assertStructEnumOrUnion(T);
     return .{};
 }
 
@@ -128,13 +137,15 @@ pub fn strEnum(comptime T: type, comptime methods: anytype) MetaValue(T, .table,
 /// Returns the translation strategy for `T`, defaulting to `.table` when no metadata is declared.
 pub fn strategyOf(comptime T: type) Strategy {
     if (@hasDecl(T, "ZUA_META")) return T.ZUA_META.strategy;
+    if (@hasDecl(T, "ZUA_TRANSLATION_STRATEGY")) return T.ZUA_TRANSLATION_STRATEGY;
+    if (@typeInfo(T) == .@"union" and @typeInfo(T).@"union".tag_type == null) return .object;
     return .table;
 }
 
 /// Returns true when `T` declares a custom encode hook via `ZUA_META`.
 pub fn hasEncodeHook(comptime T: type) bool {
     const info = @typeInfo(T);
-    if (info != .@"struct" and info != .@"enum") return false;
+    if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
     if (@hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META.encode_hook) != void;
     return false;
 }
@@ -142,7 +153,7 @@ pub fn hasEncodeHook(comptime T: type) bool {
 /// Returns true when `T` declares a custom decode hook via `ZUA_META`.
 pub fn hasDecodeHook(comptime T: type) bool {
     const info = @typeInfo(T);
-    if (info != .@"struct" and info != .@"enum") return false;
+    if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
     if (@hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META.decode_hook) != void;
     return false;
 }

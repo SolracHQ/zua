@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1
+
+### Added
+
+- Tagged union support: `union(enum)` types now decode and encode directly
+  without manual flat-struct boilerplate. Use `zua.meta.Table`, `zua.meta.Object`,
+  or `zua.meta.Ptr` on a tagged union the same as on a struct. For `.table`
+  strategy, Lua passes a single-key table selecting the active variant; zua
+  decodes whichever field is present and returns `error.InvalidType` if zero or
+  more than one field is set. Untagged unions default to `.object`.
+
 ## 0.4.0
 
 ### Added

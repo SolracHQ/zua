@@ -111,7 +111,7 @@ pub fn decodeValue(
             if (ptr_info.size == .one) {
                 const Pointee = ptr_info.child;
 
-                if (@typeInfo(Pointee) == .@"struct") {
+                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union") {
                     const strategy = comptime meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
@@ -168,6 +168,38 @@ pub fn decodeValue(
             if (lua.valueType(z.state, index) != .table) return error.InvalidType;
             const table = Table.fromBorrowed(z, index);
             return decodeStruct(table, T);
+        },
+        .@"union" => {
+            const strategy = comptime meta.strategyOf(T);
+
+            if (strategy == .object) {
+                if (lua.valueType(z.state, index) != .userdata) return error.InvalidType;
+                const raw = lua.toUserdata(z.state, index) orelse return error.InvalidType;
+                const typed: *T = @ptrCast(@alignCast(raw));
+                return typed.*;
+            }
+
+            if (strategy == .zig_ptr) {
+                if (lua.valueType(z.state, index) != .light_userdata) return error.InvalidType;
+                const raw = lua.toLightUserdata(z.state, index) orelse return error.InvalidType;
+                const typed: *T = @ptrCast(@alignCast(raw));
+                return typed.*;
+            }
+
+            if (lua.valueType(z.state, index) != .table) return error.InvalidType;
+            const table = Table.fromBorrowed(z, index);
+
+            var found: ?T = null;
+
+            inline for (@typeInfo(T).@"union".fields) |field| {
+                const maybe_value = table.get(field.name, ?field.type) catch null;
+                if (maybe_value) |v| {
+                    if (found != null) return error.InvalidType;
+                    found = @unionInit(T, field.name, v);
+                }
+            }
+
+            return found orelse error.InvalidType;
         },
         .@"enum" => {
             if (lua.valueType(z.state, index) != .integer) return error.InvalidType;
@@ -299,7 +331,7 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
             if (ptr_info.size == .one) {
                 const Pointee = ptr_info.child;
 
-                if (@typeInfo(Pointee) == .@"struct") {
+                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union") {
                     const strategy = comptime meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
@@ -344,6 +376,32 @@ pub fn pushValue(zua: *Zua, value: anytype) void {
             lua.createTable(zua.state, inferArrayCapacity(value), inferRecordCapacity(value));
             const nested = Table.fromStack(zua, -1);
             fillTable(nested, value);
+
+            const mt = @import("metatable.zig");
+            mt.attachMetatable(zua, T);
+        },
+        .@"union" => {
+            const strategy = comptime meta.strategyOf(T);
+
+            if (strategy == .object) {
+                const mt = @import("metatable.zig");
+                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(zua.state, @sizeOf(T))));
+                ptr.* = value;
+                mt.attachMetatable(zua, T);
+                return;
+            }
+
+            if (strategy == .zig_ptr) {
+                @compileError("cannot push .zig_ptr union by value: push a *T instead");
+            }
+
+            lua.createTable(zua.state, 0, 1);
+            const table = Table.fromStack(zua, -1);
+            switch (value) {
+                inline else => |v, tag| {
+                    table.set(@tagName(tag), v);
+                },
+            }
 
             const mt = @import("metatable.zig");
             mt.attachMetatable(zua, T);
