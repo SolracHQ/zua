@@ -74,6 +74,26 @@ print(p:distance())  -- 5
 
 When no strategy is declared, `.table` is the default.
 
+Tagged unions work naturally with `.table`. Lua passes a single-key table to select the active variant, zua decodes whichever field is present:
+
+```zig
+const Range = struct { min: f64, max: f64 };
+
+const Condition = union(enum) {
+    eq: f64,
+    in_range: Range,
+
+    pub const ZUA_META = zua.meta.Table(Condition, .{});
+};
+```
+
+```lua
+process:scan({ eq = 8.3 })
+process:scan({ in_range = { min = 0, max = 255 } })
+```
+
+Only one field may be set; zero or more than one fails with a type error. Tagged unions can also use `.object` or `.zig_ptr` when you want the variant to stay opaque to Lua.
+
 ### `.zig_ptr` - opaque pointer
 
 Light userdata. No methods, no metatable. Lua can hold the value and pass it back to Zig functions, but cannot inspect or modify it. This is the right choice for handles that should be completely opaque to Lua.
@@ -106,7 +126,7 @@ const T = struct {
         .__tostring = toString,
         .__add = add,
     });
-    
+
     // ...
 };
 ```
@@ -139,8 +159,6 @@ const Counter = struct {
 };
 ```
 
-This is powerful for debugging: you can provide context-specific error messages without relying on stack traces.
-
 ## Custom hooks
 
 Sometimes you need control over how a type encodes to Lua or decodes from Lua. Use `.withEncode()` and `.withDecode()` builder methods on the `ZUA_META` declaration.
@@ -170,13 +188,21 @@ const Status = enum(u8) {
 
 The hook must return a different type than its input. This is enforced to prevent infinite recursion.
 
+For enums specifically, `strEnum()` derives both hooks automatically from field names so you do not need to write the switch:
+
+```zig
+const Direction = enum { north, east, south, west };
+
+// directly on the enum
+pub const ZUA_META = zua.meta.Table(Direction, .{}).strEnum();
+```
+
 ### Decode hooks
 
 A decode hook lets a type accept multiple Lua value types and convert them. Useful when you want a flexible API that accepts an address as an integer or an existing handle:
 
 ```zig
 const Address = struct {
-
     pub const ZUA_META = zua.meta.Table(Address, .{}).withDecode(decodeHook);
 
     value: u64,
@@ -202,4 +228,4 @@ Now any function that takes an `Address` parameter accepts both integers and use
 
 ### Asymmetry is fine
 
-Encode and decode hooks are independent. You can have a type that encodes as a string but still decodes from an integer. Enums are a common example: you may want Lua code to receive human-readable names while still accepting integer values from legacy callers. The asymmetry is intentional, not a limitation.
+Encode and decode hooks are independent. You can have a type that encodes as a string but still decodes from an integer. The asymmetry is intentional, not a limitation.

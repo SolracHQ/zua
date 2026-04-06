@@ -32,3 +32,6 @@ example:
     selection="$(just list-examples | fzf "${fzf_args[@]}")"; \
     [[ -n "${selection:-}" ]]; \
     just run-example "${selection}"
+
+docs:
+    @cd handbook && mdbook build && rm -rf ../docs && mv book ../docs
