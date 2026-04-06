@@ -34,6 +34,8 @@ mdbook serve
 
 Then open http://localhost:3000.
 
+BTW, if you are looking at main branch, the handbook is published in github actions and available in the [docs](https://solrachq.github.io/zua/).
+
 ## Philosophy
 
 zua adds features when memscript or other projects need them. The goal is not maximum feature coverage, but a tight integration that works well for real use cases. If something is missing, open an issue or PR.
