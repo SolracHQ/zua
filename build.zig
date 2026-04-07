@@ -8,8 +8,51 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
     });
-    module.linkSystemLibrary("lua", .{});
+
     module.link_libc = true;
+    module.addIncludePath(b.path("lua"));
+
+    const lua_source_files = [_][]const u8{
+        "lua/lapi.c",
+        "lua/lauxlib.c",
+        "lua/lbaselib.c",
+        "lua/lcode.c",
+        "lua/lcorolib.c",
+        "lua/lctype.c",
+        "lua/ldblib.c",
+        "lua/ldebug.c",
+        "lua/ldo.c",
+        "lua/ldump.c",
+        "lua/lfunc.c",
+        "lua/lgc.c",
+        "lua/llex.c",
+        "lua/lmathlib.c",
+        "lua/lmem.c",
+        "lua/loadlib.c",
+        "lua/liolib.c",
+        "lua/lobject.c",
+        "lua/lopcodes.c",
+        "lua/loslib.c",
+        "lua/lparser.c",
+        "lua/lstate.c",
+        "lua/lstring.c",
+        "lua/lstrlib.c",
+        "lua/ltable.c",
+        "lua/ltablib.c",
+        "lua/ltm.c",
+        "lua/lundump.c",
+        "lua/lutf8lib.c",
+        "lua/lvm.c",
+        "lua/lzio.c",
+        "lua/linit.c",
+    };
+
+    for (lua_source_files) |source_file| {
+        module.addCSourceFile(.{
+            .file = b.path(source_file),
+            .flags = &.{"-fno-sanitize=alignment"}, // lua uses u16 alignment, and zig dont like that, so I disable it for all the files, anyways is Lua, made for a lot of people smarter than me, so I trust they know what they are doing, it works, but if I committing an error please advice in an issue or a PR, thanks.
+        });
+    }
 
     const mod_tests = b.addTest(.{
         .root_module = module,
@@ -41,7 +84,6 @@ pub fn build(b: *std.Build) void {
                 },
             }),
         });
-        exe.root_module.linkSystemLibrary("lua", .{});
         exe.root_module.link_libc = true;
         examples_step.dependOn(&exe.step);
 

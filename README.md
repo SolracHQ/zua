@@ -78,11 +78,19 @@ Add zua to `build.zig.zon` with a specific commit:
 
 ### System requirements
 
-You need Lua 5.4 headers and library.
+zua now includes Lua 5.4 as a pinned Git submodule, so a system Lua development package is no longer required or supported for building from source.
 
-On Fedora: `dnf install lua-devel`
+When cloning the repository, initialize the submodule:
 
-On Debian/Ubuntu: `apt install liblua5.4-dev`
+```sh
+git clone --recurse-submodules https://github.com/SolracHQ/zua.git
+```
+
+Or after cloning:
+
+```sh
+git submodule update --init --recursive
+```
 
 ## License
 
