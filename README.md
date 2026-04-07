@@ -78,19 +78,15 @@ Add zua to `build.zig.zon` with a specific commit:
 
 ### System requirements
 
-zua now includes Lua 5.4 as a pinned Git submodule, so a system Lua development package is no longer required or supported for building from source.
+zua now includes Lua 5.4 directly as vendored source code under `vendor/lua`, so a system Lua development package is no longer required or supported for building from source.
 
-When cloning the repository, initialize the submodule:
-
-```sh
-git clone --recurse-submodules https://github.com/SolracHQ/zua.git
-```
-
-Or after cloning:
+When cloning the repository, no git submodule initialization is required. Simply clone the repo and build normally:
 
 ```sh
-git submodule update --init --recursive
+git clone https://github.com/SolracHQ/zua.git
 ```
+
+> The Lua sources are now included in the repository to avoid package/submodule issues with Zig.
 
 ## License
 
