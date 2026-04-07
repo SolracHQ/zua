@@ -44,7 +44,7 @@ I am not super experienced in Zig, so bugs and edge cases may exist. If you find
 
 ## Memory management note
 
-When you call `Result.owned(value)`, the value must be allocated with `z.allocator`. If it comes from a different allocator, cleanup will fail. Stick with `z.allocator` for anything you hand to zua.
+zua separates transient callback scratch from long-lived objects pushed into Lua. Use `z.arena` for temporary buffers and formatted strings, and use `z.allocator` only for data that must outlive the callback and be owned by Lua.
 
 ## Platforms
 

@@ -85,7 +85,12 @@ pub fn Function(comptime types: anytype) type {
             // Pop results from stack
             lua.pop(self.z.state, result_count);
 
-            return Result(types).ok(parsed_result.value);
+            const parsed_values = parsed_result.unwrap();
+            const is_single = Result(types).value_count == 1;
+            return if (is_single)
+                Result(types).ok(parsed_values.@"0")
+            else
+                Result(types).ok(parsed_values);
         }
 
         /// Anchors this function in the Lua registry for persistent storage.

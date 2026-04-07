@@ -35,6 +35,7 @@ pub const Zua = struct {
     metatable_cache: std.StringHashMap(c_int),
     /// Io interface for basically anything since zif 0.16.0
     io: std.Io,
+    arena: ?std.mem.Allocator,
 
     /// Creates a heap-allocated Zua instance, opens Lua standard libraries, and stores the pointer in the registry.
     /// The returned pointer is stable and safe to capture in callbacks.
@@ -50,6 +51,7 @@ pub const Zua = struct {
             .state = state,
             .metatable_cache = std.StringHashMap(c_int).init(allocator),
             .io = io,
+            .arena = null,
         };
 
         lua.openLibs(state);

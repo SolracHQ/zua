@@ -31,10 +31,11 @@ const Entry = struct {
     }
 
     pub fn toString(z: *Zua, self: *Entry) Result([]const u8) {
-        const msg = std.fmt.allocPrint(z.allocator, "Entry(0x{X}, {d})", .{
+        const arena = z.arena.?;
+        const msg = std.fmt.allocPrint(arena, "Entry(0x{X}, {d})", .{
             self.address, self.value,
         }) catch return Result([]const u8).errStatic("out of memory");
-        return Result([]const u8).owned(msg);
+        return Result([]const u8).ok(msg);
     }
 };
 ```

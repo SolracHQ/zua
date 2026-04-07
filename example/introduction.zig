@@ -12,6 +12,6 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("Error: {s}\n", .{fail.getErr()});
         return;
     }
-    const result = eval_result.value;
+    const result = eval_result.asOption() orelse unreachable;
     std.debug.print("2 + 3 = {}\n", .{result[0]});
 }

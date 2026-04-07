@@ -82,7 +82,10 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                         lua.pushString(state, "failed to retrieve Zua context");
                         return lua.raiseError(state);
                     }
+                    var arena = std.heap.ArenaAllocator.init(vm.?.allocator);
+                    vm.?.arena = arena.allocator();
                     var result = execute(vm.?);
+                    vm.?.arena = null;
 
                     if (result.failure) |failure| {
                         switch (failure) {
@@ -92,10 +95,11 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                                 vm.?.allocator.free(message);
                             },
                         }
+                        arena.deinit();
                         return lua.raiseError(state);
                     }
 
-                    defer result.deinit(vm.?);
+                    defer arena.deinit();
                     result.pushValues(vm.?);
 
                     return @intCast(CallbackResultType.value_count);

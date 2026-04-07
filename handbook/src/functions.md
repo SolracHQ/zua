@@ -22,9 +22,9 @@ If it does, use `ZuaFn.from` and add `*Zua` as the first parameter:
 
 ```zig
 fn greet(z: *Zua, name: []const u8) Result([]const u8) {
-    const msg = std.fmt.allocPrint(z.allocator, "hello, {s}", .{name})
+    const msg = std.fmt.allocPrint(z.arena.?, "hello, {s}", .{name})
         catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(msg);
+    return Result([]const u8).ok(msg);
 }
 
 globals.setFn("greet", ZuaFn.from(greet, .{
@@ -88,17 +88,17 @@ fn log(_: *Zua, msg: []const u8) Result(.{}) {
 
 ### Allocated strings
 
-When you allocate a string to return, use `owned` instead of `ok`. The trampoline takes ownership and frees it after pushing to Lua:
+Temporary strings returned to Lua should be allocated from `z.arena` and returned with `ok`. The trampoline copies the string into Lua, then the arena is reset after the callback returns.
 
 ```zig
 fn format(z: *Zua, value: i32) Result([]const u8) {
-    const text = std.fmt.allocPrint(z.allocator, "value={d}", .{value})
+    const text = std.fmt.allocPrint(z.arena.?, "value={d}", .{value})
         catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(text);
+    return Result([]const u8).ok(text);
 }
 ```
 
-Always allocate with `z.allocator`. The trampoline frees with the same allocator, so mixing allocators will go wrong.
+Use `z.allocator` only for values that must outlive the callback, such as userdata, registry-owned handles, or owned error messages.
 
 ## Errors
 
@@ -118,8 +118,8 @@ Callbacks can also return `!Result(T)`. Zig errors propagate through the trampol
 
 ```zig
 fn readFile(z: *Zua, path: []const u8) !Result([]const u8) {
-    const contents = try std.fs.cwd().readFileAlloc(z.allocator, path, 1024 * 1024);
-    return Result([]const u8).owned(contents);
+    const contents = try std.fs.cwd().readFileAlloc(z.arena.?, path, 1024 * 1024);
+    return Result([]const u8).ok(contents);
 }
 ```
 
