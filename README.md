@@ -8,20 +8,20 @@ fn add(a: i32, b: i32) Result(i32) {
 }
 
 globals.setFn("add", ZuaFn.pure(add, .{
-    .parse_error = "add expects (i32, i32)",
+    .parse_err_fmt = "add expects (i32, i32), but got {s}",
 }));
 ```
 
 ```lua
 print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32)
+print(add("oops"))  -- error: add expects (i32, i32), but got string
 ```
 
 That is the whole model. You declare typed Zig functions, zua handles the boundary, Lua calls them. The argument decoding, return value encoding, and safe `lua_error` dispatch all happen automatically.
 
 zua uses comptime heavily. Type dispatch, struct decoding, metatable generation from declared methods - it all happens at compile time. If you like libraries that do the hard work for you but stay explicit at the call site, this should feel natural.
 
-Born from [memscript](https://github.com/solracHQ/memscript), where hand-written binding code was impossible to maintain. Features get added when memscript or other real projects need them.
+Born from [lumem](https://github.com/solracHQ/lumem), where hand-written binding code was impossible to maintain. Features get added when lumem or other real projects need them.
 
 ## Handbook
 

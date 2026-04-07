@@ -7,6 +7,11 @@ pub fn main(init: std.process.Init) !void {
 
     try z.exec("print('Hello from Lua in Zig!')");
 
-    const result = try z.eval(.{i32}, "return 2 + 3");
+    const eval_result = try z.eval(.{i32}, "return 2 + 3");
+    if (eval_result.failure) |fail| {
+        std.debug.print("Error: {s}\n", .{fail.getErr()});
+        return;
+    }
+    const result = eval_result.value;
     std.debug.print("2 + 3 = {}\n", .{result[0]});
 }

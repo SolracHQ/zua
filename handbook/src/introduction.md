@@ -12,7 +12,7 @@ fn add(a: i32, b: i32) Result(i32) {
 }
 
 globals.setFn("add", ZuaFn.pure(add, .{
-    .parse_error = "add expects (i32, i32)",
+    .parse_err_fmt = "add expects (i32, i32)",
 }));
 ```
 

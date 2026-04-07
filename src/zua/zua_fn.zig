@@ -10,22 +10,33 @@ const CallbackKind = enum {
 
 /// Configuration for `ZuaFn.from` and `ZuaFn.pure` error handling.
 pub const ZuaFnErrorConfig = struct {
-    /// parse_error is a static error message used when Lua argument decoding fails.
-    parse_error: []const u8 = "invalid arguments",
-    /// zig_err_fmt is a format string used to format Zig errors returned from the wrapped function.
-    /// It receives the Zig error name as a single `{s}` argument.
+    /// Format string for argument decoding failures.
+    /// If both fmt and hook are null, uses "invalid arguments" as fallback.
+    parse_err_fmt: ?[]const u8 = null,
+
+    /// Hook called when argument decoding fails.
+    /// Takes precedence over parse_err_fmt if both are set.
+    /// Receives:
+    ///   - z: allocator context
+    ///   - actual_lua_type: the Lua type at the failed position
+    ///   - failed_index: stack index where parse failed
+    ///   - error_message: error message from Result failure (if any)
+    /// Returns an allocator-owned error message string; trampoline frees it.
+    parse_err_hook: ?fn (
+        *Zua,
+        actual_lua_type: lua.Type,
+        failed_index: lua.StackIndex,
+        error_message: []const u8,
+    ) []const u8 = null,
+
+    /// Format string for Zig errors.
+    /// Receives error name as `{s}` placeholder.
     zig_err_fmt: ?[]const u8 = "Zig error: {s}",
-    /// zig_err_hook takes precedence over zig_err_fmt if both are provided
-    ///
-    /// result should be an allocator-owned string describing the error
-    /// Zua will free the string after pushing it to Lua
+
+    /// Hook called when wrapped function raises Zig error.
+    /// Takes precedence over zig_err_fmt if both are set.
+    /// Returns an allocator-owned error message string; trampoline frees it.
     zig_err_hook: ?fn (*Zua, anyerror) []const u8 = null,
-    /// parse_err_hook is called when argument decoding fails
-    /// Takes precedence over parse_error if provided
-    ///
-    /// result should be an allocator-owned string describing the error
-    /// Zua will free the string after pushing it to Lua
-    parse_err_hook: ?fn (*Zua, []const lua.Type, lua.StackIndex) anyerror![]const u8 = null,
 };
 
 /// Wraps a Zig function callback that receives `*Zua` as the first parameter.
@@ -67,40 +78,25 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                 fn trampoline(state_: ?*lua.State) callconv(.c) c_int {
                     const state = state_ orelse unreachable;
                     const vm = Zua.fromState(state);
-                    var result = execute(vm);
+                    if (vm == null) {
+                        lua.pushString(state, "failed to retrieve Zua context");
+                        return lua.raiseError(state);
+                    }
+                    var result = execute(vm.?);
 
                     if (result.failure) |failure| {
                         switch (failure) {
                             .static_message => |message| lua.pushString(state, message),
                             .owned_message => |message| {
                                 lua.pushString(state, message);
-                                vm.allocator.free(message);
-                            },
-                            .zig_error => |err| {
-                                if (error_config.zig_err_hook) |hook| {
-                                    const message = hook(vm, err) catch {
-                                        lua.pushString(state, @errorName(err));
-                                        return lua.raiseError(state);
-                                    };
-                                    lua.pushString(state, message);
-                                    vm.allocator.free(message);
-                                } else if (error_config.zig_err_fmt) |fmt| {
-                                    const message = std.fmt.allocPrint(vm.allocator, fmt, .{@errorName(err)}) catch {
-                                        lua.pushString(state, @errorName(err));
-                                        return lua.raiseError(state);
-                                    };
-                                    lua.pushString(state, message);
-                                    vm.allocator.free(message);
-                                } else {
-                                    lua.pushString(state, @errorName(err));
-                                }
+                                vm.?.allocator.free(message);
                             },
                         }
                         return lua.raiseError(state);
                     }
 
-                    defer result.deinit(vm);
-                    result.pushValues(vm);
+                    defer result.deinit(vm.?);
+                    result.pushValues(vm.?);
 
                     return @intCast(CallbackResultType.value_count);
                 }
@@ -114,15 +110,49 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                         decoded_types,
                         .borrowed,
                     ) catch {
+                        const first_arg_type = lua.valueType(vm.state, 1);
+                        const default_msg = "invalid arguments";
+
                         if (error_config.parse_err_hook) |hook| {
-                            const message = hook(vm, &decoded_types, 1) catch {
-                                return CallbackResultType.errStatic(error_config.parse_error);
-                            };
-                            return CallbackResultType.errOwned(message);
+                            const message = hook(vm, first_arg_type, 1, default_msg);
+                            return CallbackResultType.errOwnedString(message);
                         }
-                        return CallbackResultType.errStatic(error_config.parse_error);
+
+                        if (error_config.parse_err_fmt) |fmt| {
+                            const message = std.fmt.allocPrint(vm.allocator, fmt, .{default_msg}) catch {
+                                return CallbackResultType.errStatic(default_msg);
+                            };
+                            return CallbackResultType.errOwnedString(message);
+                        }
+
+                        return CallbackResultType.errStatic(default_msg);
                     };
-                    defer translation.cleanupDecodedValues(vm, decoded_types, decoded_values);
+
+                    // Check if Result contains a failure message
+                    if (decoded_values.failure) |failure| {
+                        const error_msg = switch (failure) {
+                            .static_message => |msg| msg,
+                            .owned_message => |msg| msg,
+                        };
+
+                        const first_arg_type = lua.valueType(vm.state, 1);
+
+                        if (error_config.parse_err_hook) |hook| {
+                            const message = hook(vm, first_arg_type, 1, error_msg);
+                            return CallbackResultType.errOwnedString(message);
+                        }
+
+                        if (error_config.parse_err_fmt) |fmt| {
+                            const message = std.fmt.allocPrint(vm.allocator, fmt, .{error_msg}) catch {
+                                return CallbackResultType.errStatic(error_msg);
+                            };
+                            return CallbackResultType.errOwnedString(message);
+                        }
+
+                        return CallbackResultType.errStatic(error_msg);
+                    }
+
+                    defer translation.cleanupDecodedValues(vm, decoded_types, decoded_values.unwrap());
 
                     var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
 
@@ -132,13 +162,13 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
 
                     inline for (decoded_types, 0..) |_, index| {
                         const call_index = if (comptime kind == .with_zua) index + 1 else index;
-                        call_args[call_index] = decoded_values[index];
+                        call_args[call_index] = decoded_values.unwrap()[index];
                     }
 
                     const raw_result = @call(.auto, function, call_args);
 
                     return if (comptime isErrorUnionType(ReturnType))
-                        raw_result catch |err| CallbackResultType.errZig(err)
+                        raw_result catch CallbackResultType.errStatic("error in callback")
                     else
                         raw_result;
                 }

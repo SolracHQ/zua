@@ -68,7 +68,8 @@ pub const Zua = struct {
         self.metatable_cache.deinit();
 
         lua.pushNil(self.state);
-        lua.setField(self.state, lua.REGISTRY_INDEX, zua_registry_key);
+        // this is comment out because I really don't know what to do, self is needed on lua.deinit becaus __gc metamethods might need to access the registry to find the Zua pointer, but that also means we can't nil out the registry entry until after lua.deinit runs, and if we wait until after lua.deinit then we can't pop the registry entry at all because the state is already closed. Anyways, I'm freeing the pointer so is in the wors case just a dangling pointer that will never be accessed. In case of weird errors I will revisit this desition.
+        // lua.setField(self.state, lua.REGISTRY_INDEX, zua_registry_key);
         lua.deinit(self.state);
         self.allocator.destroy(self);
     }
@@ -130,6 +131,21 @@ pub const Zua = struct {
         try lua.protectedCall(self.state, 0, 0, 0);
     }
 
+    /// Executes a Lua chunk and prints any error with traceback on failure.
+    pub fn execWithTrace(self: *Zua, source: []const u8) !void {
+        const tb_result = try self.execTraceback(source);
+        defer self.freeTraceBackResult(tb_result);
+        switch (tb_result) {
+            .Ok => {},
+            .Runtime => |msg| std.debug.print("Lua Runtime Error:\n{s}\n", .{msg}),
+            .Syntax => |msg| std.debug.print("Lua Syntax Error:\n{s}\n", .{msg}),
+            .OutOfMemory => |msg| std.debug.print("Lua Out of Memory:\n{s}\n", .{msg}),
+            .MessageHandler => |msg| std.debug.print("Lua Message Handler Error:\n{s}\n", .{msg}),
+            .File => |msg| std.debug.print("Lua File Error:\n{s}\n", .{msg}),
+            .Unknown => |msg| std.debug.print("Lua Unknown Error:\n{s}\n", .{msg}),
+        }
+    }
+
     /// Executes a Lua chunk and returns the Lua error message with traceback on failure.
     pub fn execTraceback(self: *Zua, source: []const u8) !TraceBackResult {
         const previous_top = lua.getTop(self.state);
@@ -171,8 +187,9 @@ pub const Zua = struct {
     }
 
     /// Executes a Lua chunk and decodes its return values into a typed tuple.
-    /// Example: `const (num, msg) = try zua.eval(.{i32, []const u8}, "return 42, 'ok'")`.
-    pub fn eval(self: *Zua, comptime types: anytype, source: []const u8) (lua.Error || translation.ParseError)!translation.ParseResult(types) {
+    /// Example: `const result = try zua.eval(.{i32, []const u8}, "return 42, 'ok'"); const (num, msg) = result.values;`.
+    /// Returns Result to preserve decode error messages from hooks.
+    pub fn eval(self: *Zua, comptime types: anytype, source: []const u8) (lua.Error || translation.ParseError)!Result(translation.ParseResult(types)) {
         const previous_top = lua.getTop(self.state);
         errdefer lua.setTop(self.state, previous_top);
 
@@ -195,7 +212,7 @@ pub const Zua = struct {
 
     /// Executes a Lua file and decodes its return values into a typed tuple.
     /// Similar to eval but loads and executes from a file path.
-    pub fn evalFile(self: *Zua, comptime types: anytype, file_path: [:0]const u8) (lua.Error || translation.ParseError)!translation.ParseResult(types) {
+    pub fn evalFile(self: *Zua, comptime types: anytype, file_path: [:0]const u8) (lua.Error || translation.ParseError)!translation.Result(translation.ParseResult(types)) {
         const previous_top = lua.getTop(self.state);
         errdefer lua.setTop(self.state, previous_top);
 
@@ -250,11 +267,11 @@ pub const Zua = struct {
 
     /// Recovers the owning Zua instance from a raw `lua_State` pointer.
     /// Called by the callback trampoline to retrieve the Zua context.
-    pub fn fromState(state: *lua.State) *Zua {
+    pub fn fromState(state: *lua.State) ?*Zua {
         _ = lua.getField(state, lua.REGISTRY_INDEX, zua_registry_key);
         defer lua.pop(state, 1);
 
-        const ptr = lua.toLightUserdata(state, -1) orelse unreachable;
+        const ptr = lua.toLightUserdata(state, -1);
         return @ptrCast(@alignCast(ptr));
     }
 
@@ -347,7 +364,7 @@ fn readRegistryValue(zua: *Zua) Result(i32) {
 }
 
 fn incrementMethod(_: *Zua, self_table: Table, delta: i32) Result(i32) {
-    const next_value = (self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing")) + delta;
+    const next_value = ((self_table.get("count", i32) catch return Result(i32).errStatic("counter.count missing"))).unwrap() + delta;
     self_table.set("count", next_value);
     return Result(i32).ok(next_value);
 }
@@ -371,7 +388,7 @@ test "zua exec and globals interop" {
     globals.set("answer", 41);
     try zua.exec("answer = answer + 1");
 
-    try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
+    try std.testing.expectEqual(@as(i32, 42), (try globals.get("answer", i32)).unwrap());
 }
 
 test "wrapped callbacks return pushed results" {
@@ -380,11 +397,11 @@ test "wrapped callbacks return pushed results" {
 
     const globals = zua.globals();
     defer globals.pop();
-    const inc_config = ZuaFn.ZuaFnErrorConfig{ .parse_error = "inc expects (i32)" };
+    const inc_config = ZuaFn.ZuaFnErrorConfig{ .parse_err_fmt = "inc expects (i32): {s}" };
     globals.setFn("inc", ZuaFn.from(pushAnswer, inc_config));
 
     try zua.exec("answer = inc(41)");
-    try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
+    try std.testing.expectEqual(@as(i32, 42), (try globals.get("answer", i32)).unwrap());
 }
 
 test "wrapped callbacks accept error-union results" {
@@ -393,11 +410,11 @@ test "wrapped callbacks accept error-union results" {
 
     const globals = zua.globals();
     defer globals.pop();
-    const inc_try_config = ZuaFn.ZuaFnErrorConfig{ .parse_error = "inc_try expects (i32)" };
+    const inc_try_config = ZuaFn.ZuaFnErrorConfig{ .parse_err_fmt = "inc_try expects (i32): {s}" };
     globals.setFn("inc_try", ZuaFn.from(pushAnswerWithTry, inc_try_config));
 
     try zua.exec("answer = inc_try(32)");
-    try std.testing.expectEqual(@as(i32, 42), try globals.get("answer", i32));
+    try std.testing.expectEqual(@as(i32, 42), (try globals.get("answer", i32)).unwrap());
 }
 
 test "wrapped callbacks surface Lua errors after Zig defers run" {
@@ -406,7 +423,7 @@ test "wrapped callbacks surface Lua errors after Zig defers run" {
 
     const globals = zua.globals();
     defer globals.pop();
-    const fail_config = ZuaFn.ZuaFnErrorConfig{ .parse_error = "fail expects ()" };
+    const fail_config = ZuaFn.ZuaFnErrorConfig{ .parse_err_fmt = "fail expects (): {s}" };
     globals.setFn("fail", ZuaFn.from(failWithDefer, fail_config));
 
     fail_callback_defer_ran = false;
@@ -426,7 +443,7 @@ test "wrapped callbacks count results after deferred cleanup" {
 
     const globals = zua.globals();
     defer globals.pop();
-    const next_value_config = ZuaFn.ZuaFnErrorConfig{ .parse_error = "next_value expects ()" };
+    const next_value_config = ZuaFn.ZuaFnErrorConfig{ .parse_err_fmt = "next_value expects (): {s}" };
     globals.setFn("next_value", ZuaFn.from(readRegistryValue, next_value_config));
 
     try zua.exec(
@@ -435,9 +452,9 @@ test "wrapped callbacks count results after deferred cleanup" {
         \\third = next_value()
     );
 
-    try std.testing.expectEqual(@as(i32, 1), try globals.get("first", i32));
-    try std.testing.expectEqual(@as(i32, 2), try globals.get("second", i32));
-    try std.testing.expectEqual(@as(i32, 3), try globals.get("third", i32));
+    try std.testing.expectEqual(@as(i32, 1), (try globals.get("first", i32)).unwrap());
+    try std.testing.expectEqual(@as(i32, 2), (try globals.get("second", i32)).unwrap());
+    try std.testing.expectEqual(@as(i32, 3), (try globals.get("third", i32)).unwrap());
 }
 
 test "wrapped method callbacks receive self without popping it" {
@@ -449,7 +466,7 @@ test "wrapped method callbacks receive self without popping it" {
 
     const counter = zua.createTable(0, 2);
     counter.set("count", 0);
-    const increment_method_config = ZuaFn.ZuaFnErrorConfig{ .parse_error = "counter:increment expects (self, i32)" };
+    const increment_method_config = ZuaFn.ZuaFnErrorConfig{ .parse_err_fmt = "counter:increment expects (self, i32): {s}" };
     counter.setFn("increment", ZuaFn.from(incrementMethod, increment_method_config));
     globals.set("counter", counter);
     counter.pop();
@@ -458,10 +475,10 @@ test "wrapped method callbacks receive self without popping it" {
         \\result = counter:increment(5)
     );
 
-    try std.testing.expectEqual(@as(i32, 5), try globals.get("result", i32));
-    const global_counter = try globals.get("counter", Table);
+    try std.testing.expectEqual(@as(i32, 5), (try globals.get("result", i32)).unwrap());
+    const global_counter = (try globals.get("counter", Table)).unwrap();
     defer global_counter.pop();
-    try std.testing.expectEqual(@as(i32, 5), try global_counter.get("count", i32));
+    try std.testing.expectEqual(@as(i32, 5), (try global_counter.get("count", i32)).unwrap());
 }
 
 test "typed eval decodes returned values directly" {
@@ -469,9 +486,10 @@ test "typed eval decodes returned values directly" {
     defer zua.deinit();
 
     const parsed = try zua.eval(.{ i32, bool, []const u8 }, "return 41, true, 'ok'");
-    try std.testing.expectEqual(@as(i32, 41), parsed[0]);
-    try std.testing.expectEqual(true, parsed[1]);
-    try std.testing.expectEqualStrings("ok", parsed[2]);
+    const values = parsed.unwrap();
+    try std.testing.expectEqual(@as(i32, 41), values[0]);
+    try std.testing.expectEqual(true, values[1]);
+    try std.testing.expectEqualStrings("ok", values[2]);
 }
 
 test "execTraceback returns a traceback string for Lua runtime failures" {

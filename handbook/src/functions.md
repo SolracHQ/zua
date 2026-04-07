@@ -14,7 +14,7 @@ To register it, decide whether the function needs access to the Zua instance. If
 
 ```zig
 globals.setFn("add", ZuaFn.pure(add, .{
-    .parse_error = "add expects (i32, i32)",
+    .parse_err_fmt = "add expects (i32, i32)",
 }));
 ```
 
@@ -28,11 +28,36 @@ fn greet(z: *Zua, name: []const u8) Result([]const u8) {
 }
 
 globals.setFn("greet", ZuaFn.from(greet, .{
-    .parse_error = "greet expects (string)",
+    .parse_err_fmt = "greet expects (string)",
 }));
 ```
 
-The `parse_error` message is what Lua sees if the arguments do not match. Make it useful.
+The `parse_err_fmt` string is what Lua sees if the arguments do not match. Use `{s}` as a placeholder for the decode error message from custom decode hooks:
+
+```zig
+globals.setFn("api_call", ZuaFn.from(apiCall, .{
+    .parse_err_fmt = "api_call failed: {s}",
+}));
+```
+
+### Custom error messages from decode hooks
+
+For complex argument validation, provide a custom `parse_err_hook` that receives the actual Lua type that failed to decode:
+
+```zig
+fn parseErrHook(z: *Zua, actual_type: zua.lua.Type, index: zua.lua.StackIndex, error_message: []const u8) []const u8 {
+    return std.fmt.allocPrint(z.allocator, "expected i32 at position {d}, got {s}: {s}", .{
+        index, @tagName(actual_type), error_message,
+    }) catch z.allocator.dupe(u8, "out of memory") catch "out of memory";
+}
+
+globals.setFn("strictAdd", ZuaFn.from(add, .{
+    .parse_err_hook = parseErrHook,
+    .parse_err_fmt = "add expects two integers: {s}",  // fallback
+}));
+```
+
+The hook receives the decoded value's type, the stack position where decode failed, and any error message from custom decode logic. The hook should return an allocator-owned string; the trampoline frees it after raising the error.
 
 ## Return values
 
@@ -82,10 +107,10 @@ Three constructors cover the common cases:
 ```zig
 return Result(i32).errStatic("missing pid");
 return Result(i32).errOwned(z.allocator, "pid {d} out of range", .{pid});
-return Result(i32).errZig(err);
+return try err;
 ```
 
-`errStatic` takes a string literal. `errOwned` formats a message on the allocator and frees it before raising the Lua error. `errZig` surfaces a Zig error value by name.
+`errStatic` takes a string literal. `errOwned` formats a message on the allocator and frees it before raising the Lua error. `errOwnedString` takes a pre-allocated string. Zig errors also propagate through `!Result(T)` and automatically become Lua errors.
 
 Errors always raise a Lua error after your function returns. Zig `defer` blocks run normally, which is the main reason zua uses this pattern instead of calling `lua_error` directly from inside the callback.
 
@@ -104,13 +129,13 @@ The second argument to `ZuaFn.pure` and `ZuaFn.from` is a `ZuaFnErrorConfig`. Yo
 
 ```zig
 globals.setFn("read_file", ZuaFn.from(readFile, ZuaFnErrorConfig{
-    .parse_error = "read_file expects (string)",
+    .parse_err_fmt = "read_file expects (string)",
     .zig_err_fmt = "read_file failed: {s}",
     .zig_err_hook = null,
 }));
 ```
 
-`parse_error` is what Lua sees when argument decoding fails. `zig_err_fmt` is a format string that receives the Zig error name as `{s}`. If you need to produce a more descriptive message at runtime, use `zig_err_hook` instead:
+`parse_err_fmt` is what Lua sees when argument decoding fails. It receives the decode error message as `{s}`. `zig_err_fmt` is a format string that receives the Zig error name as `{s}`. If you need to produce a more descriptive message at runtime, use `zig_err_hook` instead:
 
 ```zig
 fn describeError(z: *Zua, err: anyerror) []const u8 {
@@ -120,7 +145,7 @@ fn describeError(z: *Zua, err: anyerror) []const u8 {
 }
 
 globals.setFn("read_file", ZuaFn.from(readFile, ZuaFnErrorConfig{
-    .parse_error = "read_file expects (string)",
+    .parse_err_fmt = "read_file expects (string)",
     .zig_err_hook = describeError,
 }));
 ```
@@ -139,6 +164,97 @@ fn add(a: i32, b: ?i32) Result(i32) {
 
 Lua can call this as `add(1)` or `add(1, nil)` and both work.
 
+## Receiving Lua functions
+
+Just as Lua can call Zig functions, Zig can receive and call Lua functions. Declare a parameter of type `Function(types)` where `types` is the tuple of return types:
+
+```zig
+fn applyTwice(z: *Zua, callback: Function(i32), value: i32) Result(i32) {
+    // callback is a borrowed Lua function that returns i32
+    const result1 = try callback.call(z, .{value});
+    const result2 = try callback.call(z, .{result1});
+    return Result(i32).ok(result2);
+}
+```
+
+```lua
+function double(x)
+    return x * 2
+end
+
+applyTwice(double, 5)  -- double(double(5)) = 20
+```
+
+### Multiple return values
+
+Callbacks can return multiple values:
+
+```zig
+fn swapAndProcess(z: *Zua, callback: Function(.{ []const u8, i32 }), input: i32) Result([]const u8) {
+    const result = try callback.call(z, .{input});
+    // result is a tuple: .{ []const u8, i32 }
+    const message = result[0];
+    const code = result[1];
+    
+    std.debug.print("{s} (code {d})\n", .{ message, code });
+    return Result([]const u8).ok(message);
+}
+```
+
+### Storing callbacks for later
+
+Callbacks received as parameters are borrowed — valid only during the callback invocation. To store a callback for later use, call `.takeOwnership()`:
+
+```zig
+var stored_callback: ?zua.OwnedFunction(.{i32}) = null;
+
+fn setCallback(z: *Zua, cb: Function(.{i32})) Result(.{}) {
+    stored_callback = try cb.takeOwnership();
+    return Result(.{}).ok(.{});
+}
+
+fn invokeStored(z: *Zua, value: i32) Result(i32) {
+    if (stored_callback) |callback| {
+        const result = try callback.call(z, .{value});
+        return Result(i32).ok(result);
+    }
+    return Result(i32).errStatic("no callback stored");
+}
+
+fn clearCallback() void {
+    if (stored_callback) |callback| {
+        callback.release();
+        stored_callback = null;
+    }
+}
+```
+
+Registry-owned callbacks (from `.takeOwnership()`) must be explicitly released. Call `.release()` to free the registry reference, typically during shutdown or when the callback is no longer needed.
+
+### Error handling
+
+Function calls can fail due to Lua runtime errors or decode failures. Errors are returned in the `Result` wrapper:
+
+```zig
+fn safeCall(z: *Zua, callback: Function(i32)) Result(i32) {
+    const result = try callback.call(z, .{}) catch |err| {
+        // Lua runtime or allocation error
+        return Result(i32).errStatic("callback failed");
+    };
+    
+    if (result.failure) |failure| {
+        // Decode error from hook or type mismatch
+        const msg = switch (failure) {
+            .static_message => |m| m,
+            .owned_message => |m| m,
+        };
+        return Result(i32).errOwned(z, "callback returned wrong type: {s}", .{msg});
+    }
+    
+    return Result(i32).ok(result.values);
+}
+```
+
 ## Supported parameter types
 
-`i32`, `i64`, `f32`, `f64`, `bool`, `[]const u8`, `[:0]const u8`, structs, and `?T` for any of the above. Tables and userdata are covered in later chapters.
+`i32`, `i64`, `f32`, `f64`, `bool`, `[]const u8`, `[:0]const u8`, structs, `Function` (for callbacks), and `?T` for any of the above. Tables and userdata are covered in later chapters.

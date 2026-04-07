@@ -70,6 +70,37 @@ fn makeVector(x: f64, y: f64) Result(Vector2) {
     return Result(Vector2).ok(Vector2{ .x = x, .y = y });
 }
 
+fn mapWithCallback(_: *zua.Zua, callback: zua.Function(.{i32}), numbers: []const i32) Result(.{}) {
+    for (numbers) |value| {
+        const result = callback.call(.{value}) catch |err| {
+            std.debug.print("ERROR calling callback: {any}\n", .{err});
+            return Result(.{}).errStatic("callback failed");
+        };
+        if (result.failure) |fail| {
+            return Result(.{}).errStatic(fail.getErr());
+        }
+        std.debug.print("  Result: {}\n", .{result.values[0]});
+    }
+    return Result(.{}).ok(.{});
+}
+
+fn filterAndSum(_: *zua.Zua, predicate: zua.Function(.{bool}), numbers: []const i32) Result(i32) {
+    var sum: i32 = 0;
+    for (numbers) |value| {
+        const result = predicate.call(.{value}) catch |err| {
+            std.debug.print("ERROR calling predicate: {any}\n", .{err});
+            return Result(i32).errStatic("predicate failed");
+        };
+        if (result.failure) |fail| {
+            return Result(i32).errStatic(fail.getErr());
+        }
+        if (result.values[0]) {
+            sum += value;
+        }
+    }
+    return Result(i32).ok(sum);
+}
+
 pub fn main(init: std.process.Init) !void {
     const z = try zua.Zua.init(init.gpa, init.io);
     defer z.deinit();
@@ -81,9 +112,11 @@ pub fn main(init: std.process.Init) !void {
     globals.setFn("add", zua.ZuaFn.pure(add, .{}));
     globals.setFn("multiply", zua.ZuaFn.pure(multiply, .{}));
     globals.setFn("Counter", zua.ZuaFn.from(makeCounter, .{}));
-    globals.setFn("Vector", zua.ZuaFn.pure(makeVector, .{ .parse_error = "Vector expects (number, number)" }));
+    globals.setFn("Vector", zua.ZuaFn.pure(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
+    globals.setFn("map_with_callback", zua.ZuaFn.from(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
+    globals.setFn("filter_and_sum", zua.ZuaFn.from(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
 
-    try z.exec(
+    const result = try z.execTraceback(
         \\-- Basic function calls
         \\print("Basic Functions:")
         \\print("add(5, 3) =", add(5, 3))
@@ -112,6 +145,35 @@ pub fn main(init: std.process.Init) !void {
         \\print("After increment(3):", c:value())
         \\print("Counter as string:", tostring(c))
         \\
+        \\-- Processing arrays
+        \\print("\nProcessing Arrays:")
+        \\local numbers = {5, 10, 15, 20}
+        \\print("Array: {5, 10, 15, 20}")
+        \\
+        \\-- Map: process each element with callback
+        \\local double_callback = function(x) return x * 2 end
+        \\map_with_callback(double_callback, numbers)
+        \\
+        \\-- Filter and sum: use callback to filter even numbers
+        \\local is_even = function(x) return x % 2 == 0 end
+        \\local sum_evens = filter_and_sum(is_even, numbers)
+        \\print("Sum of even numbers:", sum_evens)
+        \\
         \\print("\nAll features demonstrated!")
     );
+
+    switch (result) {
+        .Ok => {},
+        .Runtime => |msg| {
+            std.debug.print("Runtime error:\n{s}\n", .{msg});
+            z.freeTraceBackResult(result);
+            return;
+        },
+        else => |err| {
+            std.debug.print("Lua error: {any}\n", .{err});
+            z.freeTraceBackResult(result);
+            return;
+        },
+    }
+    z.freeTraceBackResult(result);
 }

@@ -6,7 +6,7 @@ const Result = zua.Result;
 const Counter = struct {
     pub const ZUA_META = zua.meta.Object(Counter, .{
         .value = getValue,
-        .increment = zua.ZuaFn.pure(increment, .{ .parse_error = "increment expects an integer amount" }),
+        .increment = zua.ZuaFn.pure(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
         .reset = reset,
         .__tostring = toString,
     });

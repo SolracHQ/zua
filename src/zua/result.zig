@@ -6,11 +6,16 @@ const Zua = @import("zua.zig").Zua;
 /// Failure reason for a callback result.
 /// - `static_message`: borrowed string constant (commonly error messages from trampoline logic)
 /// - `owned_message`: allocator-owned string from formatted error construction
-/// - `zig_error`: anyerror from Zig code (converted to error name string by trampoline)
 pub const Failure = union(enum) {
     static_message: []const u8,
     owned_message: []const u8,
-    zig_error: anyerror,
+
+    /// Extract the error message string from either variant.
+    pub fn getErr(self: @This()) []const u8 {
+        return switch (self) {
+            inline else => |msg| msg,
+        };
+    }
 };
 
 fn isOwnedResultValueType(comptime T: type) bool {
@@ -48,8 +53,8 @@ fn isTypeShape(comptime shape: anytype) bool {
 /// Success: call `.ok(value)` / `.owned(allocator, value)` for a single value,
 /// or `.ok(.{ ... })` / `.owned(allocator, .{ ... })` for multiple values.
 ///
-/// Failure: call `.errStatic(message)` for static strings, `.errOwned(message)` for
-/// allocator-owned strings, or `.errZig(error)` to surface a Zig error.
+/// Failure: call `.errStatic(message)` for static strings, `.errOwnedString(message)` for
+/// pre-allocated owned strings, or `.errOwned(allocator, fmt, args)` for formatted messages.
 /// The trampoline ensures Lua `longjmp` happens after the callback fully returns,
 /// so `defer` cleanup runs before the error is raised.
 pub fn Result(comptime shape: anytype) type {
@@ -58,6 +63,15 @@ pub fn Result(comptime shape: anytype) type {
     }
 
     return MultiResult(shape);
+}
+
+/// Promotes Result(T) to Result(?T) by wrapping the value in optional.
+/// Used when decoding optional types to wrap successful results.
+pub fn promoteOptional(comptime T: type, result: Result(T)) Result(?T) {
+    if (result.failure) |failure| {
+        return Result(?T).errStatic(failure.getErr());
+    }
+    return Result(?T).ok(result.value);
 }
 
 fn SingleResult(comptime T: type) type {
@@ -103,9 +117,10 @@ fn SingleResult(comptime T: type) type {
             return .{ .failure = .{ .owned_message = message } };
         }
 
-        /// Creates a failed callback result from a Zig error value.
-        pub fn errZig(err: anyerror) @This() {
-            return .{ .failure = .{ .zig_error = err } };
+        /// Creates a failed callback result with a pre-allocated owned error message.
+        /// Use this when the message is already allocated and owned.
+        pub fn errOwnedString(message: []const u8) @This() {
+            return .{ .failure = .{ .owned_message = message } };
         }
 
         /// Pushes the successful value onto the Lua stack.
@@ -117,6 +132,20 @@ fn SingleResult(comptime T: type) type {
         pub fn deinit(self: *@This(), z: *Zua) void {
             if (!self.owns_value) return;
             freeResultValue(T, z.allocator, self.value);
+        }
+
+        /// Returns the value if successful, or prints error to stderr and exits.
+        /// Mimics Rust's Result::unwrap() behavior.
+        pub fn unwrap(self: @This()) T {
+            if (self.failure) |failure| {
+                const msg = switch (failure) {
+                    .static_message => |msg| msg,
+                    .owned_message => |msg| msg,
+                };
+                std.debug.print("thread panicked at '{s}'\n", .{msg});
+                std.process.exit(1);
+            }
+            return self.value;
         }
     };
 }
@@ -164,9 +193,10 @@ fn MultiResult(comptime types: anytype) type {
             return .{ .failure = .{ .owned_message = message } };
         }
 
-        /// Creates a failed callback result from a Zig error value.
-        pub fn errZig(err: anyerror) @This() {
-            return .{ .failure = .{ .zig_error = err } };
+        /// Creates a failed callback result with a pre-allocated owned error message.
+        /// Use this when the message is already allocated and owned.
+        pub fn errOwnedString(message: []const u8) @This() {
+            return .{ .failure = .{ .owned_message = message } };
         }
 
         /// Pushes all successful values onto the Lua stack.
@@ -183,6 +213,20 @@ fn MultiResult(comptime types: anytype) type {
                     freeResultValue(T, z.allocator, self.values[index]);
                 }
             }
+        }
+
+        /// Returns the values if successful, or prints error to stderr and exits.
+        /// Mimics Rust's Result::unwrap() behavior.
+        pub fn unwrap(self: @This()) ValueTuple {
+            if (self.failure) |failure| {
+                const msg = switch (failure) {
+                    .static_message => |msg| msg,
+                    .owned_message => |msg| msg,
+                };
+                std.debug.print("thread panicked at '{s}'\n", .{msg});
+                std.process.exit(1);
+            }
+            return self.values;
         }
     };
 }

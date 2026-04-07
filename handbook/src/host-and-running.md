@@ -35,7 +35,7 @@ const entry_table = z.createTable(0, 3);
 entry_table.set("address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
 entry_table.setFn("get", ZuaFn.from(entryGet, .{
-    .parse_error = "entry:get takes no arguments",
+    .parse_err_fmt = "entry:get takes no arguments",
 }));
 ```
 
@@ -74,21 +74,34 @@ z.exec("bad lua here") catch |err| {
 
 ## Evaluating with typed return values
 
-`eval` decodes Lua return values directly into a typed Zig tuple:
+`eval` decodes Lua return values and returns a `Result` to preserve any error messages from custom decode hooks:
 
 ```zig
 const result = try z.eval(i32, "return 1 + 2");
+const num = result.unwrap();  // panics if decode fails
 
-const data = try z.eval(.{ []const u8, i32 }, "return 'bob', 42");
-std.debug.print("{s} is {d}\n", .{ data[0], data[1] });
+const data_result = try z.eval(.{ []const u8, i32 }, "return 'bob', 42");
+if (data_result.failure) |failure| {
+    const err_msg = switch (failure) {
+        .static_message => |msg| msg,
+        .owned_message => |msg| msg,
+    };
+    // handle error...
+} else {
+    const data = data_result.values;
+    std.debug.print("{s} is {d}\n", .{ data[0], data[1] });
+}
 ```
+
+The `Result` carries any custom error messages from decode hooks, allowing you to distinguish between a type mismatch and a failed validation rule inside the hook.
 
 ## Files
 
 ```zig
 try z.execFile("init.lua");
 
-const config = try z.evalFile(.{ []const u8, i32 }, "config.lua");
+const config_result = try z.evalFile(.{ []const u8, i32 }, "config.lua");
+const config = config_result.unwrap();  // or check .failure field
 ```
 
 ## Error tracebacks

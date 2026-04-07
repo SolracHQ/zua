@@ -2,6 +2,8 @@ const std = @import("std");
 const translation = @import("translation.zig");
 const lua = @import("../lua/lua.zig");
 const Zua = @import("zua.zig").Zua;
+const Result = @import("result.zig").Result;
+const Primitive = translation.Primitive;
 
 /// Translation strategy used by the translation system.
 pub const Strategy = enum {
@@ -86,11 +88,11 @@ fn MetaValue(
         }
 
         /// Attaches a custom decode hook to this metadata builder.
-        /// The hook converts a Lua value on the stack into `T` using the Lua type and index.
+        /// The hook converts a Lua Primitive value into `T`.
         pub fn withDecode(
             self: @This(),
-            comptime handler: fn (*Zua, lua.StackIndex, lua.Type) anyerror!T,
-        ) MetaValue(T, strat, methods, EncodeHook, fn (*Zua, lua.StackIndex, lua.Type) anyerror!T) {
+            comptime handler: fn (*Zua, Primitive) anyerror!Result(T),
+        ) MetaValue(T, strat, methods, EncodeHook, fn (*Zua, Primitive) anyerror!Result(T)) {
             return .{
                 .strategy = self.strategy,
                 .methods = self.methods,

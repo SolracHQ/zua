@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.0
+
+### Breaking
+
+- `Table.get(key, T)` now returns `ParseError!Result(T)` instead of `ParseError!T`.
+  Decode errors are wrapped in the Result's `.failure` field, allowing graceful error handling
+  via `.failure` or panic semantics via `.unwrap()`.
+- `Zua.eval()` and `Zua.evalFile()` now return `Result(ParseResult(types))` instead of
+  `ParseResult(types)`, preserving error messages from decode hooks.
+- Decode hook signatures changed: hooks now receive `Primitive` union (wrapping all Lua types)
+  and return `anyerror!Result(T)` to provide custom error messages.
+- `parse_err_fmt` now receives `{s}` placeholder populated with the actual error message
+  (either from decode hook failure or "invalid arguments" for parse errors).
+
+### Added
+
+- `Table.has(key)` method to check key existence without triggering decoding, returning `bool`.
+- `Result(T).unwrap()` on both SingleResult and MultiResult: returns the value on success or
+  prints error message and calls `std.process.exit(1)` on failure (Rust-like panic semantics).
+- `Function(...)` parameter type for receiving Lua functions as callback parameters.
+  Enables passing callbacks from Lua into Zig, storing them via `.takeOwnership()`,
+  invoking them with `.call()`, and cleaning up with `.release()`.
+- `pushValue` now handles pointer-to-array types `*const [N]T`, converting to slices for cleaner
+  APIs when passing constant arrays of custom types from Zig to Lua.
+- Three-tier handle ownership model for Table and Function:
+  1. **Borrowed**: temporary stack values valid only during callback
+  2. **Stack-owned**: returned from `createTable()` / `globals()`, require `.pop()`
+  3. **Registry-owned**: created via `.takeOwnership()`, require `.release()`
+
 ## 0.4.2
 
 ### Added
@@ -104,6 +133,6 @@ First working version, extracted from memscript.
 - `Table.pop` removes the table from the stack when done
 - `Args.parse` decodes typed callback arguments into a comptime tuple in one call
 - `Result(.{ ... })` declares callback return types and carries typed success values or Lua-facing failures
-- `Result.errStatic`, `Result.errOwned`, and `Result.errZig` carry callback failures without exposing `lua_error` directly
+- `Result.errStatic` and `Result.errOwned` carry callback failures without exposing `lua_error` directly
 - The `wrap` trampoline delays `lua_error` until after the Zig callback has fully returned, keeping `defer` safe inside callbacks
 - Supported types for `parse` and `set`: `i32`, `i64`, `f32`, `f64`, `[]const u8`, `bool`, `zua.Table`

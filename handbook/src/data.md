@@ -106,8 +106,7 @@ Methods are Zig functions registered on a table. Lua calls them with `:` syntax,
 
 ```zig
 fn increment(_: *Zua, self: Table, delta: i32) Result(i32) {
-    const current = self.get("count", i32)
-        catch return Result(i32).errStatic("count missing");
+    const current = (try self.get("count", i32)).unwrap();
     const next = current + delta;
     self.set("count", next);
     return Result(i32).ok(next);
@@ -116,7 +115,7 @@ fn increment(_: *Zua, self: Table, delta: i32) Result(i32) {
 const counter = z.tableFrom(.{ .count = 0 });
 defer counter.pop();
 counter.setFn("increment", ZuaFn.from(increment, .{
-    .parse_error = "counter:increment expects (i32)",
+    .parse_err_fmt = "counter:increment expects (i32)",
 }));
 globals.set("counter", counter);
 ```
@@ -125,18 +124,112 @@ globals.set("counter", counter);
 counter:increment(5)
 ```
 
+## Checking for key existence
+
+Use `table.has()` to check if a key exists before calling `get`:
+
+```zig
+fn readOptional(_: *Zua, self: Table) Result(i32) {
+    if (!self.has("value")) {
+        return Result(i32).ok(0);  // default
+    }
+    return (try self.get("value", i32)).unwrap();
+}
+```
+
+This is useful for optional fields or when you want to handle missing keys differently than type errors.
+
 ## Decoding a table you already have
 
-When you have a `Table` handle rather than a direct function argument, use `translation.decodeStruct`:
+When you have a `Table` handle rather than a direct function argument, call its `get` method multiple times or use structure decoding:
 
 ```zig
 const guide_table = try globals.get("guide", zua.Table);
 defer guide_table.pop();
 
-const guide = try zua.translation.decodeStruct(zua.Table, guide_table, struct {
+const name = (try guide_table.get("name", []const u8)).unwrap();
+const version = (try guide_table.get("version", i32)).unwrap();
+```
+
+For one-shot decoding of many fields, use `decodeStruct`:
+
+```zig
+const guide = try zua.translation.decodeStruct(zua.Table, struct {
     name: []const u8,
     version: i32,
 });
 ```
 
-This is also useful inside callbacks that receive a table as `self` and need to read several fields in one go rather than calling `get` repeatedly.
+The `.unwrap()` method returns the value if successful, or panics with the error message if the field is missing or has the wrong type. For production code that needs to handle errors gracefully, check the `.failure` field:
+
+```zig
+const result = try guide_table.get("version", i32);
+if (result.failure) |failure| {
+    const err_msg = switch (failure) {
+        .static_message => |msg| msg,
+        .owned_message => |msg| msg,
+    };
+    // handle error with err_msg...
+} else {
+    const version = result.value;
+    // use version...
+}
+```
+
+## Handle Ownership
+
+Both `Table` and `Function` handles have three ownership modes that determine their lifetime and cleanup responsibility:
+
+### Borrowed handles
+
+Temporary handles created from Lua stack values within a callback. Valid only for the duration of the callback. No cleanup needed.
+
+```zig
+fn processTable(z: *Zua, table: Table) Result(.{}) {
+    // table is borrowed - stack remains owned by Lua
+    const value = (try table.get("key", i32)).unwrap();
+    return Result(.{}).ok(.{});
+    // do not pop() - Lua manages cleanup
+}
+```
+
+### Stack-owned handles
+
+Returned from wrapper APIs like `createTable()` or `globals()`. The handle owns the stack position until you call `.pop()`. Only valid until popped or replaced by another stack operation.
+
+```zig
+const table = z.createTable(0, 3);
+defer table.pop();  // must pop before returning
+table.set("x", 10);
+```
+
+### Registry-owned handles
+
+Persistent references anchored in the Lua registry, valid across callback invocations. Created by calling `.takeOwnership()` on a borrowed or stack-owned handle. You are responsible for calling `.release()` to clean up.
+
+```zig
+var stored_table: ?zua.OwnedTable = null;
+
+fn storeTable(z: *Zua, table: Table) Result(.{}) {
+    // table is borrowed - take ownership to persist it
+    stored_table = try table.takeOwnership();
+    return Result(.{}).ok(.{});
+}
+
+fn accessStored(_: *Zua) Result(i32) {
+    if (stored_table) |table| {
+        const value = (try table.get("count", i32)).unwrap();
+        return Result(i32).ok(value);
+    }
+    return Result(i32).errStatic("no table stored");
+}
+
+fn cleanup() void {
+    if (stored_table) |table| {
+        table.release();
+        stored_table = null;
+    }
+}
+```
+
+The registry reference is freed immediately on `.release()`; the table value remains in Lua only if other references exist.

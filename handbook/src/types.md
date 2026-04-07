@@ -199,30 +199,29 @@ pub const ZUA_META = zua.meta.Table(Direction, .{}).strEnum();
 
 ### Decode hooks
 
-A decode hook lets a type accept multiple Lua value types and convert them. Useful when you want a flexible API that accepts an address as an integer or an existing handle:
+A decode hook lets a type accept multiple Lua value types and convert them. The hook receives a `Primitive` union that wraps the decoded Lua value as one of several types:
 
 ```zig
 const Address = struct {
-    pub const ZUA_META = zua.meta.Table(Address, .{}).withDecode(decodeHook);
+    pub const ZUA_META = zua.meta.Table(Address, .{})
+        .withDecode(decodeHook);
 
     value: u64,
 
-    fn decodeHook(z: *zua.Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
-        return switch (kind) {
-            .number => blk: {
-                const n = zua.lua.toInteger(z.state, index) orelse return error.InvalidType;
-                break :blk Address{ .value = @intCast(n) };
-            },
-            .userdata => blk: {
-                const ptr = zua.lua.toUserdata(z.state, index) orelse return error.InvalidType;
+    fn decodeHook(z: *zua.Zua, primitive: zua.translation.Primitive) !zua.result.Result(Address) {
+        return switch (primitive) {
+            .integer => |n| zua.result.Result(Address).ok(.{ .value = @intCast(n) }),
+            .userdata => |ptr| blk: {
                 const addr_ptr: *Address = @ptrCast(@alignCast(ptr));
-                break :blk Address{ .value = addr_ptr.value };
+                break :blk zua.result.Result(Address).ok(.{ .value = addr_ptr.value });
             },
-            else => error.InvalidType,
+            else => zua.result.Result(Address).errOwned(z, "expected integer or userdata, got {s}", .{@tagName(primitive)}),
         };
     }
 };
 ```
+
+The `Primitive` union includes `.integer`, `.float`, `.boolean`, `.string`, `.table` (borrowed handle), `.function` (borrowed handle), `.light_userdata`, `.userdata`, and others. The hook should return a `Result(T)` to allow custom error messages that propagate through the decode chain.
 
 Now any function that takes an `Address` parameter accepts both integers and userdata handles from Lua without any changes to the function itself.
 

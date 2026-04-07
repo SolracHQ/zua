@@ -43,7 +43,7 @@ pub fn main(init: std.process.Init) !void {
     defer globals.pop();
 
     globals.setFn("list_processes", zua.ZuaFn.from(listProcesses, .{
-        .parse_error = "list_processes expects no arguments",
+        .parse_err_fmt = "list_processes expects no arguments: {s}",
     }));
 
     try z.exec(
