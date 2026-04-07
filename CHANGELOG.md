@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+### Added
+
+- Added Lua 5.4 source code directly into the repository under `vendor/lua` to simplify building from source without external dependencies.
+
 ## 0.5.0
 
 ### Breaking
