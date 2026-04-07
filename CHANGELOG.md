@@ -2,9 +2,20 @@
 
 ## 0.6.0
 
+### Added
+
 - Unified `Result` into a single tuple-backed implementation for single, multi, and zero return values.
-- Removed per-result ownership tracking from callback results; temporary callback allocations now live in `z.arena` and are discarded after `pushValues`.
+- `Result.asOption` returns the successful value as an optional, or null on failure.
+- `Result.mapErr` casts an error result to a different result type.
+
+### Changed
+
 - `Result(T)` now normalizes internally to the same tuple form as `Result(.{T})`.
+- Temporary callback allocations now live in `z.arena` and are discarded after `pushValues`.
+
+### Breaking
+
+- Removed `Result.owned` and `Result.deinit`. Use `z.arena` for temporaries that do not outlive the callback.
 
 ## 0.5.1
 
