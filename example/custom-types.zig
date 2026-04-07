@@ -28,12 +28,13 @@ const Counter = struct {
     }
 
     pub fn toString(z: *zua.Zua, self: *Counter) Result([]const u8) {
+        const arena = z.arena.?;
         const display = std.fmt.allocPrint(
-            z.allocator,
+            arena,
             "Counter({d})",
             .{self.count},
         ) catch return Result([]const u8).errStatic("out of memory");
-        return Result([]const u8).owned(display);
+        return Result([]const u8).ok(display);
     }
 };
 
@@ -58,12 +59,13 @@ fn makeRangeCondition(min: f64, max: f64) Result(Condition) {
 }
 
 fn describeCondition(z: *zua.Zua, cond: Condition) Result([]const u8) {
+    const arena = z.arena.?;
     const description = switch (cond) {
-        .eq => |value| std.fmt.allocPrint(z.allocator, "eq {d}", .{value}),
-        .in_range => |range| std.fmt.allocPrint(z.allocator, "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
+        .eq => |value| std.fmt.allocPrint(arena, "eq {d}", .{value}),
+        .in_range => |range| std.fmt.allocPrint(arena, "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
     } catch return Result([]const u8).errStatic("out of memory");
 
-    return Result([]const u8).owned(description);
+    return Result([]const u8).ok(description);
 }
 
 fn makeCounter(_: *zua.Zua) Result(Counter) {

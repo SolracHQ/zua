@@ -29,10 +29,9 @@ const demo_processes = [_]Process{
 };
 
 fn listProcesses(z: *zua.Zua) Result([]const Process) {
-    const processes = z.allocator.dupe(Process, demo_processes[0..demo_processes.len]) catch {
-        return Result([]const Process).errStatic("out of memory");
-    };
-    return Result([]const Process).owned(processes);
+    const arena = z.arena.?;
+    const processes = arena.dupe(Process, demo_processes[0..demo_processes.len]) catch return Result([]const Process).errStatic("out of memory");
+    return Result([]const Process).ok(processes);
 }
 
 pub fn main(init: std.process.Init) !void {

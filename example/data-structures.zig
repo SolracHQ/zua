@@ -31,7 +31,7 @@ fn getConfigValue(z: *zua.Zua, config: zua.Table) zua.Result(?i32) {
     if (value.failure) |failure| {
         return zua.Result(?i32).errOwned(z, "decode error: {s}", .{failure.getErr()});
     }
-    return zua.Result(?i32).ok(value.value);
+    return zua.Result(?i32).ok(value.unwrap());
 }
 
 fn sumNumbers(z: *zua.Zua, numbers_table: zua.Table) zua.Result(i32) {
@@ -52,7 +52,7 @@ fn sumNumbers(z: *zua.Zua, numbers_table: zua.Table) zua.Result(i32) {
             return zua.Result(i32).errOwned(z, "decode error at index {d}: {s}", .{ i, fail.getErr() });
         }
 
-        sum += num_result.value;
+        sum += num_result.unwrap();
     }
 
     return zua.Result(i32).ok(sum);

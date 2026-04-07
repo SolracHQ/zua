@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+- Unified `Result` into a single tuple-backed implementation for single, multi, and zero return values.
+- Removed per-result ownership tracking from callback results; temporary callback allocations now live in `z.arena` and are discarded after `pushValues`.
+- `Result(T)` now normalizes internally to the same tuple form as `Result(.{T})`.
+
 ## 0.5.1
 
 ### Added

@@ -89,10 +89,10 @@ pub fn parseTuple(
                         optionalChild(T),
                         table_ownership,
                     );
-                    if (decoded.failure) |failure| {
-                        return Result(ParseResult(types)){ .failure = failure };
+                    if (decoded.failure != null) {
+                        return decoded.mapErr(ParseResult(types));
                     }
-                    values[index] = decoded.value;
+                    values[index] = decoded.asOption().?;
                 }
             }
         } else {
@@ -105,10 +105,10 @@ pub fn parseTuple(
                 T,
                 table_ownership,
             );
-            if (decoded.failure) |failure| {
-                return Result(ParseResult(types)){ .failure = failure };
+            if (decoded.failure != null) {
+                return decoded.mapErr(ParseResult(types));
             }
-            values[index] = decoded.value;
+            values[index] = decoded.asOption().?;
         }
     }
 
@@ -157,7 +157,7 @@ pub fn decodeValue(
         if (decoded.failure) |failure| {
             return Result(T).errStatic(failure.getErr());
         }
-        return Result(T).ok(decoded.value);
+        return Result(T).ok(decoded.asOption().?);
     }
 
     // Check for custom decode hook first
@@ -268,7 +268,7 @@ pub fn decodeValue(
             var found: ?T = null;
 
             inline for (@typeInfo(T).@"union".fields) |field| {
-                const maybe_value = (table.get(field.name, ?field.type) catch return error.InvalidType).value;
+                const maybe_value = (table.get(field.name, ?field.type) catch return error.InvalidType).unwrap();
                 if (maybe_value) |v| {
                     if (found != null) return error.InvalidType;
                     found = @unionInit(T, field.name, v);

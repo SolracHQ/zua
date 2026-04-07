@@ -8,12 +8,13 @@ fn add(a: i32, b: i32) Result(i32) {
 }
 
 fn greet(z: *zua.Zua, name: []const u8) Result([]const u8) {
+    const arena = z.arena.?;
     const display = std.fmt.allocPrint(
-        z.allocator,
+        arena,
         "Hello, {s}!",
         .{name},
     ) catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(display);
+    return Result([]const u8).ok(display);
 }
 
 fn safeDivide(_: *zua.Zua, a: f64, b: f64) Result(f64) {
