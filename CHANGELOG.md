@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.7.0
+
+### Breaking
+
+- `Result` type removed entirely. Callbacks now return plain `!T` error unions.
+- Decode hooks now receive `*Context` as first parameter and return `!T` instead of `anyerror!Result(T)`.
+- Encode hooks now receive `*Context` as first parameter: `fn (*Context, T) ProxyType`.
+- `pushValue` now takes `*Context` instead of `*Zua`.
+- `strEnum()` encode/decode hook signatures updated to match the new conventions.
+- `Zua` is removed/renamed to `State`; the old execution helpers `Zua.exec`, `Zua.eval`, `Zua.execFile`, and `Zua.evalFile` are no longer available.
+- REPL-specific helpers such as `checkChunk`, `canLoadAsExpression`, `loadChunk`, and `callLoadedChunk` were removed from `State` and are now part of the dedicated REPL API.
+- `Zua` no longer carries an arena field. All scratch allocation goes through `Context`.
+- `State.createTable` and `State.tableFrom` were removed. Use `Table.create(z, ...)` and `Table.from(z, ...)` instead.
+- `Table.pop()` renamed to `Table.release()`, with updated semantics to handle both stack-owned and registry-owned tables.
+
+### Added
+- Closure support via `zua.Meta.Capture(T, opts)` strategy and `ZuaFn.newClosure(fn, initial, config)`. The captured struct is stored as userdata in upvalue 1 of the Lua C closure; a `*T` pointer is injected into every call. Each `newClosure` push allocates an independent copy of the initial value. `__gc` is supported for cleanup of owned resources.
+- New `lua.pushCClosure` and `lua.upvalueIndex` wrappers exposing `lua_pushcclosure` and `lua_upvalueindex`.
+- `VarArgs` type: declare as the last callback parameter to capture all remaining Lua arguments as `[]Primitive`. Exported from `zua` as `zua.VarArgs`.
+- `Primitive` union gains a `.nil` variant representing Lua `nil` and absent values, allowing custom decode hooks to fully handle optional and nil inputs.
+- `decodeValue(ctx, prim, T)` is now the primary primitive-based decoding entry point and owns optional handling: `.nil` returns `null` for `?T` or fails with a typed error otherwise.
+- `decodeAt(ctx, index, T)` is the stack-index entry point; it builds a `Primitive` and delegates to `decodeValue`.
+- `buildPrimitive` is now `pub`, enabling decode hooks to inspect raw Lua stack values before dispatching.
+- New `Executor` API for running Lua code: `Executor.execute` and `Executor.eval` with `Config`-based source selection.
+- New REPL API in `zua.exec.repl` for interactive execution, with per-evaluation `Context` lifetimes and optional completion/welcome message hooks.
+- Embedded `zua.Repl` interactive REPL support, including configurable prompt/continuation text, command history, completion callbacks, custom lexer identifier hooks, and ANSI syntax highlighting.
+- REPL now also exposes line editing, multi-line editing, persistent history file support, and tab completion powered by `linenoise`.
+- `Handlers.takeOwnership()` and `Handlers.release()` utilities for recursively promoting and releasing nested `Table`, `Function`, `Userdata`, and `TableView` handles in structs, unions, slices, arrays, and optionals.
+- `Executor.err` and `Executor.stack_trace` fields for retained error and traceback values.
+- `Config.stack_trace` ownership semantics are explicit: `.owned` allocates traceback data from the state allocator and must be freed manually, while `.onArena` remains owned by the current `Context`.
+- `Context` passed through all translation helpers and trampolines, replacing the ad-hoc arena on `Zua`.
+- `Primitive` union now includes a `.function` variant for borrowed function handles.
+- `pushValue` now encodes raw Zig function types and pre-wrapped `ZuaFn` values as Lua callables, making `globals.set(&ctx, name, fn)` work directly.
+- Added `zua.Fn(ins, outs)`, a typed callback wrapper for storing Lua callbacks in Zig values and returning them through Lua metadata.
+- Added `zua.TableView(T)`, a typed table-backed view for mutable Lua tables that synchronizes a decoded typed copy back into the original table.
+- `ZuaFn.new` unifies `ZuaFn.from` and `ZuaFn.pure` into a single wrapper that infers context usage from the function signature.
+- `ctx.fail`, `ctx.failTyped`, `ctx.failWithFmt`, `ctx.failWithFmtTyped` for propagating Lua-facing errors with `try`.
+- `zua.Meta.getMeta(T)` is now the canonical metadata lookup path for type translation.
+- Metadata internals now store optional `encode_hook` and `decode_hook`, making custom hooks opt-in and simpler to reason about.
+- Added raw `Userdata` handles for full userdata values, and typed object wrappers via `Object(T)` to safely represent `.object` strategy values as lightweight Lua userdata handles, preserving identity and enabling nested object fields
+
 ## 0.6.0
 
 ### Added
@@ -49,7 +90,7 @@
   APIs when passing constant arrays of custom types from Zig to Lua.
 - Three-tier handle ownership model for Table and Function:
   1. **Borrowed**: temporary stack values valid only during callback
-  2. **Stack-owned**: returned from `createTable()` / `globals()`, require `.pop()`
+  2. **Stack-owned**: returned from `Table.create()` / `globals()`, require `.pop()`
   3. **Registry-owned**: created via `.takeOwnership()`, require `.release()`
 
 ## 0.4.2
@@ -72,8 +113,8 @@
 ### Added
 
 - Tagged union support: `union(enum)` types now decode and encode directly
-  without manual flat-struct boilerplate. Use `zua.meta.Table`, `zua.meta.Object`,
-  or `zua.meta.Ptr` on a tagged union the same as on a struct. For `.table`
+  without manual flat-struct boilerplate. Use `zua.Meta.Table`, `zua.Meta.Object`,
+  or `zua.Meta.Ptr` on a tagged union the same as on a struct. For `.table`
   strategy, Lua passes a single-key table selecting the active variant; zua
   decodes whichever field is present and returns `error.InvalidType` if zero or
   more than one field is set. Untagged unions default to `.object`.
@@ -86,12 +127,12 @@
 - `.withEncode()` and `.withDecode()` builder methods for custom encode/decode hooks on `ZUA_META`
 - `ZuaFnErrorConfig.parse_err_hook` to customize error messages when Lua argument parsing fails
 - Automatic detection and reuse of pre-wrapped ZuaFn methods in metatables (check for `__IsZuaFn` marker)
-- `zua.meta` becomes the single source of truth for all type metadata queries
+- `zua.Meta` becomes the single source of truth for all type metadata queries
 
 ### Changed
 
 - Removed old magic markers: `ZUA_TRANSLATION_STRATEGY`, `ZUA_ENCODE_CUSTOM_HOOK`, `ZUA_DECODE_CUSTOM_HOOK`, `ZUA_METHODS`
-- Types may now declare `pub const ZUA_META = zua.meta.<strategy>(...)` with appropriate builder chain to customize behavior; defaults to `.table` if not declared
+- Types may now declare `pub const ZUA_META = zua.Meta.<strategy>(...)` with appropriate builder chain to customize behavior; defaults to `.table` if not declared
 - `translation.zig` now imports and uses metadata helpers from `meta.zig` exclusively
 - Simplified internal API: centralized `strategyOf()`, `hasEncodeHook()`, `hasDecodeHook()`, `methodsOf()` in `meta.zig`
 
@@ -145,8 +186,8 @@ First working version, extracted from memscript.
 - `Zua.init` and `Zua.deinit` own the Lua state and allocator, heap-allocated for stable pointer identity inside callbacks
 - `Zua.fromState` retrieves the `Zua` pointer from a raw `lua_State` inside C callbacks
 - `Zua.globals` and `Zua.registry` return `Table` handles for the global and registry tables
-- `Zua.createTable` creates a new table and returns an absolute-indexed handle
-- `Zua.tableFrom` converts a Zig struct or array literal into a Lua table recursively
+- `Table.create` creates a new table and returns an absolute-indexed handle
+- `Table.from` converts a Zig struct or array literal into a Lua table recursively
 - `Zua.exec` runs a Lua chunk for side effects
 - `Zua.eval` runs a Lua chunk and decodes the returned values into a comptime-typed tuple
 - `Table.set` and `Table.get` dispatch on comptime type, no raw stack indexes in calling code

@@ -20,7 +20,10 @@ list-examples:
         functions \
         data-structures \
         custom-types \
-        object-slices
+        object-slices \
+        nested-handle-ownership \
+        custom-hooks \
+        repl
 
 run-example name:
     zig build "run-example-{{name}}"

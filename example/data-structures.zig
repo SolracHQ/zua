@@ -12,29 +12,22 @@ const Config = struct {
     enabled: bool,
 };
 
-fn printPoint(_: *zua.Zua, p: Point) zua.Result(.{}) {
+fn printPoint(_: *zua.Context, p: Point) void {
     std.debug.print("Point({d}, {d})\n", .{ p.x, p.y });
-    return zua.Result(.{}).ok(.{});
 }
 
-fn createConfig(_: *zua.Zua, name: []const u8, value: i32, enabled: bool) zua.Result(Config) {
-    return zua.Result(Config).ok(Config{ .name = name, .value = value, .enabled = enabled });
+fn createConfig(_: *zua.Context, name: []const u8, value: i32, enabled: bool) Config {
+    return Config{ .name = name, .value = value, .enabled = enabled };
 }
 
-fn getConfigValue(z: *zua.Zua, config: zua.Table) zua.Result(?i32) {
+fn getConfigValue(ctx: *zua.Context, config: zua.Table) !?i32 {
     if (!config.has(1)) {
-        return zua.Result(?i32).ok(null);
+        return null;
     }
-    const value = config.get(1, i32) catch |err| {
-        return zua.Result(?i32).errOwned(z, "failed to get index 1: {s}", .{@errorName(err)});
-    };
-    if (value.failure) |failure| {
-        return zua.Result(?i32).errOwned(z, "decode error: {s}", .{failure.getErr()});
-    }
-    return zua.Result(?i32).ok(value.unwrap());
+    return try config.get(ctx, 1, i32);
 }
 
-fn sumNumbers(z: *zua.Zua, numbers_table: zua.Table) zua.Result(i32) {
+fn sumNumbers(ctx: *zua.Context, numbers_table: zua.Table) !i32 {
     var sum: i32 = 0;
     var i: i32 = 1;
 
@@ -44,33 +37,29 @@ fn sumNumbers(z: *zua.Zua, numbers_table: zua.Table) zua.Result(i32) {
             break;
         }
 
-        const num_result = numbers_table.get(i, i32) catch |err| {
-            return zua.Result(i32).errOwned(z, "failed at index {d}: {s}", .{ i, @errorName(err) });
-        };
-
-        if (num_result.failure) |fail| {
-            return zua.Result(i32).errOwned(z, "decode error at index {d}: {s}", .{ i, fail.getErr() });
-        }
-
-        sum += num_result.unwrap();
+        const num = try numbers_table.get(ctx, i, i32);
+        sum += num;
     }
 
-    return zua.Result(i32).ok(sum);
+    return sum;
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa, init.io);
+    const z = try zua.State.init(init.gpa, init.io);
     defer z.deinit();
+    var executor = zua.Executor{};
+    var ctx = zua.Context.init(z);
+    defer ctx.deinit();
 
     const globals = z.globals();
-    defer globals.pop();
+    defer globals.release();
 
-    globals.setFn("print_point", zua.ZuaFn.from(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }));
-    globals.setFn("create_config", zua.ZuaFn.from(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }));
-    globals.setFn("get_config_value", zua.ZuaFn.from(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }));
-    globals.setFn("sum_numbers", zua.ZuaFn.from(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }));
+    globals.set(&ctx, "print_point", zua.ZuaFn.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }));
+    globals.set(&ctx, "create_config", zua.ZuaFn.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }));
+    globals.set(&ctx, "get_config_value", zua.ZuaFn.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }));
+    globals.set(&ctx, "sum_numbers", zua.ZuaFn.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }));
 
-    try z.exec(
+    try executor.execute(&ctx, .{ .code = .{ .string =
         \\-- Create and pass tables
         \\local p = {x = 3.5, y = 4.2}
         \\print_point(p)
@@ -88,5 +77,5 @@ pub fn main(init: std.process.Init) !void {
         \\-- Process array tables
         \\local numbers = {10, 20, 30, 40}
         \\print("sum_numbers({10, 20, 30, 40}):", sum_numbers(numbers))
-    );
+    } });
 }

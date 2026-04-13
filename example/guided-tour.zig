@@ -1,43 +1,46 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const Result = zua.Result;
-
 // Simple functions for demonstration
-fn add(a: i32, b: i32) Result(i32) {
-    return Result(i32).ok(a + b);
+fn add(a: i32, b: i32) i32 {
+    return a + b;
 }
 
-fn multiply(a: f64, b: f64) Result(f64) {
-    return Result(f64).ok(a * b);
+fn multiply(a: f64, b: f64) f64 {
+    return a * b;
 }
 
 // A custom type with methods
 const Vector2 = struct {
-    pub const ZUA_META = zua.meta.Table(Vector2, .{
+    pub const ZUA_META = zua.Meta.Table(Vector2, .{
         .length = length,
         .normalize = normalize,
+        .translate = translate,
     });
 
     x: f64,
     y: f64,
 
-    pub fn length(self: Vector2) Result(f64) {
-        const len = std.math.sqrt(self.x * self.x + self.y * self.y);
-        return Result(f64).ok(len);
+    pub fn length(self: Vector2) f64 {
+        return std.math.sqrt(self.x * self.x + self.y * self.y);
     }
 
-    pub fn normalize(z: *zua.Zua, self: Vector2) Result(Vector2) {
-        _ = z;
+    pub fn normalize(self: Vector2) Vector2 {
         const len = std.math.sqrt(self.x * self.x + self.y * self.y);
-        if (len == 0) return Result(Vector2).errStatic("cannot normalize zero vector");
-        return Result(Vector2).ok(Vector2{ .x = self.x / len, .y = self.y / len });
+        if (len == 0) return Vector2{ .x = 0, .y = 0 };
+        return Vector2{ .x = self.x / len, .y = self.y / len };
+    }
+
+    pub fn translate(ctx: *zua.Context, self: zua.TableView(Vector2), dx: f64, dy: f64) void {
+        self.ref.x += dx;
+        self.ref.y += dy;
+        self.sync(ctx);
     }
 };
 
 // A stateful object
 const Counter = struct {
-    pub const ZUA_META = zua.meta.Object(Counter, .{
+    pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
         .increment = increment,
         .__tostring = toString,
@@ -45,79 +48,73 @@ const Counter = struct {
 
     count: i32,
 
-    pub fn getValue(self: *Counter) Result(i32) {
-        return Result(i32).ok(self.count);
+    pub fn getValue(self: *Counter) i32 {
+        return self.count;
     }
 
-    pub fn increment(self: *Counter, amount: i32) Result(.{}) {
+    pub fn increment(self: *Counter, amount: i32) void {
         self.count += amount;
-        return Result(.{}).ok(.{});
     }
 
-    pub fn toString(z: *zua.Zua, self: *Counter) Result([]const u8) {
-        const arena = z.arena.?;
-        const msg = std.fmt.allocPrint(arena, "Counter({d})", .{self.count}) catch
-            return Result([]const u8).errStatic("out of memory");
-        return Result([]const u8).ok(msg);
+    pub fn toString(ctx: *zua.Context, self: *Counter) []const u8 {
+        const arena = ctx.allocator();
+        const msg = std.fmt.allocPrint(arena, "Counter({d})", .{self.count}) catch {
+            ctx.err = "out of memory";
+            return "";
+        };
+        return msg;
     }
 };
 
 // Functions to create our types
-fn makeCounter(_: *zua.Zua) Result(Counter) {
-    return Result(Counter).ok(Counter{ .count = 0 });
+fn makeCounter() !Counter {
+    return Counter{ .count = 0 };
 }
 
-fn makeVector(x: f64, y: f64) Result(Vector2) {
-    return Result(Vector2).ok(Vector2{ .x = x, .y = y });
+fn makeVector(x: f64, y: f64) Vector2 {
+    return Vector2{ .x = x, .y = y };
 }
 
-fn mapWithCallback(_: *zua.Zua, callback: zua.Function(.{i32}), numbers: []const i32) Result(.{}) {
+fn mapWithCallback(ctx: *zua.Context, callback: zua.Function, numbers: []const i32) !void {
     for (numbers) |value| {
-        const result = callback.call(.{value}) catch |err| {
-            std.debug.print("ERROR calling callback: {any}\n", .{err});
-            return Result(.{}).errStatic("callback failed");
-        };
-        if (result.failure) |fail| {
-            return Result(.{}).errStatic(fail.getErr());
-        }
-        std.debug.print("  Result: {}\n", .{result.values[0]});
+        const mapped = try callback.call(ctx, .{value}, i32);
+        std.debug.print("  Mapped: {d}\n", .{mapped});
     }
-    return Result(.{}).ok(.{});
 }
 
-fn filterAndSum(_: *zua.Zua, predicate: zua.Function(.{bool}), numbers: []const i32) Result(i32) {
+fn filterAndSum(ctx: *zua.Context, predicate: zua.Function, numbers: []const i32) !i32 {
     var sum: i32 = 0;
     for (numbers) |value| {
-        const result = predicate.call(.{value}) catch |err| {
-            std.debug.print("ERROR calling predicate: {any}\n", .{err});
-            return Result(i32).errStatic("predicate failed");
-        };
-        if (result.failure) |fail| {
-            return Result(i32).errStatic(fail.getErr());
-        }
-        if (result.values[0]) {
-            sum += value;
-        }
+        const is_match = try predicate.call(ctx, .{value}, bool);
+        if (is_match) sum += value;
     }
-    return Result(i32).ok(sum);
+    return sum;
+}
+
+fn multiReturnExample() struct { i32, f64 } {
+    return .{ 42, 3.14 };
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa, init.io);
+    const z = try zua.State.init(init.gpa, init.io);
     defer z.deinit();
+    var executor = zua.Executor{};
+    var ctx = zua.Context.init(z);
+    defer ctx.deinit();
 
     const globals = z.globals();
-    defer globals.pop();
+    defer globals.release();
 
     // Register functions
-    globals.setFn("add", zua.ZuaFn.pure(add, .{}));
-    globals.setFn("multiply", zua.ZuaFn.pure(multiply, .{}));
-    globals.setFn("Counter", zua.ZuaFn.from(makeCounter, .{}));
-    globals.setFn("Vector", zua.ZuaFn.pure(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
-    globals.setFn("map_with_callback", zua.ZuaFn.from(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
-    globals.setFn("filter_and_sum", zua.ZuaFn.from(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
+    globals.set(&ctx, "add", add);
+    globals.set(&ctx, "multiply", multiply);
+    globals.set(&ctx, "Counter", makeCounter);
+    globals.set(&ctx, "Vector", zua.ZuaFn.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
+    globals.set(&ctx, "map_with_callback", zua.ZuaFn.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
+    globals.set(&ctx, "filter_and_sum", zua.ZuaFn.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
+    globals.set(&ctx, "multi_return_example", multiReturnExample);
 
-    const result = try z.execTraceback(
+    const code =
         \\-- Basic function calls
         \\print("Basic Functions:")
         \\print("add(5, 3) =", add(5, 3))
@@ -135,6 +132,8 @@ pub fn main(init: std.process.Init) !void {
         \\print("Vector length:", v:length())
         \\local v_norm = v:normalize()
         \\print("Normalized vector:", v_norm.x, v_norm.y)
+        \\v:translate(2, 1)
+        \\print("Translated vector:", v.x, v.y)
         \\
         \\-- Stateful object
         \\print("\nStateful Object (Counter):")
@@ -160,21 +159,16 @@ pub fn main(init: std.process.Init) !void {
         \\local sum_evens = filter_and_sum(is_even, numbers)
         \\print("Sum of even numbers:", sum_evens)
         \\
+        \\-- Multi-value return example
+        \\print("\nMulti-value Return:")
+        \\local a, b = multi_return_example()
+        \\print("Values returned:", a, b)
+        \\
         \\print("\nAll features demonstrated!")
-    );
+    ;
 
-    switch (result) {
-        .Ok => {},
-        .Runtime => |msg| {
-            std.debug.print("Runtime error:\n{s}\n", .{msg});
-            z.freeTraceBackResult(result);
-            return;
-        },
-        else => |err| {
-            std.debug.print("Lua error: {any}\n", .{err});
-            z.freeTraceBackResult(result);
-            return;
-        },
-    }
-    z.freeTraceBackResult(result);
+    executor.execute(&ctx, .{ .code = .{ .string = code } }) catch |err| {
+        std.debug.print("Lua error: {s}\n", .{ctx.err orelse "unknown error"});
+        return err;
+    };
 }

@@ -1,66 +1,89 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const Result = zua.Result;
-
-fn add(a: i32, b: i32) Result(i32) {
-    return Result(i32).ok(a + b);
+fn add(a: i32, b: i32) i32 {
+    return a + b;
 }
 
-fn greet(z: *zua.Zua, name: []const u8) Result([]const u8) {
-    const arena = z.arena.?;
-    const display = std.fmt.allocPrint(
-        arena,
+fn greet(ctx: *zua.Context, name: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(
+        ctx.allocator(),
         "Hello, {s}!",
         .{name},
-    ) catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).ok(display);
+    ) catch try ctx.failTyped([]const u8, "out of memory");
 }
 
-fn safeDivide(_: *zua.Zua, a: f64, b: f64) Result(f64) {
+fn safeDivide(ctx: *zua.Context, a: f64, b: f64) !f64 {
     if (b == 0.0) {
-        return Result(f64).errStatic("division by zero");
+        return ctx.failTyped(f64, "division by zero");
     }
-    return Result(f64).ok(a / b);
+    return a / b;
 }
 
-fn applyTwice(_: *zua.Zua, callback: zua.Function(.{i32}), initial: i32) Result(i32) {
+fn applyTwice(ctx: *zua.Context, callback: zua.Function, initial: i32) !i32 {
     var current = initial;
+    current = try callback.call(ctx, .{current}, i32);
+    current = try callback.call(ctx, .{current}, i32);
+    return current;
+}
 
-    // First call
-    const result1 = callback.call(.{current}) catch {
-        return Result(i32).errStatic("first call failed");
-    };
-    if (result1.failure) |fail| {
-        return Result(i32).errStatic(fail.getErr());
-    }
-    current = result1.values[0];
+// --- Closures ---
 
-    // Second call
-    const result2 = callback.call(.{current}) catch {
-        return Result(i32).errStatic("second call failed");
-    };
-    if (result2.failure) |fail| {
-        return Result(i32).errStatic(fail.getErr());
+/// Captured state for a counter closure. The `Meta.Capture` strategy
+/// stores this struct as upvalue 1 of the Lua C closure so mutations
+/// persist across calls to the same closure instance.
+const CounterState = struct {
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{});
+    count: i32,
+    step: i32,
+};
+
+/// Each call increments `count` by `step` and returns the new value.
+// --- VarArgs ---
+
+/// Sums all Lua number arguments passed in. Demonstrates VarArgs.
+fn sumAll(ctx: *zua.Context, args: zua.VarArgs) !i64 {
+    var total: i64 = 0;
+    for (args.args) |prim| {
+        switch (prim) {
+            .integer => |i| total += i,
+            .float => |f| total += @intFromFloat(f),
+            else => return ctx.failTyped(i64, "sum_all expects numbers"),
+        }
     }
-    return Result(i32).ok(result2.values[0]);
+    return total;
+}
+
+/// Describes the Lua type of each argument passed in.
+fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
+    var buf = std.ArrayList(u8).empty;
+    for (args.args, 0..) |prim, i| {
+        if (i > 0) try buf.appendSlice(ctx.allocator(), ", ");
+        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+    }
+    return buf.items;
+}
+
+fn counterTick(s: *CounterState) i32 {
+    s.count += s.step;
+    return s.count;
 }
 
 /// CallbackRegistry: an Object type that stores a callback for later use.
 /// Demonstrates the Object strategy with callback ownership.
 const CallbackRegistry = struct {
     // Marker for Object strategy
-    pub const ZUA_META = zua.meta.Object(CallbackRegistry, .{
+    pub const ZUA_META = zua.Meta.Object(CallbackRegistry, .{
         .set_callback = setCallback,
         .call_stored = callStored,
-        .__gc = deinit, // Ensure we release owned callback on GC
+        .__gc = deinit,
     });
 
     // Stores owned callback, null if not set
-    stored: ?zua.Function(.{i32}) = null,
+    stored: ?zua.Fn(i32, i32) = null,
 
     /// Store a callback by taking ownership
-    pub fn setCallback(self: *CallbackRegistry, callback: zua.Function(.{i32})) Result(.{}) {
+    pub fn setCallback(self: *CallbackRegistry, callback: zua.Fn(i32, i32)) void {
         // Release previous callback if it exists
         if (self.stored) |prev| {
             prev.release();
@@ -68,52 +91,55 @@ const CallbackRegistry = struct {
 
         // Take ownership of the new callback
         self.stored = callback.takeOwnership();
-        return Result(.{}).ok(.{});
     }
 
     /// Call the stored callback with a value, or return default if not set
-    pub fn callStored(self: *CallbackRegistry, value: i32) Result(i32) {
+    pub fn callStored(ctx: *zua.Context, self: *CallbackRegistry, value: i32) !i32 {
         if (self.stored) |callback| {
-            const result = callback.call(.{value}) catch |err| {
-                std.debug.print("ERROR calling stored callback: {any}\n", .{err});
-                return Result(i32).errStatic("callback call failed");
-            };
-            if (result.failure) |fail| {
-                return Result(i32).errStatic(fail.getErr());
-            }
-            return Result(i32).ok(result.values[0]);
+            return try callback.call(ctx, value);
         } else {
             // Default: return value unchanged if no callback set
-            return Result(i32).ok(value);
+            return value;
         }
     }
 
-    fn deinit(self: *CallbackRegistry) Result(.{}) {
+    fn deinit(self: *CallbackRegistry) void {
         if (self.stored) |callback| {
             callback.release();
         }
-        return Result(.{}).ok(.{});
     }
 };
 
-fn makeCallbackRegistry(_: *zua.Zua) Result(CallbackRegistry) {
-    return Result(CallbackRegistry).ok(CallbackRegistry{});
+fn makeCallbackRegistry(_: *zua.Context) CallbackRegistry {
+    return CallbackRegistry{};
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa, init.io);
+    const z = try zua.State.init(init.gpa, init.io);
     defer z.deinit();
+    var executor = zua.Executor{};
+    var ctx = zua.Context.init(z);
+    errdefer {
+        std.debug.print("Error: {s}\n", .{ctx.err orelse "unknown"});
+    }
+    defer ctx.deinit();
 
     const globals = z.globals();
-    defer globals.pop();
+    defer globals.release();
 
-    globals.setFn("add", zua.ZuaFn.pure(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }));
-    globals.setFn("greet", zua.ZuaFn.from(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }));
-    globals.setFn("divide", zua.ZuaFn.from(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }));
-    globals.setFn("apply_twice", zua.ZuaFn.from(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }));
-    globals.setFn("CallbackRegistry", zua.ZuaFn.from(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }));
+    globals.set(&ctx, "add", zua.ZuaFn.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }));
+    globals.set(&ctx, "greet", zua.ZuaFn.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }));
+    globals.set(&ctx, "divide", zua.ZuaFn.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }));
+    globals.set(&ctx, "apply_twice", zua.ZuaFn.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }));
+    globals.set(&ctx, "CallbackRegistry", zua.ZuaFn.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }));
 
-    try z.exec(
+    // Closures: each newClosure call produces an independent captured state.
+    globals.set(&ctx, "sum_all", zua.ZuaFn.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }));
+    globals.set(&ctx, "describe_args", zua.ZuaFn.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }));
+    globals.set(&ctx, "counter_by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}));
+    globals.set(&ctx, "counter_by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+
+    try executor.execute(&ctx, .{ .code = .{ .string =
         \\print("add(10, 20) =", add(10, 20))
         \\print(greet("Zig"))
         \\print("divide(10, 2) =", divide(10, 2))
@@ -141,5 +167,20 @@ pub fn main(init: std.process.Init) !void {
         \\if not ok then
         \\    print("Caught error:", result)
         \\end
-    );
+        \\
+        \\-- Closures: captured state persists across calls
+        \\print("\nClosures (captured mutable state):")
+        \\print("counter_by_one:", counter_by_one())  -- 1
+        \\print("counter_by_one:", counter_by_one())  -- 2
+        \\print("counter_by_one:", counter_by_one())  -- 3
+        \\print("counter_by_ten:", counter_by_ten())  -- 10
+        \\print("counter_by_ten:", counter_by_ten())  -- 20
+        \\-- The two counters are independent
+        \\print("counter_by_one:", counter_by_one())  -- 4  (unaffected by by_ten calls)        \\
+        \\-- VarArgs: capture remaining Lua arguments as []Primitive
+        \\print("\nVarArgs:")
+        \\print("sum_all(1, 2, 3, 4, 5) =", sum_all(1, 2, 3, 4, 5))
+        \\print("sum_all() =", sum_all())
+        \\print("describe_args(1, true, 'hello', 3.14) =", describe_args(1, true, "hello", 3.14))    
+    } });
 }

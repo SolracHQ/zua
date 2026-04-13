@@ -1,53 +1,79 @@
+//! Metatable creation and attachment helpers for Zua values.
+//!
+//! This module builds metatables from Zua metadata, attaches them to userdata
+//! values, and resolves method trampolines for both raw method functions and
+//! wrapped `ZuaFn` values.
+
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
-const translation = @import("translation.zig");
-const ZuaFn = @import("zua_fn.zig");
+const ZuaFn = @import("functions/zua_fn.zig");
 const Meta = @import("meta.zig");
-const Zua = @import("zua.zig").Zua;
+const State = @import("state/state.zig");
+const Context = @import("state/context.zig");
 
 /// Ensures the metatable for `T` exists and attaches it to the value on top of the Lua stack.
-pub fn attachMetatable(z: *Zua, comptime T: type) void {
+///
+/// This is used by the encoder when pushing userdata values with an object
+/// strategy. It creates or reuses a cached metatable and sets it on the value
+/// currently at the top of the Lua stack.
+///
+/// Arguments:
+/// - z: The global Zua state owning the Lua VM and metatable cache.
+/// - T: The type whose metatable should be attached.
+pub fn attachMetatable(z: *State, comptime T: type) void {
     z.getOrCreateMetatable(T);
-    _ = lua.setMetatable(z.state, -2);
+    _ = lua.setMetatable(z.luaState, -2);
 }
 
 /// Builds a metatable for `T` and leaves it on the Lua stack.
-/// Regular methods are written to `__index`, while metamethods are written directly to the metatable.
-pub fn buildMetatable(z: *Zua, comptime T: type) void {
-    const strategy = Meta.strategyOf(T);
+///
+/// Regular methods are stored in the `__index` table, while metamethods are
+/// written directly on the metatable. Object strategy types also receive a
+/// `__name` field for diagnostic purposes.
+///
+/// Arguments:
+/// - z: The global Zua state owning the Lua VM.
+/// - T: The type whose metatable is being constructed.
+pub fn buildMetatable(z: *State, comptime T: type) void {
+    const strategy = Meta.getMeta(T).strategy;
 
-    lua.createTable(z.state, 0, 4);
-    const mt_index = lua.absIndex(z.state, -1);
+    lua.createTable(z.luaState, 0, 4);
+    const mt_index = lua.absIndex(z.luaState, -1);
 
     if (strategy == .object) {
-        lua.pushString(z.state, @typeName(T));
-        lua.setField(z.state, mt_index, "__name");
+        lua.pushString(z.luaState, @typeName(T));
+        lua.setField(z.luaState, mt_index, "__name");
     }
 
-    const methods = comptime Meta.methodsOf(T);
-    if (methods == null) return;
+    const methods = comptime Meta.getMeta(T).methods;
+    if (methodCount(T) == 0) return;
 
-    lua.createTable(z.state, 0, methodCount(T));
-    const methods_index = lua.absIndex(z.state, -1);
+    lua.createTable(z.luaState, 0, methodCount(T));
+    const methods_index = lua.absIndex(z.luaState, -1);
 
-    const methods_type = @TypeOf(methods.?);
+    const methods_type = @TypeOf(methods);
 
     inline for (@typeInfo(methods_type).@"struct".fields) |field| {
-        const method_fn = @field(methods.?, field.name);
+        const method_fn = @field(methods, field.name);
         const trampoline = selectTrampoline(method_fn);
-        lua.pushFunction(z.state, trampoline);
+        lua.pushFunction(z.luaState, trampoline);
 
         // Metamethods (starting with __) go directly on the metatable
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
-            lua.setField(z.state, mt_index, field.name);
+            lua.setField(z.luaState, mt_index, field.name);
         } else {
-            lua.setField(z.state, methods_index, field.name);
+            lua.setField(z.luaState, methods_index, field.name);
         }
     }
 
-    lua.setField(z.state, mt_index, "__index");
+    lua.setField(z.luaState, mt_index, "__index");
 }
 
+/// Selects the Lua C function trampoline for a method value.
+///
+/// If the method is already a compiled `ZuaFn`, its trampoline is returned
+/// directly. Otherwise the method function is wrapped in a new `ZuaFn` so it can
+/// be exposed to Lua with the standard decode/execute semantics.
 fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
@@ -56,22 +82,13 @@ fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
         return method_fn_type.trampoline();
     }
 
-    // Otherwise wrap it
-    const fn_info = @typeInfo(method_fn_type).@"fn";
-    const first_param = fn_info.params[0].type orelse
-        @compileError("method parameters must have concrete types");
-
-    const error_config = ZuaFn.ZuaFnErrorConfig{};
-
-    if (first_param == *Zua) {
-        return @TypeOf(ZuaFn.from(method_fn, error_config)).trampoline();
-    } else {
-        return @TypeOf(ZuaFn.pure(method_fn, error_config)).trampoline();
-    }
+    return ZuaFn.ZuaFnType(method_fn, .{}).trampoline();
 }
 
+/// Returns the number of methods declared on `T`.
+///
+/// This is used to size the temporary `__index` table before populating it.
 fn methodCount(comptime T: type) i32 {
-    const methods = comptime Meta.methodsOf(T);
-    if (methods == null) return 0;
-    return @intCast(@typeInfo(@TypeOf(methods.?)).@"struct".fields.len);
+    const methods = comptime Meta.getMeta(T).methods;
+    return @intCast(@typeInfo(@TypeOf(methods)).@"struct".fields.len);
 }

@@ -1,58 +1,52 @@
-# zua (Zig + Lua)
+# zua
 
-zua lets you write Zig and call it from Lua. No stack indexes. No push/pop accounting. No longjmp surprises.
+zua is a Zig library for embedding Lua. It is comptime-heavy by design: pushing values to Lua cannot fail because all types are known at compile time, while reading them can fail because Lua is a dynamic language and we depend on whatever the caller passes. The goal is to write Zig like Zig, write Lua like Lua, and have everything in between just work.
 
 ```zig
-fn add(a: i32, b: i32) Result(i32) {
-    return Result(i32).ok(a + b);
+fn add(a: i32, b: i32) i32 {
+    return a + b;
 }
 
-globals.setFn("add", ZuaFn.pure(add, .{
-    .parse_err_fmt = "add expects (i32, i32), but got {s}",
-}));
+globals.set(&ctx, "add", add);
 ```
 
 ```lua
 print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32), but got string
+print(add("oops"))  -- error: add expects (i32, i32): got string
 ```
 
-That is the whole model. You declare typed Zig functions, zua handles the boundary, Lua calls them. The argument decoding, return value encoding, and safe `lua_error` dispatch all happen automatically.
+The library grew beyond simple bindings because lifetime considerations, ownership rules, and things that cannot be represented cleanly on either side all need somewhere to live. The API tries to stay clean regardless. You should never need to touch `zua.lua` directly, even though it is there if you do.
 
-zua uses comptime heavily. Type dispatch, struct decoding, metatable generation from declared methods - it all happens at compile time. If you like libraries that do the hard work for you but stay explicit at the call site, this should feel natural.
+All dependencies are vendored. No supply chain concerns: only `linenoise` for the embedded REPL and Lua 5.4 copied from its official repository. Both are MIT-compatible; their licenses are in `vendor/`.
 
-Born from [lumem](https://github.com/solracHQ/lumem), where hand-written binding code was impossible to maintain. Features get added when lumem or other real projects need them.
+The library is heavily inspired by [mlua](https://github.com/mlua-rs/mlua), the best Lua bindings I have ever seen. Unfortunately those are for Rust.
+
+## What is new in 0.7.0
+
+A lot of rework across the full library. The complete list is in the changelog, but the highlights are:
+
+- The `Result` API is gone. I was so biased following mlua that I forgot Zig is not Rust, for good and for bad. The error path felt unnatural; not being able to just `try` was painful. Now functions return plain `!T` and errors propagate like normal Zig.
+- A built-in REPL with syntax highlighting, tab completion, and persistent history, usable in roughly 5 lines of setup code.
+- New handle types, typed wrappers, and closure support with captured mutable state.
 
 ## Handbook
 
-The handbook covers everything: functions, passing structured data, exposing Zig types with methods and metamethods, host state, running Lua from Zig.
+The handbook walks through the full API from a simple `add` function to opaque objects, closures, and the REPL, without touching the Lua C API once.
+
+The handbook intentionally repeats some content across chapters so readers can pick a single chapter and still understand the API without having to read everything else first.
 
 ```sh
 cd handbook
 mdbook serve
 ```
 
-Then open http://localhost:3000.
-
-BTW, if you are looking at main branch, the handbook is published in github actions and available in the [docs](https://solrachq.github.io/zua/).
-
-## Philosophy
-
-zua adds features when memscript or other projects need them. The goal is not maximum feature coverage, but a tight integration that works well for real use cases. If something is missing, open an issue or PR.
-
-I am not super experienced in Zig, so bugs and edge cases may exist. If you find something broken or unexpected, please open an issue. I cannot test all the comptime paths, so reports help a lot.
-
-## Memory management note
-
-zua separates transient callback scratch from long-lived objects pushed into Lua. Use `z.arena` for temporary buffers and formatted strings, and use `z.allocator` only for data that must outlive the callback and be owned by Lua.
+Then open http://localhost:3000. The handbook is also published at [solrachq.github.io/zua](https://solrachq.github.io/zua/) on the main branch.
 
 ## Platforms
 
-I develop on Linux (Fedora and Ubuntu WSL). Both are well-tested. Windows and macOS might work, but I do not actively support them. If you hit issues on other platforms, let me know.
+I develop on Linux (Fedora). Windows and macOS might work but are not actively supported. If you hit issues on other platforms, open an issue.
 
 ## Installation
-
-### Using zig fetch (recommended)
 
 ```sh
 zig fetch --save git+https://github.com/SolracHQ/zua
@@ -63,30 +57,22 @@ const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
 exe.root_module.addImport("zua", zua.module("zua"));
 ```
 
-### Pinning a specific version
-
-Add zua to `build.zig.zon` with a specific commit:
+To pin a specific commit, add zua to `build.zig.zon` directly:
 
 ```zig
 .dependencies = .{
     .zua = .{
-        .url = "https://github.com/solracHQ/zua/archive/<commit>.tar.gz",
+        .url  = "https://github.com/solracHQ/zua/archive/<commit>.tar.gz",
         .hash = "<hash>",
     },
 },
 ```
 
-### System requirements
-
-zua now includes Lua 5.4 directly as vendored source code under `vendor/lua`, so a system Lua development package is no longer required or supported for building from source.
-
-When cloning the repository, no git submodule initialization is required. Simply clone the repo and build normally:
+Lua 5.4 is included as vendored source under `vendor/lua`. No system Lua package is required, no submodule initialization either. Just clone and build:
 
 ```sh
 git clone https://github.com/SolracHQ/zua.git
 ```
-
-> The Lua sources are now included in the repository to avoid package/submodule issues with Zig.
 
 ## License
 
