@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Types - Zua HandBook</title>
+        <title>Closures - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-769225fc.js";
+            window.path_to_searchindex_js = "searchindex-46db9dea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a7376eed.js"></script>
+        <script src="toc-79e67a69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,193 +174,119 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="types"><a class="header" href="#types">Types</a></h1>
-<p>Tables are good for DTOs, plain data you want Lua to read and write. But sometimes you need a Zig value that has identity, methods, and a lifetime that Lua does not control. That is what translation strategies and the <code>ZUA_META</code> declaration are for.</p>
-<h2 id="translation-strategies"><a class="header" href="#translation-strategies">Translation strategies</a></h2>
-<p>Declare <code>ZUA_META</code> on a struct to tell zua how to represent it in Lua. There are three options.</p>
-<h3 id="object---userdata-with-methods"><a class="header" href="#object---userdata-with-methods"><code>.object</code> - userdata with methods</a></h3>
-<p>The struct is allocated as Lua userdata with a metatable. Methods receive <code>self: *T</code>, so they can mutate the value. This is the right choice when the value needs to stay in Zig-owned memory and Lua should interact with it through a defined interface.</p>
-<pre><code class="language-zig">const Entry = struct {
-    pub const ZUA_META = zua.meta.Object(Entry, .{
-        .get = get,
-        .set = set,
-        .__tostring = toString,
-    });
-
-    address: u64,
-    value: f64,
-
-    pub fn get(self: *Entry) Result(f64) {
-        return Result(f64).ok(self.value);
-    }
-
-    pub fn set(self: *Entry, v: f64) Result(.{}) {
-        self.value = v;
-        return Result(.{}).ok(.{});
-    }
-
-    pub fn toString(z: *Zua, self: *Entry) Result([]const u8) {
-        const msg = std.fmt.allocPrint(z.allocator, "Entry(0x{X}, {d})", .{
-            self.address, self.value,
-        }) catch return Result([]const u8).errStatic("out of memory");
-        return Result([]const u8).owned(msg);
-    }
-};
-</code></pre>
-<pre><code class="language-lua">local e = make_entry(0xdeadbeef)
-e:set(8.3)
-print(e:get())       -- 8.3
-print(tostring(e))   -- Entry(0xDEADBEEF, 8.3)
-</code></pre>
-<h3 id="table---lua-table-with-methods"><a class="header" href="#table---lua-table-with-methods"><code>.table</code> - Lua table with methods</a></h3>
-<p>Fields become table keys. Lua code can read and write them directly. Methods receive <code>self: T</code> for read-only access or <code>self: Table</code> when they need to mutate fields on the Lua side.</p>
-<pre><code class="language-zig">const Point = struct {
-    pub const ZUA_META = zua.meta.Table(Point, .{
-        .distance = distance,
-    });
-
-    x: f64,
-    y: f64,
-
-    pub fn distance(self: Point) Result(f64) {
-        return Result(f64).ok(std.math.sqrt(self.x * self.x + self.y * self.y));
-    }
-};
-</code></pre>
-<pre><code class="language-lua">local p = make_point()
-p.x = 3
-p.y = 4
-print(p:distance())  -- 5
-</code></pre>
-<p>When no strategy is declared, <code>.table</code> is the default.</p>
-<p>Tagged unions work naturally with <code>.table</code>. Lua passes a single-key table to select the active variant, zua decodes whichever field is present:</p>
-<pre><code class="language-zig">const Range = struct { min: f64, max: f64 };
-
-const Condition = union(enum) {
-    eq: f64,
-    in_range: Range,
-
-    pub const ZUA_META = zua.meta.Table(Condition, .{});
-};
-</code></pre>
-<pre><code class="language-lua">process:scan({ eq = 8.3 })
-process:scan({ in_range = { min = 0, max = 255 } })
-</code></pre>
-<p>Only one field may be set; zero or more than one fails with a type error. Tagged unions can also use <code>.object</code> or <code>.zig_ptr</code> when you want the variant to stay opaque to Lua.</p>
-<h3 id="zig_ptr---opaque-pointer"><a class="header" href="#zig_ptr---opaque-pointer"><code>.zig_ptr</code> - opaque pointer</a></h3>
-<p>Light userdata. No methods, no metatable. Lua can hold the value and pass it back to Zig functions, but cannot inspect or modify it. This is the right choice for handles that should be completely opaque to Lua.</p>
-<pre><code class="language-zig">const Context = struct {
-    pub const ZUA_META = zua.meta.Ptr(Context);
-
-    multiplier: f64,
+                        <h1 id="closures"><a class="header" href="#closures">Closures</a></h1>
+<p>Sometimes a function needs private mutable state that persists across calls: a counter, an accumulator, a rate limiter. You could use an object for this, but closures let you express it more directly. The state travels inside the function itself.</p>
+<h2 id="declaring-a-capture"><a class="header" href="#declaring-a-capture">Declaring a capture</a></h2>
+<p>Declare a struct with <code>Meta.Capture</code> and register it with <code>ZuaFn.newClosure</code>:</p>
+<pre><code class="language-zig">const CounterState = struct {
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{});
+    count: i32,
+    step:  i32,
 };
 
-fn scale(ctx: *Context, value: f64) Result(f64) {
-    return Result(f64).ok(value * ctx.multiplier);
+fn counterTick(s: *CounterState) i32 {
+    s.count += s.step;
+    return s.count;
 }
 </code></pre>
-<pre><code class="language-lua">local ctx = get_context()
-print(scale(ctx, 10))
+<p>Then register the closure with an initial value:</p>
+<pre><code class="language-zig">globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
+    counterTick,
+    CounterState{ .count = 0, .step = 1 },
+    .{},
+));
 </code></pre>
-<h2 id="methods-and-metamethods"><a class="header" href="#methods-and-metamethods">Methods and metamethods</a></h2>
-<p>Methods are declared in the <code>ZUA_META</code> via <code>meta.Object()</code>, <code>meta.Table()</code> etc. as a comptime tuple of name-function pairs. Names starting with <code>__</code> are metamethods and go directly on the metatable. Everything else goes in <code>__index</code>.</p>
-<pre><code class="language-zig">const T = struct {
-    pub const ZUA_META = zua.meta.Object(T, .{
-        .normalize = normalize,
-        .__tostring = toString,
-        .__add = add,
-    });
-
-    // ...
-};
+<pre><code class="language-lua">print(counter())  -- 1
+print(counter())  -- 2
+print(counter())  -- 3
 </code></pre>
-<p>The first parameter of a method determines how <code>self</code> is received:</p>
+<p>Each call to <code>newClosure</code> allocates a <strong>fresh, independent</strong> capture. Registering the same function twice with different initial values gives two closures that never share state:</p>
+<pre><code class="language-zig">globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
+globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+</code></pre>
+<pre><code class="language-lua">print(by_one())  -- 1
+print(by_one())  -- 2
+print(by_ten())  -- 10
+print(by_one())  -- 3  (unaffected by by_ten calls)
+</code></pre>
+<p>The capture struct is stored as Lua userdata in upvalue 1 of the C closure. Its lifetime is managed by Lua’s garbage collector, exactly like an object created with <code>Meta.Object</code>.</p>
+<h2 id="parameter-position"><a class="header" href="#parameter-position">Parameter position</a></h2>
+<p>The capture parameter must be a pointer <code>*T</code> and must appear in a fixed position:</p>
 <ul>
-<li><code>.object</code>: <code>self: *T</code> for mutable access, or <code>*Zua</code> then <code>*T</code></li>
-<li><code>.table</code>: <code>self: T</code> for read-only, <code>self: Table</code> for mutable, or <code>*Zua</code> first in either case</li>
+<li>first parameter when there is no context,</li>
+<li>second parameter when <code>*Context</code> is first.</li>
 </ul>
-<p>Metamethods follow the same rules. <code>__tostring</code> and binary operators like <code>__add</code> and <code>__mul</code> work as you would expect from the Lua manual.</p>
-<h3 id="customizing-method-error-handling"><a class="header" href="#customizing-method-error-handling">Customizing method error handling</a></h3>
-<p>Methods can be wrapped in <code>ZuaFn</code> to customize error handling. Instead of a bare function, use <code>ZuaFn.from()</code> or <code>ZuaFn.pure()</code> with a <code>ZuaFnErrorConfig</code> to control how Zig errors are reported to Lua:</p>
-<pre><code class="language-zig">const Counter = struct {
-    pub const ZUA_META = zua.meta.Object(Counter, .{
-        .increment = zua.ZuaFn.pure(increment, .{
-            .zig_err_fmt = "increment failed: {s}",
-        }),
+<pre><code class="language-zig">fn tick(s: *CounterState) i32 { ... }
+
+fn tickWithCtx(ctx: *zua.Context, s: *CounterState, extra: i32) !i32 { ... }
+</code></pre>
+<p>Placing the capture parameter anywhere else is a compile error.</p>
+<h2 id="cleanup-with-__gc"><a class="header" href="#cleanup-with-__gc">Cleanup with __gc</a></h2>
+<p>If the captured struct owns heap memory or Lua handles, declare <code>__gc</code> in the <code>Meta.Capture</code> options:</p>
+<pre><code class="language-zig">const BufState = struct {
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{
+        .__gc = cleanup,
+    });
+    data:      []u8,
+    allocator: std.mem.Allocator,
+
+    fn cleanup(self: *BufState) void {
+        self.allocator.free(self.data);
+    }
+};
+</code></pre>
+<p>Lua calls <code>__gc</code> when the closure is collected, so the memory is always freed.</p>
+<h2 id="partial-application-with-captured-lua-callbacks"><a class="header" href="#partial-application-with-captured-lua-callbacks">Partial application with captured Lua callbacks</a></h2>
+<p>Closures can capture Lua functions, not just plain data. This lets you implement partial application: receive a function and some arguments from Lua, and return a new function that remembers them.</p>
+<pre><code class="language-zig">const PartialState = struct {
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{
+        .__gc = release,
     });
 
-    count: i32 = 0,
+    f:     zua.Fn(.{i32, i32}, i32),
+    first: i32,
 
-    pub fn increment(self: *Counter, amount: i32) Result(.{}) {
-        self.count += amount;
-        return Result(.{}).ok(.{});
+    fn release(self: *PartialState) void {
+        self.f.release();
     }
 };
+
+fn partialCall(ctx: *zua.Context, s: *PartialState, n: i32) !i32 {
+    return s.f.call(ctx, .{ s.first, n });
+}
+
+fn alwaysWith(
+    ctx: *zua.Context,
+    first: i32,
+    f:    zua.Fn(.{i32, i32}, i32),
+) zua.ZuaFn.ZuaFnClosureType(partialCall, .{}) {
+    _ = ctx;
+    return zua.ZuaFn.newClosure(partialCall, PartialState{
+        .f     = f.takeOwnership(),
+        .first = first,
+    }, .{});
+}
 </code></pre>
-<h2 id="custom-hooks"><a class="header" href="#custom-hooks">Custom hooks</a></h2>
-<p>Sometimes you need control over how a type encodes to Lua or decodes from Lua. Use <code>.withEncode()</code> and <code>.withDecode()</code> builder methods on the <code>ZUA_META</code> declaration.</p>
-<h3 id="encode-hooks"><a class="header" href="#encode-hooks">Encode hooks</a></h3>
-<p>An encode hook transforms a value into a different type before it is pushed to Lua. The classic use is encoding an enum as a string instead of an integer:</p>
-<pre><code class="language-zig">const Status = enum(u8) {
-    idle = 0,
-    running = 1,
-    stopped = 2,
-
-    pub const ZUA_META = zua.meta.Table(Status, .{})
-        .withEncode([]const u8, encodeAsString);
-
-    fn encodeAsString(status: Status) []const u8 {
-        return switch (status) {
-            .idle =&gt; "idle",
-            .running =&gt; "running",
-            .stopped =&gt; "stopped",
-        };
-    }
-};
+<pre><code class="language-lua">local add  = function(a, b) return a + b end
+local add5 = alwaysWith(5, add)
+print(add5(3))   -- 8
+print(add5(10))  -- 15
 </code></pre>
-<p>The hook must return a different type than its input. This is enforced to prevent infinite recursion.</p>
-<p>For enums specifically, <code>strEnum()</code> derives both hooks automatically from field names so you do not need to write the switch:</p>
-<pre><code class="language-zig">const Direction = enum { north, east, south, west };
-
-// directly on the enum
-pub const ZUA_META = zua.meta.Table(Direction, .{}).strEnum();
-</code></pre>
-<h3 id="decode-hooks"><a class="header" href="#decode-hooks">Decode hooks</a></h3>
-<p>A decode hook lets a type accept multiple Lua value types and convert them. Useful when you want a flexible API that accepts an address as an integer or an existing handle:</p>
-<pre><code class="language-zig">const Address = struct {
-    pub const ZUA_META = zua.meta.Table(Address, .{}).withDecode(decodeHook);
-
-    value: u64,
-
-    fn decodeHook(z: *zua.Zua, index: zua.lua.StackIndex, kind: zua.lua.Type) !Address {
-        return switch (kind) {
-            .number =&gt; blk: {
-                const n = zua.lua.toInteger(z.state, index) orelse return error.InvalidType;
-                break :blk Address{ .value = @intCast(n) };
-            },
-            .userdata =&gt; blk: {
-                const ptr = zua.lua.toUserdata(z.state, index) orelse return error.InvalidType;
-                const addr_ptr: *Address = @ptrCast(@alignCast(ptr));
-                break :blk Address{ .value = addr_ptr.value };
-            },
-            else =&gt; error.InvalidType,
-        };
-    }
-};
-</code></pre>
-<p>Now any function that takes an <code>Address</code> parameter accepts both integers and userdata handles from Lua without any changes to the function itself.</p>
-<h3 id="asymmetry-is-fine"><a class="header" href="#asymmetry-is-fine">Asymmetry is fine</a></h3>
-<p>Encode and decode hooks are independent. You can have a type that encodes as a string but still decodes from an integer. The asymmetry is intentional, not a limitation.</p>
+<p><code>alwaysWith</code> receives <code>first</code> and <code>f</code> from Lua, takes ownership of <code>f</code> so it survives past the call, and returns a new closure that bundles both. The <code>__gc</code> on <code>PartialState</code> releases the owned <code>Fn</code> handle when Lua collects the closure. Without it the Lua function would leak in the registry.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>zua.Fn(ins, outs)</code> gives static type safety on the call signature. If you do not know the arity ahead of time, <code>zua.Function</code> works the same way; call it with <code>.call(ctx, .{...}, ReturnType)</code> instead.</p>
+</blockquote>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="data.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="object-handles.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="host-and-running.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="varargs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -370,11 +296,11 @@ pub const ZUA_META = zua.meta.Table(Direction, .{}).strEnum();
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="data.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="object-handles.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="host-and-running.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="varargs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

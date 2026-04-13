@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Data - Zua HandBook</title>
+        <title>Object handles - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-769225fc.js";
+            window.path_to_searchindex_js = "searchindex-46db9dea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a7376eed.js"></script>
+        <script src="toc-79e67a69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,115 +174,102 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="data"><a class="header" href="#data">Data</a></h1>
-<p>Most real APIs pass more than a few scalars. This chapter covers how to move structured data across the boundary in both directions.</p>
-<h2 id="structs-as-function-arguments"><a class="header" href="#structs-as-function-arguments">Structs as function arguments</a></h2>
-<p>When a Lua caller passes a config table, declare the corresponding Zig struct as a parameter and zua decodes the fields automatically:</p>
-<pre><code class="language-zig">fn printConfig(_: *Zua, config: struct {
-    name: []const u8,
-    version: i32,
-}) Result(.{}) {
-    std.debug.print("{s} v{d}\n", .{ config.name, config.version });
-    return Result(.{}).ok(.{});
-}
-</code></pre>
-<pre><code class="language-lua">printConfig({ name = "myapp", version = 1 })
-</code></pre>
-<p>Any named struct works too, the inline form is just convenient when the type is only used once.</p>
-<p>Optional fields decode as <code>null</code> when the Lua table does not have that key or has <code>nil</code> for it. Nested structs decode recursively from nested Lua tables:</p>
-<pre><code class="language-zig">const Range = struct { min: f64, max: f64 };
-
-const ScanOptions = struct {
-    type_name: []const u8,
-    eq: ?f64,
-    in_range: ?Range,
+                        <h1 id="object-handles"><a class="header" href="#object-handles">Object handles</a></h1>
+<p>When you have <code>.object</code> strategy values that need to be passed between functions, stored inside other objects, or kept alive beyond the current callback, you need typed handles. <code>zua.Object(T)</code> is the handle type for <code>.object</code> strategy values. <code>zua.Handlers</code> provides utilities to manage ownership recursively when structs contain multiple nested handles.</p>
+<h2 id="zuaobjectt"><a class="header" href="#zuaobjectt">zua.Object(T)</a></h2>
+<p><code>zua.Object(T)</code> is a typed handle you use as a parameter or field type when you want to receive or store a reference to an <code>.object</code> strategy value. It wraps <code>zua.Userdata</code> and exposes <code>.get()</code> for typed access:</p>
+<pre><code class="language-zig">const Node = struct {
+    pub const ZUA_META = zua.Meta.Object(Node, .{
+        .value = getValue,
+    });
+    data: i32,
+    pub fn getValue(self: *Node) i32 { return self.data; }
 };
-</code></pre>
-<p>This decodes both:</p>
-<pre><code class="language-lua">{ type_name = "f32", eq = 8.3 }
-{ type_name = "u32", in_range = { min = 0, max = 255 } }
-</code></pre>
-<h2 id="sum-types"><a class="header" href="#sum-types">Sum types</a></h2>
-<p>Lua tables that represent a sum type, where only one of several optional fields is present, do not map directly to Zig tagged unions. Decode into a flat struct first, then convert:</p>
-<pre><code class="language-zig">const Condition = union(enum) { eq: f64, in_range: Range };
 
-fn decodeCondition(eq: ?f64, in_range: ?Range) !Condition {
-    if (eq != null and in_range != null) return error.InvalidType;
-    if (eq) |v| return .{ .eq = v };
-    if (in_range) |r| return .{ .in_range = r };
-    return error.InvalidType;
+const Wrapper = struct {
+    pub const ZUA_META = zua.Meta.Object(Wrapper, .{
+        .get_node = getNode,
+        .__gc     = cleanup,
+    });
+
+    node: zua.Object(Node),
+
+    pub fn getNode(self: *Wrapper) i32 {
+        return self.node.get().data;
+    }
+
+    pub fn cleanup(self: *Wrapper) void {
+        self.node.release();
+    }
+};
+
+fn makeWrapper(_: *zua.Context, node: zua.Object(Node)) Wrapper {
+    return Wrapper{ .node = node.takeOwnership() };
 }
 </code></pre>
-<p>The two-step approach is intentional. Struct decode handles the mechanical field extraction. Your conversion function encodes the validation rules and error messages that belong to your domain. You can see this pattern in practice in the memscript API example, where scan options arrive as a flat table and get converted to a <code>Condition</code> union before any logic runs.</p>
-<h2 id="building-tables-to-return"><a class="header" href="#building-tables-to-return">Building tables to return</a></h2>
-<p>Use <code>tableFrom</code> when you already have data you want to push to Lua:</p>
-<pre><code class="language-zig">const guide = z.tableFrom(.{
-    .name = "guided-tour",
-    .version = 1,
-    .tags = [_][]const u8{ "zig", "lua" },
-});
-defer guide.pop();
-globals.set("guide", guide);
+<pre><code class="language-lua">local n = makeNode(42)
+local w = makeWrapper(n)
+print(w:get_node())  -- 42
 </code></pre>
-<p>Struct fields become string keys. Arrays and slices become array-style Lua tables. Nesting is recursive.</p>
-<p>When you need to build a table incrementally, use <code>createTable</code> and <code>set</code>:</p>
-<pre><code class="language-zig">const entry = z.createTable(0, 3);
-defer entry.pop();
-entry.set("address", "0x7fff1234");
-entry.set("type", "f32");
-entry.set("value", 8.3);
-globals.set("entry", entry);
-</code></pre>
-<h2 id="returning-a-table-from-a-callback"><a class="header" href="#returning-a-table-from-a-callback">Returning a table from a callback</a></h2>
-<p>Return <code>Result(Table)</code> and push the table as the return value:</p>
-<pre><code class="language-zig">fn makeEntry(z: *Zua, address: []const u8) Result(Table) {
-    const t = z.createTable(0, 2);
-    t.set("address", address);
-    t.set("type", "f32");
-    return Result(Table).ok(t);
+<p><code>node.get()</code> returns <code>*Node</code>, a direct pointer into the Lua userdata memory. <code>.takeOwnership()</code> moves the handle into the registry so it survives beyond the current callback. <code>.release()</code> in <code>__gc</code> unanchors it so the GC can collect both the <code>Node</code> and the <code>Wrapper</code> when they go out of scope.</p>
+<p>Key rules:</p>
+<ul>
+<li><code>zua.Object(T)</code> decoded from a function parameter is a <strong>borrowed</strong> handle. Call <code>.takeOwnership()</code> if the value must outlive the current callback.</li>
+<li>Do not embed <code>T</code> directly in a table-strategy struct. Use <code>zua.Object(T)</code> instead.</li>
+<li>Release registry-owned <code>Object(T)</code> handles in <code>__gc</code> to avoid leaking the Lua reference.</li>
+</ul>
+<h2 id="handlerstakeownership-and-handlersrelease"><a class="header" href="#handlerstakeownership-and-handlersrelease">Handlers.takeOwnership and Handlers.release</a></h2>
+<p>When a struct contains multiple nested handles, calling <code>.takeOwnership()</code> on each one manually is tedious and easy to get wrong. <code>Handlers.takeOwnership</code> walks the value recursively and promotes every handle it finds to registry-owned in one call:</p>
+<pre><code class="language-zig">const Scene = struct {
+    background: zua.Object(Texture),
+    sprites:    []zua.Object(Sprite),
+    on_click:   zua.Function,
+};
+
+fn buildScene(bg: zua.Object(Texture), click: zua.Function) Scene {
+    var scene = Scene{
+        .background = bg,
+        .sprites    = &amp;.{},
+        .on_click   = click,
+    };
+    zua.Handlers.takeOwnership(&amp;scene);
+    return scene;
 }
 </code></pre>
-<p>The trampoline pushes the table value and pops the handle after your function returns.</p>
-<h2 id="adding-methods-to-tables"><a class="header" href="#adding-methods-to-tables">Adding methods to tables</a></h2>
-<p>Methods are Zig functions registered on a table. Lua calls them with <code>:</code> syntax, which passes the receiver table as the first argument:</p>
-<pre><code class="language-zig">fn increment(_: *Zua, self: Table, delta: i32) Result(i32) {
-    const current = self.get("count", i32)
-        catch return Result(i32).errStatic("count missing");
-    const next = current + delta;
-    self.set("count", next);
-    return Result(i32).ok(next);
+<p><code>Handlers.takeOwnership</code> handles structs, unions, slices, arrays, and optionals recursively. It does not touch non-handle fields. <code>Handlers.release</code> does the reverse:</p>
+<pre><code class="language-zig">fn cleanup(self: *Scene) void {
+    zua.Handlers.release(Scene, self.*);
 }
-
-const counter = z.tableFrom(.{ .count = 0 });
-defer counter.pop();
-counter.setFn("increment", ZuaFn.from(increment, .{
-    .parse_error = "counter:increment expects (i32)",
-}));
-globals.set("counter", counter);
 </code></pre>
-<pre><code class="language-lua">counter:increment(5)
+<p>Use <code>Handlers.release</code> in <code>__gc</code> when the object owns a collection of nested handles that would be tedious to release individually.</p>
+<h2 id="hiding-a-pointer-on-a-table"><a class="header" href="#hiding-a-pointer-on-a-table">Hiding a pointer on a table</a></h2>
+<p>Sometimes you want a Lua-facing table with public fields but a private Zig pointer backing it. Store the pointer as a light userdata key with a name that signals it is private by convention:</p>
+<pre><code class="language-zig">const entry_table = Table.create(z, 0, 3);
+entry_table.set(&amp;ctx, "address", "0x7fff1234");
+entry_table.setLightUserdata("_ptr", entry_ptr);
+entry_table.set(&amp;ctx, "get", zua.ZuaFn.new(entryGet, .{}));
 </code></pre>
-<h2 id="decoding-a-table-you-already-have"><a class="header" href="#decoding-a-table-you-already-have">Decoding a table you already have</a></h2>
-<p>When you have a <code>Table</code> handle rather than a direct function argument, use <code>translation.decodeStruct</code>:</p>
-<pre><code class="language-zig">const guide_table = try globals.get("guide", zua.Table);
-defer guide_table.pop();
-
-const guide = try zua.translation.decodeStruct(zua.Table, guide_table, struct {
-    name: []const u8,
-    version: i32,
-});
+<p>Inside the method, retrieve it:</p>
+<pre><code class="language-zig">fn entryGet(ctx: *zua.Context, self: zua.Table) !f64 {
+    const entry = self.getLightUserdata("_ptr", Entry)
+        catch return ctx.fail("entry pointer missing");
+    return entry.read();
+}
 </code></pre>
-<p>This is also useful inside callbacks that receive a table as <code>self</code> and need to read several fields in one go rather than calling <code>get</code> repeatedly.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Light userdata is a raw pointer. The pointed-to value must outlive the Lua state. zua does not track or manage that lifetime. If the Lua state can outlive the pointed-to value, use the <code>.object</code> strategy instead, which ties the allocation to Lua’s GC.</p>
+</blockquote>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="functions.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="table-function-handles.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="types.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="closures.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -292,11 +279,11 @@ const guide = try zua.translation.decodeStruct(zua.Table, guide_table, struct {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="functions.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="table-function-handles.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="types.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="closures.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Zua HandBook</title>
+        <title>First function - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,8 +174,9 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
+                        <h1 id="first-function"><a class="header" href="#first-function">First function</a></h1>
+<p>The fastest way to understand zua is to register something and call it. This chapter covers functions that take arguments, do work, and return a value, without needing anything from the Lua runtime.</p>
+<h2 id="a-plain-function"><a class="header" href="#a-plain-function">A plain function</a></h2>
 <pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
     return a + b;
 }
@@ -183,40 +184,84 @@
 globals.set(&amp;ctx, "add", add);
 </code></pre>
 <pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
+print(add("oops"))  -- error: add expects (i32, i32): got string
 </code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
-<h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
-<ul>
-<li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
-<li><strong>First function</strong> - arguments, return values, error messages.</li>
-<li><strong>Context and arena</strong> - the call allocator, string lifetimes, when to use the arena vs the state allocator.</li>
-<li><strong>Errors</strong> - <code>ctx.fail</code>, <code>ctx.failWithFmt</code>, catching errors from Zig, stack tracebacks.</li>
-<li><strong>Structured data</strong> - structs as tables, optional fields, nested structs, building tables from Zig.</li>
-<li><strong>Strategies</strong> - <code>.table</code>, <code>.object</code>, <code>.ptr</code>, what each one is for and when to use which.</li>
-<li><strong>Methods and ZUA_META</strong> - attaching functions to types, <code>self</code> variants, metamethods.</li>
-<li><strong>Lifecycle and __gc</strong> - when Lua collects objects and how to clean up owned resources.</li>
-<li><strong>Encode and decode hooks</strong> - custom type conversions, <code>strEnum</code>, <code>withEncode</code>, <code>withDecode</code>.</li>
-<li><strong>Handles and ownership</strong> - borrowed, stack-owned, registry-owned, what each means in practice.</li>
-<li><strong>Table and Function handles</strong> - <code>zua.Table</code>, <code>zua.Function</code>, when you hold vs borrow.</li>
-<li><strong>Object handles</strong> - <code>zua.Object(T)</code>, <code>zua.Userdata</code>, <code>Handlers.takeOwnership</code>.</li>
-<li><strong>Closures</strong> - <code>Meta.Capture</code>, <code>ZuaFn.newClosure</code>, partial application with captured Lua callbacks.</li>
-<li><strong>VarArgs and Primitive</strong> - variadic functions, inspecting raw Lua values, <code>decodeValue</code>.</li>
-<li><strong>REPL</strong> - the built-in interactive shell, history, completion, syntax highlighting.</li>
-</ul>
+<p>A raw Zig function reference is automatically wrapped as a Lua callable. <code>globals.set</code> generates a trampoline at compile time that decodes Lua arguments, calls your function, and pushes the return value back.</p>
+<h2 id="controlling-the-error-message"><a class="header" href="#controlling-the-error-message">Controlling the error message</a></h2>
+<p>When the caller passes wrong argument types, zua raises a Lua error before your function is ever called. By default the message is generic. Wrap the function in <code>ZuaFn.new</code> to control it:</p>
+<pre><code class="language-zig">globals.set(&amp;ctx, "add", zua.ZuaFn.new(add, .{
+    .parse_err_fmt = "add expects (i32, i32): {s}",
+}));
+</code></pre>
+<p>The <code>{s}</code> placeholder is filled with the decode failure description, for example <code>"expected i32, got string"</code>. <code>ZuaFn.new</code> is optional; use it only when the default message is not informative enough.</p>
+<h2 id="argument-types"><a class="header" href="#argument-types">Argument types</a></h2>
+<p>zua maps Lua value types to Zig types automatically. The supported mappings for function parameters are:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Zig type</th><th>Expected Lua value</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i32</code>, <code>i64</code> and other integers</td><td>integer</td></tr>
+<tr><td><code>f32</code>, <code>f64</code></td><td>number (integer or float)</td></tr>
+<tr><td><code>bool</code></td><td>boolean</td></tr>
+<tr><td><code>[]const u8</code>, <code>[:0]const u8</code></td><td>string</td></tr>
+<tr><td><code>?T</code></td><td>T, or nil or missing</td></tr>
+</tbody>
+</table>
+</div>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.</p>
+<p>In Lua, integers and floats are both called “number”. Lua 5.4 introduced an internal distinction, but from the Lua side <code>1</code> and <code>1.0</code> look similar. zua checks at the boundary: <code>i32</code> accepts only integer Lua values, while <code>f64</code> accepts both integer and float.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Unsigned integers wider than <code>u63</code> may not round-trip cleanly through Lua numeric values. For values outside that range, use an object handle instead. This is covered in the <a href="./strategies.html">Strategies</a> chapter.</p>
+</blockquote>
+<h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
+<p>Return any supported type directly:</p>
+<pre><code class="language-zig">fn answer() i32 {
+    return 42;
+}
+</code></pre>
+<p>For multiple return values, use an anonymous struct tuple. Lua receives them as multiple return values in the usual way:</p>
+<pre><code class="language-zig">fn minmax(a: f64, b: f64) struct { f64, f64 } {
+    return .{ @min(a, b), @max(a, b) };
+}
+</code></pre>
+<pre><code class="language-lua">local lo, hi = minmax(5, 2)
+print(lo, hi)  -- 2   5
+</code></pre>
+<p>For no return value, return <code>void</code>:</p>
+<pre><code class="language-zig">fn logMessage(msg: []const u8) void {
+    std.log.info("{s}", .{msg});
+}
+</code></pre>
+<h2 id="optional-parameters"><a class="header" href="#optional-parameters">Optional parameters</a></h2>
+<p>Wrap a parameter type in <code>?</code> to make it optional. A missing trailing argument or an explicit <code>nil</code> from Lua both decode as <code>null</code>:</p>
+<pre><code class="language-zig">fn add(a: i32, b: ?i32) i32 {
+    return a + (b orelse 0);
+}
+</code></pre>
+<pre><code class="language-lua">print(add(5))       -- 5
+print(add(5, 3))    -- 8
+print(add(5, nil))  -- 5
+</code></pre>
+<p>Optional parameters must come after all required parameters.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Functions that need to allocate memory or report errors to Lua need one more thing: a <code>*zua.Context</code> as the first parameter. That is covered in the next chapter.</p>
 </blockquote>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="context-and-arena.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -226,8 +271,11 @@ print(add("oops"))  -- error: add expects (i32, i32): string
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="context-and-arena.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

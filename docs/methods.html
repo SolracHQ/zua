@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Zua HandBook</title>
+        <title>Methods and ZUA_META - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,49 +174,140 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-globals.set(&amp;ctx, "add", add);
-</code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
-</code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
-<h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
-<ul>
-<li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
-<li><strong>First function</strong> - arguments, return values, error messages.</li>
-<li><strong>Context and arena</strong> - the call allocator, string lifetimes, when to use the arena vs the state allocator.</li>
-<li><strong>Errors</strong> - <code>ctx.fail</code>, <code>ctx.failWithFmt</code>, catching errors from Zig, stack tracebacks.</li>
-<li><strong>Structured data</strong> - structs as tables, optional fields, nested structs, building tables from Zig.</li>
-<li><strong>Strategies</strong> - <code>.table</code>, <code>.object</code>, <code>.ptr</code>, what each one is for and when to use which.</li>
-<li><strong>Methods and ZUA_META</strong> - attaching functions to types, <code>self</code> variants, metamethods.</li>
-<li><strong>Lifecycle and __gc</strong> - when Lua collects objects and how to clean up owned resources.</li>
-<li><strong>Encode and decode hooks</strong> - custom type conversions, <code>strEnum</code>, <code>withEncode</code>, <code>withDecode</code>.</li>
-<li><strong>Handles and ownership</strong> - borrowed, stack-owned, registry-owned, what each means in practice.</li>
-<li><strong>Table and Function handles</strong> - <code>zua.Table</code>, <code>zua.Function</code>, when you hold vs borrow.</li>
-<li><strong>Object handles</strong> - <code>zua.Object(T)</code>, <code>zua.Userdata</code>, <code>Handlers.takeOwnership</code>.</li>
-<li><strong>Closures</strong> - <code>Meta.Capture</code>, <code>ZuaFn.newClosure</code>, partial application with captured Lua callbacks.</li>
-<li><strong>VarArgs and Primitive</strong> - variadic functions, inspecting raw Lua values, <code>decodeValue</code>.</li>
-<li><strong>REPL</strong> - the built-in interactive shell, history, completion, syntax highlighting.</li>
-</ul>
+                        <h1 id="methods-and-zua_meta"><a class="header" href="#methods-and-zua_meta">Methods and ZUA_META</a></h1>
+<p>Both <code>.table</code> and <code>.object</code> strategy types can have methods attached to them so Lua code can call them with <code>:</code> syntax. The method list is declared inside <code>ZUA_META</code>.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.</p>
+<p>The <code>:</code> syntax in Lua is shorthand for passing the receiver as the first argument. <code>p:distance()</code> is exactly equivalent to <code>p.distance(p)</code>. zua decodes the first argument as <code>self</code> automatically.</p>
 </blockquote>
+<h2 id="declaring-methods"><a class="header" href="#declaring-methods">Declaring methods</a></h2>
+<p>Pass the method list as the second argument to <code>Meta.Table</code> or <code>Meta.Object</code>:</p>
+<pre><code class="language-zig">const Point = struct {
+    pub const ZUA_META = zua.Meta.Table(Point, .{
+        .distance = distance,
+    });
+
+    x: f64,
+    y: f64,
+
+    pub fn distance(self: Point) f64 {
+        return std.math.sqrt(self.x * self.x + self.y * self.y);
+    }
+};
+</code></pre>
+<pre><code class="language-lua">local p = makePoint(3, 4)
+print(p:distance())  -- 5
+</code></pre>
+<p>The keys in the method list become the Lua method names. The values are Zig function references, and the same <code>ZuaFn.new</code> wrapper that works for top-level functions works here too, covered below.</p>
+<h2 id="self-types-for-table-methods"><a class="header" href="#self-types-for-table-methods">Self types for .table methods</a></h2>
+<p>For <code>.table</code> methods, <code>self</code> can be either the struct type or a <code>zua.Table</code> handle:</p>
+<ul>
+<li><code>self: T</code> decodes the current field values from the Lua table into a Zig struct. The method gets a read-only snapshot; mutations to <code>self</code> do not affect the Lua table.</li>
+<li><code>self: zua.Table</code> gives the method a live handle to the table so it can read and write fields directly.</li>
+</ul>
+<p>Use <code>T</code> when you only need to read, and <code>zua.Table</code> when you need to mutate:</p>
+<pre><code class="language-zig">const Counter = struct {
+    pub const ZUA_META = zua.Meta.Table(Counter, .{
+        .value     = getValue,
+        .increment = increment,
+    });
+
+    count: i32,
+
+    pub fn getValue(self: Counter) i32 {
+        return self.count;
+    }
+
+    pub fn increment(ctx: *zua.Context, self: zua.Table, delta: i32) !void {
+        const current = try self.get(ctx, "count", i32);
+        self.set(ctx, "count", current + delta);
+    }
+};
+</code></pre>
+<pre><code class="language-lua">local c = makeCounter()
+c:increment(5)
+print(c:value())  -- 5
+print(c.count)    -- 5  (fields are directly readable on table strategy)
+</code></pre>
+<h2 id="self-types-for-object-methods"><a class="header" href="#self-types-for-object-methods">Self types for .object methods</a></h2>
+<p>For <code>.object</code> methods, <code>self</code> is a pointer to the live Zig value inside the userdata:</p>
+<ul>
+<li><code>self: *T</code> gives direct mutable access.</li>
+<li><code>self: T</code> by value gives a read-only snapshot; mutations do not affect the Lua userdata.</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>You cannot return <code>*T</code> from a function when <code>T</code> is an <code>.object</code> type. The metatable would be lost. Return <code>T</code> by value instead and let zua allocate the userdata automatically.</p>
+</blockquote>
+<h2 id="context-in-methods"><a class="header" href="#context-in-methods">Context in methods</a></h2>
+<p><code>*zua.Context</code> can appear as the first parameter before <code>self</code> in any method. zua skips it when matching parameters to Lua arguments, the same way it does for top-level functions:</p>
+<pre><code class="language-zig">pub fn toString(ctx: *zua.Context, self: Point) ![]const u8 {
+    return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+        catch return ctx.fail("out of memory");
+}
+</code></pre>
+<h2 id="metamethods"><a class="header" href="#metamethods">Metamethods</a></h2>
+<p>Names starting with <code>__</code> in the method list are treated as metamethods and registered directly on the metatable. Everything else goes into <code>__index</code>:</p>
+<pre><code class="language-zig">const Vec2 = struct {
+    pub const ZUA_META = zua.Meta.Table(Vec2, .{
+        .length     = length,
+        .__tostring = toString,
+        .__add      = add,
+    });
+
+    x: f64,
+    y: f64,
+
+    pub fn length(self: Vec2) f64 {
+        return std.math.sqrt(self.x * self.x + self.y * self.y);
+    }
+
+    pub fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
+        return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+            catch return ctx.fail("out of memory");
+    }
+
+    pub fn add(a: Vec2, b: Vec2) Vec2 {
+        return .{ .x = a.x + b.x, .y = a.y + b.y };
+    }
+};
+</code></pre>
+<pre><code class="language-lua">local a = makeVec(1, 2)
+local b = makeVec(3, 4)
+local c = a + b
+print(tostring(c))  -- (4, 6)
+</code></pre>
+<h2 id="customizing-method-error-messages"><a class="header" href="#customizing-method-error-messages">Customizing method error messages</a></h2>
+<p>Wrap a method in <code>ZuaFn.new</code> to control the error message when argument types do not match. The wrapper is optional and can be used on individual methods without affecting others:</p>
+<pre><code class="language-zig">const Counter = struct {
+    pub const ZUA_META = zua.Meta.Object(Counter, .{
+        .increment = zua.ZuaFn.new(increment, .{
+            .parse_err_fmt = "Counter:increment expects (integer): {s}",
+        }),
+        .reset = reset,
+    });
+
+    count: i32 = 0,
+
+    pub fn increment(self: *Counter, amount: i32) void {
+        self.count += amount;
+    }
+
+    pub fn reset(self: *Counter) void {
+        self.count = 0;
+    }
+};
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="strategies.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="lifecycle.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -226,8 +317,11 @@ print(add("oops"))  -- error: add expects (i32, i32): string
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="strategies.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="lifecycle.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Zua HandBook</title>
+        <title>Lifecycle and __gc - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,49 +174,100 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
+                        <h1 id="lifecycle-and-__gc"><a class="header" href="#lifecycle-and-__gc">Lifecycle and __gc</a></h1>
+<p><code>.object</code> strategy values are allocated as Lua userdata and their lifetime is managed by the Lua garbage collector. When Lua collects an object, it calls the <code>__gc</code> metamethod if one is declared. This is where you free any resources the object owns.</p>
+<h2 id="when-__gc-fires"><a class="header" href="#when-__gc-fires">When __gc fires</a></h2>
+<p><code>__gc</code> fires when the Lua GC determines the object is unreachable. This is not deterministic; it happens at some point after the last Lua reference to the object is dropped. You can trigger a collection cycle with <code>collectgarbage("collect")</code> in Lua, but in normal code you just declare <code>__gc</code> and trust that it will run.</p>
+<pre><code class="language-zig">const TextEntry = struct {
+    pub const ZUA_META = zua.Meta.Object(TextEntry, .{
+        .label = getLabel,
+        .__gc  = cleanup,
+    });
 
-globals.set(&amp;ctx, "add", add);
+    label: []const u8,
+
+    pub fn getLabel(self: *TextEntry) []const u8 {
+        return self.label;
+    }
+
+    pub fn cleanup(ctx: *zua.Context, self: *TextEntry) void {
+        ctx.state.allocator.free(self.label);
+    }
+};
+
+fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
+    const owned = ctx.state.allocator.dupe(u8, label)
+        catch return ctx.fail("out of memory");
+    return TextEntry{ .label = owned };
+}
 </code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
-</code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
-<h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
+<p><code>cleanup</code> receives <code>*zua.Context</code> like any other zua callback, so it has access to <code>ctx.state.allocator</code> for freeing persistent memory. The <code>label</code> slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.</p>
+<h2 id="what-__gc-does-not-cover"><a class="header" href="#what-__gc-does-not-cover">What __gc does not cover</a></h2>
+<p><code>__gc</code> is only called for the <strong>userdata allocation itself</strong>, meaning the struct fields that live inline inside the userdata block. Fields of type <code>i32</code>, <code>f64</code>, <code>bool</code>, and similar scalar types live inline and are collected automatically with the userdata; you do not need to do anything for them.</p>
+<p>Fields that point to external memory, <code>[]const u8</code>, <code>*T</code>, or any other pointer, point to memory outside the userdata block that Lua does not know about. Those must be freed in <code>__gc</code>.</p>
+<p>Fields that hold Lua handles, <code>zua.Function</code>, <code>zua.Table</code>, <code>zua.Object(T)</code>, anchor Lua values in the registry. Those must be released in <code>__gc</code> to avoid leaking Lua references. The <a href="./object-handles.html">Object handles</a> chapter covers this in detail.</p>
+<h2 id="object-fields-and-the-state-allocator"><a class="header" href="#object-fields-and-the-state-allocator">Object fields and the state allocator</a></h2>
+<p>When a function creates an <code>.object</code> value, zua allocates the userdata in Lua’s GC memory and places the Zig struct directly in that allocation. This means:</p>
 <ul>
-<li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
-<li><strong>First function</strong> - arguments, return values, error messages.</li>
-<li><strong>Context and arena</strong> - the call allocator, string lifetimes, when to use the arena vs the state allocator.</li>
-<li><strong>Errors</strong> - <code>ctx.fail</code>, <code>ctx.failWithFmt</code>, catching errors from Zig, stack tracebacks.</li>
-<li><strong>Structured data</strong> - structs as tables, optional fields, nested structs, building tables from Zig.</li>
-<li><strong>Strategies</strong> - <code>.table</code>, <code>.object</code>, <code>.ptr</code>, what each one is for and when to use which.</li>
-<li><strong>Methods and ZUA_META</strong> - attaching functions to types, <code>self</code> variants, metamethods.</li>
-<li><strong>Lifecycle and __gc</strong> - when Lua collects objects and how to clean up owned resources.</li>
-<li><strong>Encode and decode hooks</strong> - custom type conversions, <code>strEnum</code>, <code>withEncode</code>, <code>withDecode</code>.</li>
-<li><strong>Handles and ownership</strong> - borrowed, stack-owned, registry-owned, what each means in practice.</li>
-<li><strong>Table and Function handles</strong> - <code>zua.Table</code>, <code>zua.Function</code>, when you hold vs borrow.</li>
-<li><strong>Object handles</strong> - <code>zua.Object(T)</code>, <code>zua.Userdata</code>, <code>Handlers.takeOwnership</code>.</li>
-<li><strong>Closures</strong> - <code>Meta.Capture</code>, <code>ZuaFn.newClosure</code>, partial application with captured Lua callbacks.</li>
-<li><strong>VarArgs and Primitive</strong> - variadic functions, inspecting raw Lua values, <code>decodeValue</code>.</li>
-<li><strong>REPL</strong> - the built-in interactive shell, history, completion, syntax highlighting.</li>
+<li>Scalar fields like <code>i32</code> and <code>f64</code> live inside the userdata, no cleanup needed.</li>
+<li>Pointer fields like <code>[]const u8</code> point outside the userdata, must be freed in <code>__gc</code>.</li>
+<li>Handle fields like <code>zua.Function</code> anchor registry references, must be released in <code>__gc</code>.</li>
 </ul>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.</p>
-</blockquote>
+<pre><code class="language-zig">const Connection = struct {
+    pub const ZUA_META = zua.Meta.Object(Connection, .{
+        .send  = send,
+        .close = close,
+        .__gc  = cleanup,
+    });
+
+    // lives inline in userdata, no cleanup
+    port: u16,
+
+    // points to external memory, must free in __gc
+    host: []const u8,
+
+    // anchors a registry reference, must release in __gc
+    on_data: ?zua.Function,
+
+    pub fn send(ctx: *zua.Context, self: *Connection, msg: []const u8) !void {
+        _ = ctx; _ = self; _ = msg;
+    }
+
+    pub fn close(self: *Connection) void {
+        _ = self;
+    }
+
+    pub fn cleanup(ctx: *zua.Context, self: *Connection) void {
+        ctx.state.allocator.free(self.host);
+        if (self.on_data) |cb| cb.release();
+    }
+};
+</code></pre>
+<h2 id="__gc-and-the-capture-strategy"><a class="header" href="#__gc-and-the-capture-strategy">__gc and the capture strategy</a></h2>
+<p>Closures created with <code>ZuaFn.newClosure</code> use the <code>.capture</code> strategy, which also supports <code>__gc</code>. If the captured struct owns heap memory or Lua handles, declare <code>__gc</code> in <code>Meta.Capture</code> the same way:</p>
+<pre><code class="language-zig">const BufState = struct {
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{
+        .__gc = cleanup,
+    });
+    data:      []u8,
+    allocator: std.mem.Allocator,
+
+    fn cleanup(self: *BufState) void {
+        self.allocator.free(self.data);
+    }
+};
+</code></pre>
+<p>Lua calls <code>__gc</code> when the closure is collected, so the buffer is always freed regardless of how the closure goes out of scope.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="methods.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="hooks.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -226,8 +277,11 @@ print(add("oops"))  -- error: add expects (i32, i32): string
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="methods.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="hooks.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Host State and Running Lua - Zua HandBook</title>
+        <title>Handles and ownership - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-769225fc.js";
+            window.path_to_searchindex_js = "searchindex-46db9dea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a7376eed.js"></script>
+        <script src="toc-79e67a69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,109 +174,100 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="host-state"><a class="header" href="#host-state">Host State</a></h1>
-<p>Callbacks often need access to application state that Lua should not touch directly. The standard pattern is a light userdata pointer stored in the Lua registry.</p>
-<h2 id="storing-state"><a class="header" href="#storing-state">Storing state</a></h2>
-<pre><code class="language-zig">var app = AppState{ .next_id = 1000 };
+                        <h1 id="handles-and-ownership"><a class="header" href="#handles-and-ownership">Handles and ownership</a></h1>
+<p>zua uses handles to represent Lua values on the Zig side. A handle is a thin wrapper around a Lua stack slot or registry reference. Every handle has an ownership mode, and getting the mode wrong leads to either dangling references or memory leaks.</p>
+<h2 id="the-three-ownership-modes"><a class="header" href="#the-three-ownership-modes">The three ownership modes</a></h2>
+<p><strong>Borrowed</strong> handles point to a Lua stack slot owned by the current call frame. They are valid only for the duration of the current callback. You cannot call <code>.release()</code> on a borrowed handle because you do not own it.</p>
+<p><strong>Stack-owned</strong> handles own a Lua value on the current stack. They remain valid until <code>.release()</code> removes the value. <code>Table.create()</code> and <code>z.globals()</code> return stack-owned handles.</p>
+<p><strong>Registry-owned</strong> handles own a Lua registry reference. They survive after the current callback returns and across callback invocations. They must be released explicitly with <code>.release()</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The Lua registry is a special table inside the Lua state that is not accessible from Lua code. Storing a value there anchors it so the garbage collector cannot collect it, regardless of whether Lua code still holds a reference to it.</p>
+</blockquote>
+<p>You can tell which mode a handle is in by how you got it:</p>
+<ul>
+<li>came from a function parameter: <strong>borrowed</strong>,</li>
+<li>came from <code>Table.create()</code>, <code>globals()</code>, or similar factory: <strong>stack-owned</strong>,</li>
+<li>came from calling <code>.takeOwnership()</code>: <strong>registry-owned</strong>.</li>
+</ul>
+<h2 id="takeownership-and-release"><a class="header" href="#takeownership-and-release">takeOwnership and release</a></h2>
+<p>Call <code>.takeOwnership()</code> on any handle to move it into the Lua registry. The returned handle is registry-owned and survives until you call <code>.release()</code>:</p>
+<pre><code class="language-zig">var stored: ?zua.Function = null;
 
-const registry = z.registry();
-defer registry.pop();
-registry.setLightUserdata("app", &amp;app);
-</code></pre>
-<h2 id="reading-state-inside-a-callback"><a class="header" href="#reading-state-inside-a-callback">Reading state inside a callback</a></h2>
-<pre><code class="language-zig">fn nextId(z: *Zua) Result(i32) {
-    const registry = z.registry();
-    defer registry.pop();
-
-    const app = registry.getLightUserdata("app", AppState)
-        catch return Result(i32).errStatic("app state missing");
-    app.next_id += 1;
-    return Result(i32).ok(app.next_id - 1);
+fn setCallback(_: *zua.Context, cb: zua.Function) void {
+    if (stored) |old| old.release();
+    stored = cb.takeOwnership();
 }
-</code></pre>
-<h2 id="hidden-pointer-on-a-table"><a class="header" href="#hidden-pointer-on-a-table">Hidden pointer on a table</a></h2>
-<p>You can attach a private pointer directly to a Lua-facing table. This is useful when a table wraps a specific Zig value rather than shared global state:</p>
-<pre><code class="language-zig">const entry_table = z.createTable(0, 3);
-entry_table.set("address", "0x7fff1234");
-entry_table.setLightUserdata("_ptr", entry_ptr);
-entry_table.setFn("get", ZuaFn.from(entryGet, .{
-    .parse_error = "entry:get takes no arguments",
-}));
-</code></pre>
-<p>Inside the method:</p>
-<pre><code class="language-zig">fn entryGet(z: *Zua, self: Table) Result(f64) {
-    const entry = self.getLightUserdata("_ptr", Entry)
-        catch return Result(f64).errStatic("entry pointer missing");
-    _ = z;
-    return Result(f64).ok(entry.read());
-}
-</code></pre>
-<p>The <code>_ptr</code> naming convention signals to Lua authors that the field is private. Lua can still read it, but it is not part of the public API.</p>
-<h2 id="lifetime"><a class="header" href="#lifetime">Lifetime</a></h2>
-<p>Light userdata is a raw pointer. The pointed-to value must outlive the <code>Zua</code> instance. zua does not track or manage that lifetime.</p>
-<h1 id="running-lua"><a class="header" href="#running-lua">Running Lua</a></h1>
-<h2 id="executing-for-side-effects"><a class="header" href="#executing-for-side-effects">Executing for side effects</a></h2>
-<pre><code class="language-zig">try z.exec("print('hello world')");
-</code></pre>
-<p>Errors come back as Zig errors:</p>
-<pre><code class="language-zig">z.exec("bad lua here") catch |err| {
-    std.debug.print("error: {}\n", .{err});
-};
-</code></pre>
-<h2 id="evaluating-with-typed-return-values"><a class="header" href="#evaluating-with-typed-return-values">Evaluating with typed return values</a></h2>
-<p><code>eval</code> decodes Lua return values directly into a typed Zig tuple:</p>
-<pre><code class="language-zig">const result = try z.eval(i32, "return 1 + 2");
 
-const data = try z.eval(.{ []const u8, i32 }, "return 'bob', 42");
-std.debug.print("{s} is {d}\n", .{ data[0], data[1] });
-</code></pre>
-<h2 id="files"><a class="header" href="#files">Files</a></h2>
-<pre><code class="language-zig">try z.execFile("init.lua");
-
-const config = try z.evalFile(.{ []const u8, i32 }, "config.lua");
-</code></pre>
-<h2 id="error-tracebacks"><a class="header" href="#error-tracebacks">Error tracebacks</a></h2>
-<p>When you need the full Lua stack trace, use <code>execTraceback</code>:</p>
-<pre><code class="language-zig">const result = try z.execTraceback("bad code here");
-defer z.freeTraceBackResult(result);
-
-switch (result) {
-    .Ok =&gt; {},
-    .Runtime =&gt; |msg| std.debug.print("runtime error:\n{s}\n", .{msg}),
-    .Syntax  =&gt; |msg| std.debug.print("syntax error:\n{s}\n", .{msg}),
-    else     =&gt; |msg| std.debug.print("error:\n{s}\n", .{msg}),
-}
-</code></pre>
-<p>Always call <code>freeTraceBackResult</code> to free the allocated message.</p>
-<h2 id="building-a-repl"><a class="header" href="#building-a-repl">Building a REPL</a></h2>
-<p><code>checkChunk</code> tells you whether a piece of Lua source is syntactically complete or waiting for more input:</p>
-<pre><code class="language-zig">var buffer = std.ArrayList(u8).init(allocator);
-defer buffer.deinit();
-
-while (true) {
-    // read a line from stdin into `line`...
-    try buffer.appendSlice(line);
-    try buffer.appendSlice("\n");
-
-    if (!try z.checkChunk(buffer.items)) {
-        // incomplete, keep reading
-        continue;
+fn clearCallback() void {
+    if (stored) |cb| {
+        cb.release();
+        stored = null;
     }
-
-    try z.exec(buffer.items);
-    buffer.clearRetainingCapacity();
 }
 </code></pre>
-<p>For expression-style results (where <code>= 1 + 2</code> should print <code>3</code>), use <code>canLoadAsExpression</code> to detect whether the input is a valid expression before executing. <code>loadChunk</code> and <code>callLoadedChunk</code> let you load code once and execute it multiple times, or inspect return values from the stack directly.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>Registry-owned handles must be released with <code>.release()</code> when you no longer need them. Failing to release leaks the Lua reference and prevents the garbage collector from collecting the function or table.</p>
+</blockquote>
+<h2 id="stack-owned-handles"><a class="header" href="#stack-owned-handles">Stack-owned handles</a></h2>
+<p>Stack-owned handles must be released before the enclosing scope returns. The standard pattern is <code>defer</code>:</p>
+<pre><code class="language-zig">const globals = z.globals();
+defer globals.release();
+
+globals.set(&amp;ctx, "add", add);
+// release() happens here, at end of scope
+</code></pre>
+<p>If you return a stack-owned handle from a callback, the trampoline takes ownership and you do not call <code>.release()</code> yourself:</p>
+<pre><code class="language-zig">fn makeTable(ctx: *zua.Context) zua.Table {
+    const t = Table.create(z, 0, 2);
+    t.set(ctx, "x", 1);
+    t.set(ctx, "y", 2);
+    return t;  // trampoline takes ownership, do not release
+}
+</code></pre>
+<h2 id="borrowed-handles-inside-callbacks"><a class="header" href="#borrowed-handles-inside-callbacks">Borrowed handles inside callbacks</a></h2>
+<p>When a <code>zua.Function</code> or <code>zua.Table</code> arrives as a function parameter, it is borrowed. Use it directly if you only need it during the call. If you need it later, take ownership:</p>
+<pre><code class="language-zig">fn processTable(ctx: *zua.Context, t: zua.Table) !i32 {
+    // t is borrowed, valid only during this call
+    return try t.get(ctx, "value", i32);
+}
+
+fn storeTable(_: *zua.Context, t: zua.Table) void {
+    // takeOwnership moves t to the registry so it outlives this call
+    stored_table = t.takeOwnership();
+}
+</code></pre>
+<h2 id="handle-types"><a class="header" href="#handle-types">Handle types</a></h2>
+<p>The handle types in zua are:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Wraps</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>zua.Table</code></td><td>Lua table</td><td>stack or registry owned</td></tr>
+<tr><td><code>zua.Function</code></td><td>Lua function</td><td>stack or registry owned</td></tr>
+<tr><td><code>zua.Userdata</code></td><td>Lua full userdata</td><td>raw untyped handle</td></tr>
+<tr><td><code>zua.Object(T)</code></td><td>Lua full userdata</td><td>typed wrapper over <code>Userdata</code>, <code>.get()</code> returns <code>*T</code></td></tr>
+<tr><td><code>zua.Fn(ins, outs)</code></td><td>Lua function</td><td>typed wrapper over <code>Function</code></td></tr>
+<tr><td><code>zua.TableView(T)</code></td><td>Lua table</td><td>typed mirror with sync back to Lua</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>zua.Object(T)</code> and <code>zua.Fn(ins, outs)</code> are covered in their own chapters. The ownership rules are the same for all handle types: borrowed parameters are valid only during the call, and registry-owned handles must be released.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="types.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="hooks.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="table-function-handles.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -284,10 +275,13 @@ while (true) {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="types.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="hooks.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="table-function-handles.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>

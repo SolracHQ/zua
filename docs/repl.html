@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Zua HandBook</title>
+        <title>REPL - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,51 +174,162 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
+                        <h1 id="repl"><a class="header" href="#repl">REPL</a></h1>
+<p>zua ships a full interactive REPL that you can drop into any project with a single call. It handles multi-line input, persistent history, tab completion, and ANSI syntax highlighting. The prompt knows when an expression is incomplete, an unclosed <code>do</code> block or a function without <code>end</code>, and switches to a continuation prompt automatically.</p>
+<h2 id="the-minimal-repl"><a class="header" href="#the-minimal-repl">The minimal REPL</a></h2>
+<pre><code class="language-zig">pub fn main(init: std.process.Init) !void {
+    const z = try zua.State.init(init.gpa, init.io);
+    defer z.deinit();
+
+    try zua.Repl.run(z, .{});
+}
+</code></pre>
+<p>That gives you a working Lua shell. Type expressions, call functions, define variables, paste multi-line code, and hit Ctrl-D to exit.</p>
+<h2 id="registering-your-api"><a class="header" href="#registering-your-api">Registering your API</a></h2>
+<p>Register globals the same way you do everywhere else, before calling <code>run</code>:</p>
+<pre><code class="language-zig">var ctx = zua.Context.init(z);
+defer ctx.deinit();
+
+const globals = z.globals();
+defer globals.release();
+
+globals.set(&amp;ctx, "add",   add);
+globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
+
+try zua.Repl.run(z, .{});
+</code></pre>
+<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
+<p><code>zua.Repl.run</code> takes a <code>Config</code> struct. Every field is optional; defaults give you a working shell out of the box.</p>
+<pre><code class="language-zig">try zua.Repl.run(z, .{
+    .prompt              = "myapp&gt; ",
+    .continuation_prompt = "   ... ",
+    .welcome_message     = "Welcome! Type 'help' for hints.\n",
+    .history_path        = "myapp_history.txt",
+});
+</code></pre>
+<p><code>history_path</code> enables persistent history across sessions. The file is created if it does not exist, loaded on startup, and saved after each line.</p>
+<h2 id="tab-completion"><a class="header" href="#tab-completion">Tab completion</a></h2>
+<p>Pass a <code>completion_callback</code> to hook into the line editor. The callback receives the current buffer and a <code>*Completions</code> value you push candidates onto:</p>
+<pre><code class="language-zig">fn complete(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
+    const candidates = &amp;[_][:0]const u8{ "add", "greet", "print", "tostring" };
+    for (candidates) |c| {
+        if (std.mem.startsWith(u8, c, buffer)) {
+            zua.Repl.linenoise.addCompletion(completions, c);
+        }
+    }
 }
 
-globals.set(&amp;ctx, "add", add);
+try zua.Repl.run(z, .{
+    .completion_callback = complete,
+});
 </code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
+<h2 id="syntax-highlighting"><a class="header" href="#syntax-highlighting">Syntax highlighting</a></h2>
+<p>Pass a <code>color_config</code> to color Lua source as the user types:</p>
+<pre><code class="language-zig">try zua.Repl.run(z, .{
+    .color_config = zua.Repl.highlight.ColorConfig{
+        .keyword       = .{ .color = .{ .ansi = 93 }, .bold = true },
+        .keyword_value = .{ .color = .{ .ansi = 96 } },
+        .builtin       = .{ .color = .{ .ansi = 32 } },
+        .string        = .{ .color = .{ .ansi = 34 } },
+        .integer       = .{ .color = .{ .ansi = 95 } },
+        .number        = .{ .color = .{ .ansi = 95 } },
+        .symbol        = .{ .color = .{ .ansi = 33 } },
+        .comment       = .{ .color = .{ .ansi = 90 }, .dim = true },
+        .name          = .{ .color = .{ .ansi = 37 } },
+    },
+});
 </code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
-<h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
-<ul>
-<li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
-<li><strong>First function</strong> - arguments, return values, error messages.</li>
-<li><strong>Context and arena</strong> - the call allocator, string lifetimes, when to use the arena vs the state allocator.</li>
-<li><strong>Errors</strong> - <code>ctx.fail</code>, <code>ctx.failWithFmt</code>, catching errors from Zig, stack tracebacks.</li>
-<li><strong>Structured data</strong> - structs as tables, optional fields, nested structs, building tables from Zig.</li>
-<li><strong>Strategies</strong> - <code>.table</code>, <code>.object</code>, <code>.ptr</code>, what each one is for and when to use which.</li>
-<li><strong>Methods and ZUA_META</strong> - attaching functions to types, <code>self</code> variants, metamethods.</li>
-<li><strong>Lifecycle and __gc</strong> - when Lua collects objects and how to clean up owned resources.</li>
-<li><strong>Encode and decode hooks</strong> - custom type conversions, <code>strEnum</code>, <code>withEncode</code>, <code>withDecode</code>.</li>
-<li><strong>Handles and ownership</strong> - borrowed, stack-owned, registry-owned, what each means in practice.</li>
-<li><strong>Table and Function handles</strong> - <code>zua.Table</code>, <code>zua.Function</code>, when you hold vs borrow.</li>
-<li><strong>Object handles</strong> - <code>zua.Object(T)</code>, <code>zua.Userdata</code>, <code>Handlers.takeOwnership</code>.</li>
-<li><strong>Closures</strong> - <code>Meta.Capture</code>, <code>ZuaFn.newClosure</code>, partial application with captured Lua callbacks.</li>
-<li><strong>VarArgs and Primitive</strong> - variadic functions, inspecting raw Lua values, <code>decodeValue</code>.</li>
-<li><strong>REPL</strong> - the built-in interactive shell, history, completion, syntax highlighting.</li>
-</ul>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.</p>
-</blockquote>
+<p>Fields left unset use their defaults (no color). Set <code>.ansi</code> for a standard terminal color code or <code>.rgb</code> for a 24-bit color if your terminal supports it. <code>.bold</code> and <code>.dim</code> apply on top of any color.</p>
+<h2 id="custom-identifier-classification"><a class="header" href="#custom-identifier-classification">Custom identifier classification</a></h2>
+<p>The highlighter knows Lua keywords, builtins, strings, and numbers. It does not know your API. Use <code>identifier_hook</code> to teach it:</p>
+<pre><code class="language-zig">fn myIdentifier(text: []const u8) bool {
+    return std.mem.startsWith(u8, text, "my_") or
+           std.mem.eql(u8, text, "greet");
+}
+
+fn myColor(text: []const u8) zua.Repl.highlight.Color {
+    _ = text;
+    return .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } };
+}
+
+try zua.Repl.run(z, .{
+    .identifier_hook = myIdentifier,
+    .color_config    = zua.Repl.highlight.ColorConfig{
+        .custom = myColor,
+        // ... other colors
+    },
+});
+</code></pre>
+<p>When <code>identifier_hook</code> returns <code>true</code> for a name, the lexer classifies it as <code>.custom</code> and the highlighter calls your <code>custom</code> color function. The function receives the text so you can vary the color by name if you want.</p>
+<h2 id="evaluation-context"><a class="header" href="#evaluation-context">Evaluation context</a></h2>
+<p>Each line typed at the REPL runs in a fresh <code>Context</code>, so arena-allocated scratch memory from one line does not carry over to the next. Global state in the Lua VM persists normally, so variables and functions defined at the prompt remain available for the rest of the session.</p>
+<h2 id="full-example"><a class="header" href="#full-example">Full example</a></h2>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+
+fn example() []const u8 {
+    return "this is just an example";
+}
+
+fn customIdentifier(text: []const u8) bool {
+    return std.mem.startsWith(u8, text, "custom_");
+}
+
+fn customColor(text: []const u8) zua.Repl.highlight.Color {
+    _ = text;
+    return .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } };
+}
+
+fn completionCallback(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
+    const items = &amp;[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
+    for (items) |item| {
+        if (std.mem.startsWith(u8, item, buffer)) {
+            zua.Repl.linenoise.addCompletion(completions, item);
+        }
+    }
+}
+
+pub fn main(init: std.process.Init) !void {
+    const z = try zua.State.init(init.gpa, init.io);
+    defer z.deinit();
+
+    var ctx = zua.Context.init(z);
+    defer ctx.deinit();
+
+    const globals = z.globals();
+    defer globals.release();
+    globals.set(&amp;ctx, "example",      example);
+    globals.set(&amp;ctx, "custom_magic", example);
+
+    try zua.Repl.run(z, .{
+        .welcome_message     = "Welcome to the zua REPL!\n",
+        .history_path        = "zua_repl_history.txt",
+        .completion_callback = completionCallback,
+        .identifier_hook     = customIdentifier,
+        .color_config        = zua.Repl.highlight.ColorConfig{
+            .keyword       = .{ .color = .{ .ansi = 93 }, .bold = true },
+            .keyword_value = .{ .color = .{ .ansi = 96 } },
+            .builtin       = .{ .color = .{ .ansi = 32 } },
+            .custom        = customColor,
+            .name          = .{ .color = .{ .ansi = 37 } },
+            .string        = .{ .color = .{ .ansi = 34 } },
+            .integer       = .{ .color = .{ .ansi = 95 } },
+            .number        = .{ .color = .{ .ansi = 95 } },
+            .symbol        = .{ .color = .{ .ansi = 33 } },
+            .comment       = .{ .color = .{ .ansi = 90 }, .dim = true },
+        },
+    });
+}
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-
-                            <a rel="next prefetch" href="setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            <a rel="prev" href="varargs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
+
 
                         <div style="clear: both"></div>
                     </nav>
@@ -226,10 +337,10 @@ print(add("oops"))  -- error: add expects (i32, i32): string
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-
-                    <a rel="next prefetch" href="setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    <a rel="prev" href="varargs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
+
             </nav>
 
         </div>

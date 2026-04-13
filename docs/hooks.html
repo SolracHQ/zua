@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Introduction - Zua HandBook</title>
+        <title>Encode and decode hooks - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,49 +174,108 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
+                        <h1 id="encode-and-decode-hooks"><a class="header" href="#encode-and-decode-hooks">Encode and decode hooks</a></h1>
+<p>By default, zua encodes and decodes types according to their strategy. An encode hook lets you change what Lua sees when a value is pushed. A decode hook lets you accept multiple Lua value types for a single Zig type. The two hooks are independent; you can have one without the other.</p>
+<h2 id="encode-hooks"><a class="header" href="#encode-hooks">Encode hooks</a></h2>
+<p>An encode hook transforms a value before it is pushed to Lua. The classic use is encoding an enum as a string:</p>
+<pre><code class="language-zig">const Status = enum(u8) {
+    idle    = 0,
+    running = 1,
+    stopped = 2,
 
-globals.set(&amp;ctx, "add", add);
+    pub const ZUA_META = zua.Meta.Table(Status, .{})
+        .withEncode([]const u8, encodeAsString);
+
+    fn encodeAsString(_: *zua.Context, status: Status) []const u8 {
+        return switch (status) {
+            .idle    =&gt; "idle",
+            .running =&gt; "running",
+            .stopped =&gt; "stopped",
+        };
+    }
+};
 </code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
+<p>Now any function that returns <code>Status</code> pushes a Lua string instead of an integer. The hook must return a different type than its input; this is enforced at compile time to prevent infinite recursion.</p>
+<h2 id="decode-hooks"><a class="header" href="#decode-hooks">Decode hooks</a></h2>
+<p>A decode hook lets a type accept multiple Lua value types. The hook receives a <code>Primitive</code> union that wraps the actual Lua value:</p>
+<pre><code class="language-zig">const Address = struct {
+    pub const ZUA_META = zua.Meta.Object(Address, .{
+        .value = getValue,
+    }).withDecode(decodeHook);
+
+    inner: u64,
+
+    pub fn getValue(self: *Address) u64 { return self.inner; }
+
+    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !Address {
+        return switch (prim) {
+            .integer  =&gt; |n| .{ .inner = @intCast(n) },
+            .string   =&gt; |s| blk: {
+                const digits = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
+                break :blk .{ .inner = std.fmt.parseInt(u64, digits, 16)
+                    catch return ctx.failTyped(Address, "invalid hex address") };
+            },
+            .userdata =&gt; |ptr| blk: {
+                const a: *Address = @ptrCast(@alignCast(ptr.get()));
+                break :blk .{ .inner = a.inner };
+            },
+            else =&gt; ctx.failTyped(Address, "expected integer, hex string, or Address"),
+        };
+    }
+};
 </code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
-<h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
-<ul>
-<li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
-<li><strong>First function</strong> - arguments, return values, error messages.</li>
-<li><strong>Context and arena</strong> - the call allocator, string lifetimes, when to use the arena vs the state allocator.</li>
-<li><strong>Errors</strong> - <code>ctx.fail</code>, <code>ctx.failWithFmt</code>, catching errors from Zig, stack tracebacks.</li>
-<li><strong>Structured data</strong> - structs as tables, optional fields, nested structs, building tables from Zig.</li>
-<li><strong>Strategies</strong> - <code>.table</code>, <code>.object</code>, <code>.ptr</code>, what each one is for and when to use which.</li>
-<li><strong>Methods and ZUA_META</strong> - attaching functions to types, <code>self</code> variants, metamethods.</li>
-<li><strong>Lifecycle and __gc</strong> - when Lua collects objects and how to clean up owned resources.</li>
-<li><strong>Encode and decode hooks</strong> - custom type conversions, <code>strEnum</code>, <code>withEncode</code>, <code>withDecode</code>.</li>
-<li><strong>Handles and ownership</strong> - borrowed, stack-owned, registry-owned, what each means in practice.</li>
-<li><strong>Table and Function handles</strong> - <code>zua.Table</code>, <code>zua.Function</code>, when you hold vs borrow.</li>
-<li><strong>Object handles</strong> - <code>zua.Object(T)</code>, <code>zua.Userdata</code>, <code>Handlers.takeOwnership</code>.</li>
-<li><strong>Closures</strong> - <code>Meta.Capture</code>, <code>ZuaFn.newClosure</code>, partial application with captured Lua callbacks.</li>
-<li><strong>VarArgs and Primitive</strong> - variadic functions, inspecting raw Lua values, <code>decodeValue</code>.</li>
-<li><strong>REPL</strong> - the built-in interactive shell, history, completion, syntax highlighting.</li>
-</ul>
+<p>Now any function that takes <code>Address</code> by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>The decode hook fires when the type is decoded as a plain value <code>T</code>. It does not fire for <code>*T</code> receivers in <code>.object</code> methods; those extract the raw userdata pointer directly. So <code>fn method(self: *Address)</code> always receives the Lua userdata handle, while <code>fn f(addr: Address)</code> goes through the hook and accepts all the forms the hook handles.</p>
+</blockquote>
+<h2 id="hooks-are-independent"><a class="header" href="#hooks-are-independent">Hooks are independent</a></h2>
+<p>Encode and decode are separate concerns. A type can encode as a string but still decode from an integer. This asymmetry is intentional; you get exactly the behavior you declare and nothing more.</p>
+<h2 id="strenum"><a class="header" href="#strenum">strEnum</a></h2>
+<p>For enums where Lua should see string names rather than integers, <code>Meta.strEnum</code> derives both encode and decode hooks automatically from the enum field names:</p>
+<pre><code class="language-zig">const Direction = enum { north, east, south, west };
+
+pub const ZUA_META = zua.Meta.strEnum(Direction, .{});
+</code></pre>
+<pre><code class="language-lua">local d = getDirection()  -- returns "north", "east", etc.
+setDirection("east")       -- accepts the string name
+</code></pre>
+<p><code>strEnum</code> is the fast path when field names are exactly what you want Lua to see. If you need different names or mixed integer/string input, use <code>withEncode</code> and <code>withDecode</code> manually.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.</p>
+<p><code>strEnum</code> derives hook functions from enum field names at compile time. If your field names are not valid Lua-friendly identifiers, use a manual encode hook with a <code>switch</code> statement to map them explicitly.</p>
 </blockquote>
+<h2 id="the-primitive-union"><a class="header" href="#the-primitive-union">The Primitive union</a></h2>
+<p>Decode hooks receive a <code>Primitive</code> that covers every Lua value type:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Lua type</th></tr>
+</thead>
+<tbody>
+<tr><td><code>.nil</code></td><td>nil or absent</td></tr>
+<tr><td><code>.boolean</code></td><td>boolean</td></tr>
+<tr><td><code>.integer</code></td><td>integer</td></tr>
+<tr><td><code>.float</code></td><td>float</td></tr>
+<tr><td><code>.string</code></td><td>string</td></tr>
+<tr><td><code>.table</code></td><td>table (borrowed)</td></tr>
+<tr><td><code>.function</code></td><td>function (borrowed)</td></tr>
+<tr><td><code>.light_userdata</code></td><td>light userdata</td></tr>
+<tr><td><code>.userdata</code></td><td>full userdata (borrowed)</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>table</code>, <code>function</code>, and <code>userdata</code> variants hold borrowed handles valid only during the current callback. Call <code>.takeOwnership()</code> before returning if you need them to outlive the call. The <a href="./ownership.html">Handles and ownership</a> chapter covers the ownership model in detail.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="lifecycle.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
 
-                            <a rel="next prefetch" href="setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="ownership.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -226,8 +285,11 @@ print(add("oops"))  -- error: add expects (i32, i32): string
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="lifecycle.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
 
-                    <a rel="next prefetch" href="setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="ownership.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

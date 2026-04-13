@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Functions - Zua HandBook</title>
+        <title>Table and Function handles - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-769225fc.js";
+            window.path_to_searchindex_js = "searchindex-46db9dea.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-a7376eed.js"></script>
+        <script src="toc-79e67a69.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -174,110 +174,112 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
-<p>The core idea is simple: a Zig function is a Lua-callable function. You declare typed parameters, zua decodes the Lua arguments into them, and you return a <code>Result</code>.</p>
-<h2 id="your-first-function"><a class="header" href="#your-first-function">Your first function</a></h2>
-<pre><code class="language-zig">fn add(a: i32, b: i32) Result(i32) {
-    return Result(i32).ok(a + b);
+                        <h1 id="table-and-function-handles"><a class="header" href="#table-and-function-handles">Table and Function handles</a></h1>
+<p><code>zua.Table</code> and <code>zua.Function</code> are handles to live Lua values. This chapter covers receiving them as parameters, building and reading tables from Zig, and calling Lua functions from Zig.</p>
+<h2 id="zuatable-as-a-parameter"><a class="header" href="#zuatable-as-a-parameter">zua.Table as a parameter</a></h2>
+<p>Declare <code>zua.Table</code> as a parameter when you want a live handle to the caller’s table rather than a decoded snapshot:</p>
+<pre><code class="language-zig">fn sumValues(ctx: *zua.Context, t: zua.Table) !f64 {
+    var total: f64 = 0;
+    var i: i32 = 1;
+    while (t.has(i)) : (i += 1) {
+        total += try t.get(ctx, i, f64);
+    }
+    return total;
 }
 </code></pre>
-<p>To register it, decide whether the function needs access to the Zua instance. If not, use <code>ZuaFn.pure</code>:</p>
-<pre><code class="language-zig">globals.setFn("add", ZuaFn.pure(add, .{
-    .parse_error = "add expects (i32, i32)",
-}));
+<pre><code class="language-lua">print(sumValues({ 1.5, 2.5, 3.0 }))  -- 7
 </code></pre>
-<p>If it does, use <code>ZuaFn.from</code> and add <code>*Zua</code> as the first parameter:</p>
-<pre><code class="language-zig">fn greet(z: *Zua, name: []const u8) Result([]const u8) {
-    const msg = std.fmt.allocPrint(z.allocator, "hello, {s}", .{name})
-        catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(msg);
+<p><code>t</code> is a borrowed handle here. It is valid for the duration of the call.</p>
+<h2 id="reading-and-writing-table-fields"><a class="header" href="#reading-and-writing-table-fields">Reading and writing table fields</a></h2>
+<p><code>Table.get</code> decodes a field by key and returns an error if the key is missing or the type does not match. <code>Table.has</code> checks existence without decoding:</p>
+<pre><code class="language-zig">if (t.has("name")) {
+    const name = try t.get(ctx, "name", []const u8);
+    std.debug.print("name: {s}\n", .{name});
+}
+</code></pre>
+<p>Keys can be strings or integers:</p>
+<pre><code class="language-zig">const first = try t.get(ctx, 1, i32);   // integer key (array index)
+const label = try t.get(ctx, "label", []const u8);  // string key
+</code></pre>
+<p><code>Table.set</code> writes a field. It accepts any type that zua knows how to encode:</p>
+<pre><code class="language-zig">t.set(ctx, "result", 42);
+t.set(ctx, "status", "ok");
+</code></pre>
+<h2 id="zuafunction-as-a-parameter"><a class="header" href="#zuafunction-as-a-parameter">zua.Function as a parameter</a></h2>
+<p>Declare <code>zua.Function</code> as a parameter to receive a Lua function and call it from Zig:</p>
+<pre><code class="language-zig">fn applyTwice(ctx: *zua.Context, cb: zua.Function, value: i32) !i32 {
+    const r1 = try cb.call(ctx, .{value}, i32);
+    const r2 = try cb.call(ctx, .{r1},    i32);
+    return r2;
+}
+</code></pre>
+<pre><code class="language-lua">print(applyTwice(function(x) return x * 2 end, 5))  -- 20
+</code></pre>
+<p><code>cb.call</code> takes three arguments: the context, a tuple of arguments, and the expected return type. For multiple return values, pass a tuple type:</p>
+<pre><code class="language-zig">const pair = try cb.call(ctx, .{input}, struct { []const u8, i32 });
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Raw Zig function signatures cannot be decoded from Lua directly. Use <code>zua.Function</code> or the typed wrapper <code>zua.Fn(ins, outs)</code> when accepting callbacks from Lua.</p>
+</blockquote>
+<h2 id="storing-a-function-for-later"><a class="header" href="#storing-a-function-for-later">Storing a Function for later</a></h2>
+<p>A <code>zua.Function</code> received as a parameter is borrowed and valid only during the current call. To store it and call it later, take ownership:</p>
+<pre><code class="language-zig">var stored: ?zua.Function = null;
+
+fn setCallback(_: *zua.Context, cb: zua.Function) void {
+    if (stored) |old| old.release();
+    stored = cb.takeOwnership();
 }
 
-globals.setFn("greet", ZuaFn.from(greet, .{
-    .parse_error = "greet expects (string)",
-}));
-</code></pre>
-<p>The <code>parse_error</code> message is what Lua sees if the arguments do not match. Make it useful.</p>
-<h2 id="return-values"><a class="header" href="#return-values">Return values</a></h2>
-<p><code>Result(T)</code> wraps your return type. For a single value, <code>ok</code> is all you need:</p>
-<pre><code class="language-zig">fn answer(_: *Zua) Result(i32) {
-    return Result(i32).ok(42);
-}
-</code></pre>
-<p>For multiple return values, use an anonymous tuple:</p>
-<pre><code class="language-zig">fn minmax(_: *Zua, a: f64, b: f64) Result(.{ f64, f64 }) {
-    return Result(.{ f64, f64 }).ok(.{ @min(a, b), @max(a, b) });
-}
-</code></pre>
-<p>For no return value:</p>
-<pre><code class="language-zig">fn log(_: *Zua, msg: []const u8) Result(.{}) {
-    std.log.info("{s}", .{msg});
-    return Result(.{}).ok(.{});
-}
-</code></pre>
-<h3 id="allocated-strings"><a class="header" href="#allocated-strings">Allocated strings</a></h3>
-<p>When you allocate a string to return, use <code>owned</code> instead of <code>ok</code>. The trampoline takes ownership and frees it after pushing to Lua:</p>
-<pre><code class="language-zig">fn format(z: *Zua, value: i32) Result([]const u8) {
-    const text = std.fmt.allocPrint(z.allocator, "value={d}", .{value})
-        catch return Result([]const u8).errStatic("out of memory");
-    return Result([]const u8).owned(text);
-}
-</code></pre>
-<p>Always allocate with <code>z.allocator</code>. The trampoline frees with the same allocator, so mixing allocators will go wrong.</p>
-<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
-<p>Three constructors cover the common cases:</p>
-<pre><code class="language-zig">return Result(i32).errStatic("missing pid");
-return Result(i32).errOwned(z.allocator, "pid {d} out of range", .{pid});
-return Result(i32).errZig(err);
-</code></pre>
-<p><code>errStatic</code> takes a string literal. <code>errOwned</code> formats a message on the allocator and frees it before raising the Lua error. <code>errZig</code> surfaces a Zig error value by name.</p>
-<p>Errors always raise a Lua error after your function returns. Zig <code>defer</code> blocks run normally, which is the main reason zua uses this pattern instead of calling <code>lua_error</code> directly from inside the callback.</p>
-<p>Callbacks can also return <code>!Result(T)</code>. Zig errors propagate through the trampoline and become Lua errors automatically:</p>
-<pre><code class="language-zig">fn readFile(z: *Zua, path: []const u8) !Result([]const u8) {
-    const contents = try std.fs.cwd().readFileAlloc(z.allocator, path, 1024 * 1024);
-    return Result([]const u8).owned(contents);
-}
-</code></pre>
-<h2 id="configuring-error-messages"><a class="header" href="#configuring-error-messages">Configuring error messages</a></h2>
-<p>The second argument to <code>ZuaFn.pure</code> and <code>ZuaFn.from</code> is a <code>ZuaFnErrorConfig</code>. You can pass an anonymous struct literal for convenience, but the full type gives you three fields:</p>
-<pre><code class="language-zig">globals.setFn("read_file", ZuaFn.from(readFile, ZuaFnErrorConfig{
-    .parse_error = "read_file expects (string)",
-    .zig_err_fmt = "read_file failed: {s}",
-    .zig_err_hook = null,
-}));
-</code></pre>
-<p><code>parse_error</code> is what Lua sees when argument decoding fails. <code>zig_err_fmt</code> is a format string that receives the Zig error name as <code>{s}</code>. If you need to produce a more descriptive message at runtime, use <code>zig_err_hook</code> instead:</p>
-<pre><code class="language-zig">fn describeError(z: *Zua, err: anyerror) []const u8 {
-    return std.fmt.allocPrint(z.allocator, "file error ({s}): check path and permissions", .{
-        @errorName(err),
-    }) catch "file error";
+fn invokeStored(ctx: *zua.Context, value: i32) !i32 {
+    const cb = stored orelse return ctx.fail("no callback stored");
+    return try cb.call(ctx, .{value}, i32);
 }
 
-globals.setFn("read_file", ZuaFn.from(readFile, ZuaFnErrorConfig{
-    .parse_error = "read_file expects (string)",
-    .zig_err_hook = describeError,
-}));
-</code></pre>
-<p>The hook takes precedence over <code>zig_err_fmt</code> when both are set. The returned string must be allocated with <code>z.allocator</code>. zua frees it after raising the Lua error.</p>
-<h2 id="optional-parameters"><a class="header" href="#optional-parameters">Optional parameters</a></h2>
-<p>Declare optional parameters as <code>?T</code>. A missing trailing argument or an explicit <code>nil</code> both decode as <code>null</code>:</p>
-<pre><code class="language-zig">fn add(a: i32, b: ?i32) Result(i32) {
-    return Result(i32).ok(a + (b orelse 0));
+fn clearCallback() void {
+    if (stored) |cb| {
+        cb.release();
+        stored = null;
+    }
 }
 </code></pre>
-<p>Lua can call this as <code>add(1)</code> or <code>add(1, nil)</code> and both work.</p>
-<h2 id="supported-parameter-types"><a class="header" href="#supported-parameter-types">Supported parameter types</a></h2>
-<p><code>i32</code>, <code>i64</code>, <code>f32</code>, <code>f64</code>, <code>bool</code>, <code>[]const u8</code>, <code>[:0]const u8</code>, structs, and <code>?T</code> for any of the above. Tables and userdata are covered in later chapters.</p>
+<h2 id="zuafn-typed-function-wrappers"><a class="header" href="#zuafn-typed-function-wrappers">zua.Fn: typed function wrappers</a></h2>
+<p><code>zua.Fn(ins, outs)</code> is a typed wrapper over <code>zua.Function</code> that encodes the expected argument and return types. Use it when you want static type safety on the call signature or when storing a callback in a Zig struct field:</p>
+<pre><code class="language-zig">const Handler = struct {
+    pub const ZUA_META = zua.Meta.Object(Handler, .{
+        .set = setCallback,
+        .run = runCallback,
+        .__gc = cleanup,
+    });
+
+    cb: ?zua.Fn(i32, i32) = null,
+
+    pub fn setCallback(self: *Handler, cb: zua.Fn(i32, i32)) void {
+        if (self.cb) |old| old.release();
+        self.cb = cb.takeOwnership();
+    }
+
+    pub fn runCallback(ctx: *zua.Context, self: *Handler, value: i32) !i32 {
+        const cb = self.cb orelse return ctx.fail("no callback set");
+        return try cb.call(ctx, .{value});
+    }
+
+    pub fn cleanup(self: *Handler) void {
+        if (self.cb) |cb| cb.release();
+    }
+};
+</code></pre>
+<p><code>zua.Fn</code> values are decoded from Lua functions, participate in the same ownership model as <code>zua.Function</code>, and must be released in <code>__gc</code> if they are stored on an object.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="ownership.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="data.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="object-handles.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -287,11 +289,11 @@ globals.setFn("read_file", ZuaFn.from(readFile, ZuaFnErrorConfig{
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="ownership.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="data.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="object-handles.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
