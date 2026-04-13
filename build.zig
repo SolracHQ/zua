@@ -7,10 +7,24 @@ pub fn build(b: *std.Build) void {
     const module = b.addModule("zua", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .optimize = optimize,
     });
+
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_c.addIncludePath(b.path("vendor/lua"));
+    translate_c.addIncludePath(b.path("vendor/linenoise"));
+    const c_mod = translate_c.createModule();
+    module.addImport("c", c_mod);
+
+    // Lua configuration
 
     module.link_libc = true;
     module.addIncludePath(b.path("vendor/lua"));
+    module.addIncludePath(b.path("vendor/linenoise"));
 
     const lua_source_files = [_][]const u8{
         "vendor/lua/lapi.c",
@@ -54,6 +68,10 @@ pub fn build(b: *std.Build) void {
         });
     }
 
+    // Linenoise configuration
+    module.addCSourceFile(.{ .file = b.path("vendor/linenoise/linenoise.c"), .flags = &.{} });
+    module.addIncludePath(b.path("vendor/linenoise"));
+
     const mod_tests = b.addTest(.{
         .root_module = module,
     });
@@ -69,6 +87,9 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-custom-types", .path = "example/custom-types.zig" },
         .{ .name = "example-guided-tour", .path = "example/guided-tour.zig" },
         .{ .name = "example-object-slices", .path = "example/object-slices.zig" },
+        .{ .name = "example-nested-handle-ownership", .path = "example/nested-handle-ownership.zig" },
+        .{ .name = "example-custom-hooks", .path = "example/custom-hooks.zig" },
+        .{ .name = "example-repl", .path = "example/repl.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

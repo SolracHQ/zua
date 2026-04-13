@@ -6,11 +6,7 @@
 //! the public surface is documented for LSP hover.
 const std = @import("std");
 
-pub const c = @cImport({
-    @cInclude("lua.h");
-    @cInclude("lauxlib.h");
-    @cInclude("lualib.h");
-});
+pub const c = @import("c");
 
 /// Opaque Lua thread handle used by all API calls.
 pub const State = c.lua_State;
@@ -380,6 +376,23 @@ pub fn newTable(state: *State) void {
 /// Pushes a C function with no upvalues onto the stack.
 pub fn pushCFunction(state: *State, function: CFunction) void {
     c.lua_pushcclosure(state, function, 0);
+}
+
+/// Pushes a C closure onto the stack.
+///
+/// Pops `upvalue_count` values from the stack and bundles them as upvalues of
+/// the new closure. Inside the trampoline, use `upvalueIndex` to get the stack
+/// pseudo-index for each upvalue.
+pub fn pushCClosure(state: *State, function: CFunction, upvalue_count: c_int) void {
+    c.lua_pushcclosure(state, function, upvalue_count);
+}
+
+/// Returns the pseudo-index for upvalue `n` of the currently running closure.
+///
+/// `n` is 1-based: upvalue 1 is the first value that was bundled when the
+/// closure was created with `pushCClosure`.
+pub fn upvalueIndex(n: c_int) StackIndex {
+    return c.lua_upvalueindex(n);
 }
 
 /// Pushes a byte slice as a Lua string.

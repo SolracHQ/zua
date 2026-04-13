@@ -1,40 +1,34 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const Result = zua.Result;
-
 const Counter = struct {
-    pub const ZUA_META = zua.meta.Object(Counter, .{
+    pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
-        .increment = zua.ZuaFn.pure(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
+        .increment = zua.ZuaFn.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
         .reset = reset,
         .__tostring = toString,
     });
 
     count: i32 = 0,
 
-    pub fn getValue(self: *Counter) Result(i32) {
-        return Result(i32).ok(self.count);
+    pub fn getValue(self: *Counter) i32 {
+        return self.count;
     }
 
-    pub fn increment(self: *Counter, amount: i32) Result(.{}) {
+    pub fn increment(self: *Counter, amount: i32) void {
         self.count += amount;
-        return Result(.{}).ok(.{});
     }
 
-    pub fn reset(self: *Counter) Result(.{}) {
+    pub fn reset(self: *Counter) void {
         self.count = 0;
-        return Result(.{}).ok(.{});
     }
 
-    pub fn toString(z: *zua.Zua, self: *Counter) Result([]const u8) {
-        const arena = z.arena.?;
-        const display = std.fmt.allocPrint(
-            arena,
+    pub fn toString(ctx: *zua.Context, self: *Counter) ![]const u8 {
+        return std.fmt.allocPrint(
+            ctx.allocator(),
             "Counter({d})",
             .{self.count},
-        ) catch return Result([]const u8).errStatic("out of memory");
-        return Result([]const u8).ok(display);
+        ) catch try ctx.failTyped([]const u8, "out of memory");
     }
 };
 
@@ -47,44 +41,44 @@ const Condition = union(enum) {
     eq: f64,
     in_range: Range,
 
-    pub const ZUA_META = zua.meta.Table(Condition, .{});
+    pub const ZUA_META = zua.Meta.Table(Condition, .{});
 };
 
-fn makeEqCondition(value: f64) Result(Condition) {
-    return Result(Condition).ok(.{ .eq = value });
+fn makeEqCondition(value: f64) Condition {
+    return .{ .eq = value };
 }
 
-fn makeRangeCondition(min: f64, max: f64) Result(Condition) {
-    return Result(Condition).ok(.{ .in_range = Range{ .min = min, .max = max } });
+fn makeRangeCondition(min: f64, max: f64) Condition {
+    return .{ .in_range = Range{ .min = min, .max = max } };
 }
 
-fn describeCondition(z: *zua.Zua, cond: Condition) Result([]const u8) {
-    const arena = z.arena.?;
-    const description = switch (cond) {
-        .eq => |value| std.fmt.allocPrint(arena, "eq {d}", .{value}),
-        .in_range => |range| std.fmt.allocPrint(arena, "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
-    } catch return Result([]const u8).errStatic("out of memory");
-
-    return Result([]const u8).ok(description);
+fn describeCondition(ctx: *zua.Context, cond: Condition) ![]const u8 {
+    return switch (cond) {
+        .eq => |value| std.fmt.allocPrint(ctx.allocator(), "eq {d}", .{value}),
+        .in_range => |range| std.fmt.allocPrint(ctx.allocator(), "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
+    } catch try ctx.failTyped([]const u8, "out of memory");
 }
 
-fn makeCounter(_: *zua.Zua) Result(Counter) {
-    return Result(Counter).ok(Counter{});
+fn makeCounter(_: *zua.Context) Counter {
+    return Counter{};
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.Zua.init(init.gpa, init.io);
+    const z = try zua.State.init(init.gpa, init.io);
     defer z.deinit();
+    var executor = zua.Executor{};
+    var ctx = zua.Context.init(z);
+    defer ctx.deinit();
 
     const globals = z.globals();
-    defer globals.pop();
+    defer globals.release();
 
-    globals.setFn("Counter", zua.ZuaFn.from(makeCounter, .{}));
-    globals.setFn("makeEqCondition", zua.ZuaFn.pure(makeEqCondition, .{}));
-    globals.setFn("makeRangeCondition", zua.ZuaFn.pure(makeRangeCondition, .{}));
-    globals.setFn("describeCondition", zua.ZuaFn.from(describeCondition, .{}));
+    globals.set(&ctx, "Counter", makeCounter);
+    globals.set(&ctx, "makeEqCondition", makeEqCondition);
+    globals.set(&ctx, "makeRangeCondition", makeRangeCondition);
+    globals.set(&ctx, "describeCondition", describeCondition);
 
-    try z.exec(
+    try executor.execute(&ctx, .{ .code = .{ .string =
         \\local c = Counter()
         \\print("Initial:", c:value())
         \\
@@ -102,5 +96,5 @@ pub fn main(init: std.process.Init) !void {
         \\print("Condition eq:", describeCondition(makeEqCondition(8.3)))
         \\print("Condition range:", describeCondition(makeRangeCondition(0, 255)))
         \\print("Condition from Lua table:", describeCondition({ eq = 8.3 }))
-    );
+    } });
 }

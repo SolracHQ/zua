@@ -1,12 +1,41 @@
 const std = @import("std");
-pub const Result = @import("zua/result.zig").Result;
-pub const Table = @import("zua/table.zig").Table;
-pub const Function = @import("zua/function.zig").Function;
-pub const Zua = @import("zua/zua.zig").Zua;
-pub const ZuaFn = @import("zua/zua_fn.zig");
+
+// Low-level Lua API
 pub const lua = @import("lua/lua.zig");
-pub const translation = @import("zua/translation.zig");
-pub const meta = @import("zua/meta.zig");
+
+// linenoise c bindings for REPL input
+pub const linenoise = @import("linenoise/linenoise.zig");
+
+// State holders
+pub const Context = @import("zua/state/context.zig");
+pub const State = @import("zua/state/state.zig");
+
+// Handlers
+pub const Handlers = @import("zua/handlers/handlers.zig");
+pub const Userdata = @import("zua/handlers/userdata.zig");
+pub const Table = @import("zua/handlers/table.zig");
+pub const Function = @import("zua/handlers/function.zig");
+
+// Typed wrappers
+pub const Fn = @import("zua/typed/fn.zig").Fn;
+pub const Object = @import("zua/typed/object.zig").Object;
+pub const TableView = @import("zua/typed/view.zig").TableView;
+
+// Functions
+pub const ZuaFn = @import("zua/functions/zua_fn.zig");
+
+// Luz-Zig mapping layer
+pub const Mapper = @import("zua/mapper/mapper.zig");
+pub const Encoder = Mapper.Encoder;
+pub const Decoder = Mapper.Decoder;
+pub const VarArgs = Mapper.Decoder.VarArgs;
+
+// MetaData System for behavior customization
+pub const Meta = @import("zua/meta.zig");
+
+// Final Execution utilities
+pub const Executor = @import("zua/exec/executor.zig");
+pub const Repl = @import("zua/repl/repl.zig");
 
 test {
     std.testing.refAllDecls(@This());
