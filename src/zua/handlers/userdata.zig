@@ -38,6 +38,15 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Userdata {
     };
 }
 
+/// Allocates a new full userdata block of `size` bytes and returns a stack-owned handle.
+///
+/// The caller is responsible for releasing the returned handle or leaving it on
+/// the stack until Lua owns it.
+pub fn create(state: *State, size: usize) Userdata {
+    _ = lua.newUserdata(state.luaState, size);
+    return Userdata.fromStack(state, -1);
+}
+
 /// Anchors this userdata in the Lua registry for persistent storage.
 ///
 /// The returned handle owns the registry reference and may be released with

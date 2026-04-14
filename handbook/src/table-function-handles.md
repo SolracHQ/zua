@@ -72,7 +72,9 @@ const pair = try cb.call(ctx, .{input}, struct { []const u8, i32 });
 
 > [!NOTE]
 > Raw Zig function signatures cannot be decoded from Lua directly. Use `zua.Function` or the typed wrapper `zua.Fn(ins, outs)` when accepting callbacks from Lua.
-
+>
+> You can also construct a callable Lua function handle from a native Zig callback using `zua.Function.create(z, callback)`. For typed wrappers, `zua.Fn(ins, outs).create(&ctx, callback)` builds the typed wrapper and checks the callback signature at compile time.
+>
 ## Storing a Function for later
 
 A `zua.Function` received as a parameter is borrowed and valid only during the current call. To store it and call it later, take ownership:

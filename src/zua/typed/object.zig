@@ -18,6 +18,16 @@ const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
 /// handler. It decodes Lua `userdata` values into a typed handle and exposes a
 /// typed `.get()` method to access the embedded `T` payload.
 pub fn Object(comptime T: type) type {
+    comptime {
+        if (@typeInfo(T) == .@"fn") {
+            @compileError("Object(T) cannot wrap function types");
+        }
+        const m = Meta.getMeta(T);
+        if (m.strategy != .object) {
+            @compileError(@typeName(T) ++ " must use object strategy to be wrapped by Object(T)");
+        }
+    }
+
     return struct {
         pub const ZUA_META = Meta.Table(@This(), .{}).withDecode(decode).withEncode(UserData, encode);
         pub const __ZUA_USERDATA_TYPE = T;
@@ -46,6 +56,17 @@ pub fn Object(comptime T: type) type {
         /// Constructs a typed object wrapper from an existing raw userdata handle.
         pub fn from(handle: UserData) @This() {
             return .{ .handle = handle };
+        }
+
+        /// Allocates a new typed userdata object and returns a typed handle.
+        ///
+        /// The object payload is copied into the Lua userdata block and the
+        /// associated metatable is attached.
+        pub fn create(state: *State, value: T) @This() {
+            const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(state.luaState, @sizeOf(T))));
+            ptr.* = value;
+            MetaTable.attachMetatable(state, T);
+            return .{ .handle = UserData.fromStack(state, -1) };
         }
 
         /// Returns the typed payload pointer stored inside the userdata.

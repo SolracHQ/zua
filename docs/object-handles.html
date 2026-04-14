@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-46db9dea.js";
+            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -212,6 +212,7 @@ local w = makeWrapper(n)
 print(w:get_node())  -- 42
 </code></pre>
 <p><code>node.get()</code> returns <code>*Node</code>, a direct pointer into the Lua userdata memory. <code>.takeOwnership()</code> moves the handle into the registry so it survives beyond the current callback. <code>.release()</code> in <code>__gc</code> unanchors it so the GC can collect both the <code>Node</code> and the <code>Wrapper</code> when they go out of scope.</p>
+<p><code>zua.Object(T)</code> performs compile-time validation: <code>T</code> must not be a raw function type, and it must declare <code>.object</code> strategy metadata. This catches invalid object-handle declarations before the code compiles.</p>
 <p>Key rules:</p>
 <ul>
 <li><code>zua.Object(T)</code> decoded from a function parameter is a <strong>borrowed</strong> handle. Call <code>.takeOwnership()</code> if the value must outlive the current callback.</li>
