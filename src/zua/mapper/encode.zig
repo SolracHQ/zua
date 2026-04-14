@@ -79,10 +79,10 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
     }
 
     if (comptime T == Table or T == Function or T == Userdata) {
-        const index = switch (value.handle) {
-            inline else => |idx| idx,
-        };
-        lua.pushValue(ctx.state.luaState, index);
+        switch (value.handle) {
+            .borrowed, .stack_owned => |index| lua.pushValue(ctx.state.luaState, index),
+            .registry_owned => |ref| _ = lua.rawGetI(ctx.state.luaState, lua.REGISTRY_INDEX, ref),
+        }
         return;
     }
 
