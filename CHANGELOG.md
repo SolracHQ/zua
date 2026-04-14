@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.1
+
+### Added
+- `Function.create(state, callback)` helper for pushing a native Zig callback or pre-wrapped `ZuaFn` wrapper as a raw Lua function handle.
+- `Userdata.create(state, size)` helper for allocating raw full userdata and returning a stack-owned `zua.Userdata` handle.
+- `zua.Fn(ins, outs).create(ctx, callback)` now validates callback parameter and return shapes at compile time using `ZuaFn` metadata.
+- `Object(T)` now rejects function types and requires `T` to use `.object` strategy metadata.
+
 ## 0.7.0
 
 ### Breaking

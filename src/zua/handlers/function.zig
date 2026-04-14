@@ -7,6 +7,7 @@ const HandleOwnership = @import("../handlers/handlers.zig").HandleOwnership;
 const Mapper = @import("../mapper/mapper.zig");
 const State = @import("../state/state.zig");
 const Context = @import("../state/context.zig").Context;
+const MetaTable = @import("../metatable.zig");
 
 /// Errors returned by function calls.
 pub const Error = error{Failed};
@@ -65,6 +66,39 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
         .state = state,
         .handle = .{ .stack_owned = lua.absIndex(state.luaState, index) },
     };
+}
+
+/// Creates a new Lua function handle from a Zig callback or an existing
+/// `ZuaFn` wrapper.
+///
+/// This is a convenience helper for constructing raw function handles from
+/// native Zig callbacks or pre-wrapped ZuaFn values.
+///
+/// Arguments:
+/// - state: The global Zua state containing the Lua VM.
+/// - callback: A Zig function or a `ZuaFn`/`ZuaFn.newClosure` wrapper.
+///
+/// Returns:
+/// - Function: A stack-owned handle for the pushed Lua function.
+///
+/// Example:
+/// ```zig
+/// const fn_handle = Function.create(state, my_native_callback);
+/// const fn_handle = Function.create(state, zua.ZuaFn.new(my_callback, .{}));
+/// ```
+pub fn create(state: *State, callback: anytype) Function {
+    const CallbackType = @TypeOf(callback);
+
+    if (comptime @typeInfo(CallbackType) == .@"fn" or
+        (@typeInfo(CallbackType) == .@"struct" and @hasDecl(CallbackType, "__IsZuaFn")))
+    {
+        var ctx = Context.init(state);
+        defer ctx.deinit();
+        Mapper.Encoder.pushValue(&ctx, callback);
+        return Function.fromStack(state, -1);
+    }
+
+    @compileError("Function.create expects a Zig function or a ZuaFn wrapper");
 }
 
 /// Calls the Lua function with the given arguments and decodes return values.

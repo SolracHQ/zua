@@ -27,6 +27,10 @@ fn applyTwice(ctx: *zua.Context, callback: zua.Function, initial: i32) !i32 {
     return current;
 }
 
+fn increment(x: i32) i32 {
+    return x + 1;
+}
+
 // --- Closures ---
 
 /// Captured state for a counter closure. The `Meta.Capture` strategy
@@ -132,6 +136,16 @@ pub fn main(init: std.process.Init) !void {
     globals.set(&ctx, "divide", zua.ZuaFn.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }));
     globals.set(&ctx, "apply_twice", zua.ZuaFn.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }));
     globals.set(&ctx, "CallbackRegistry", zua.ZuaFn.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }));
+
+    var increment_handle = zua.Function.create(z, increment);
+    const owned_increment = increment_handle.takeOwnership();
+    globals.set(&ctx, "increment", owned_increment);
+    defer owned_increment.release();
+
+    var typed_increment = zua.Fn(.{i32}, i32).create(&ctx, increment);
+    const owned_typed_increment = typed_increment.takeOwnership();
+    globals.set(&ctx, "typed_increment", owned_typed_increment);
+    defer owned_typed_increment.release();
 
     // Closures: each newClosure call produces an independent captured state.
     globals.set(&ctx, "sum_all", zua.ZuaFn.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }));

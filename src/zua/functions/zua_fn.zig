@@ -176,6 +176,8 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
         pub const __IsZuaFn = true;
         // Closure marker: present and true only on closure wrappers.
         pub const __IsZuaClosure: bool = (kind == .with_capture or kind == .with_zua_and_capture);
+        pub const __ZuaFnTypeInfo = function_info;
+        pub const __ZuaFnReturnType = ActualReturnType;
         // The initial capture value — only meaningful when __IsZuaClosure is true.
         initial: CaptureType = undefined,
 
@@ -320,7 +322,7 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
             };
         }
 
-        fn decodedParameterTypes() [decodedParameterCount()]type {
+        pub fn decodedParameterTypes() [decodedParameterCount()]type {
             comptime var types: [decodedParameterCount()]type = undefined;
             comptime var out: usize = 0;
             inline for (function_info.params, 0..) |param, i| {
@@ -428,7 +430,7 @@ fn validateCapturePosition(comptime info: std.builtin.Type.Fn) void {
 }
 
 /// Returns the payload type for an error union or the original type if the input is not an error union.
-fn unwrapErrorUnion(comptime T: type) type {
+pub fn unwrapErrorUnion(comptime T: type) type {
     return switch (@typeInfo(T)) {
         .error_union => |eu| eu.payload,
         else => T,
