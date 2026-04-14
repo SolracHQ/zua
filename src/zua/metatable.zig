@@ -48,17 +48,26 @@ pub fn buildMetatable(z: *State, comptime T: type) void {
     const methods = comptime Meta.getMeta(T).methods;
     if (methodCount(T) == 0) return;
 
-    lua.createTable(z.luaState, 0, methodCount(T));
-    const methods_index = lua.absIndex(z.luaState, -1);
-
+    const has_custom_index = comptime @hasField(@TypeOf(methods), "__index");
+    const regular_count = comptime regularMethodCount(T);
     const methods_type = @TypeOf(methods);
 
-    inline for (@typeInfo(methods_type).@"struct".fields) |field| {
-        const method_fn = @field(methods, field.name);
-        const trampoline = selectTrampoline(method_fn);
-        lua.pushFunction(z.luaState, trampoline);
+    // Build the methods table (for regular named methods) when needed.
+    // When a custom __index also exists, we generate a combined __index
+    // trampoline.
+    var methods_index: i32 = 0;
+    if (regular_count > 0) {
+        lua.createTable(z.luaState, 0, regular_count);
+        methods_index = lua.absIndex(z.luaState, -1);
+    }
 
-        // Metamethods (starting with __) go directly on the metatable
+    inline for (@typeInfo(methods_type).@"struct".fields) |field| {
+        // Skip __index —since it is handled separately below.
+        if (comptime std.mem.eql(u8, field.name, "__index")) continue;
+
+        const method_fn = @field(methods, field.name);
+        lua.pushFunction(z.luaState, selectTrampoline(method_fn));
+
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
             lua.setField(z.luaState, mt_index, field.name);
         } else {
@@ -66,7 +75,20 @@ pub fn buildMetatable(z: *State, comptime T: type) void {
         }
     }
 
-    lua.setField(z.luaState, mt_index, "__index");
+    if (regular_count > 0 and has_custom_index) {
+        // when needs both __index (for methods and custom __index) use a combined trampoline that tries with named methods first, then falls back to the custom __index.
+        lua.pushFunction(z.luaState, combinedIndexTrampoline(T));
+        lua.setField(z.luaState, mt_index, "__index");
+        // The methods table is no longer needed as __index so lets pop it.
+        lua.pop(z.luaState, 1);
+    } else if (regular_count > 0) {
+        // No custom __index: the methods table itself is __index.
+        lua.setField(z.luaState, mt_index, "__index");
+    } else if (has_custom_index) {
+        // Only a custom __index, no named methods.
+        lua.pushFunction(z.luaState, selectTrampoline(@field(methods, "__index")));
+        lua.setField(z.luaState, mt_index, "__index");
+    }
 }
 
 /// Selects the Lua C function trampoline for a method value.
@@ -85,10 +107,49 @@ fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
     return ZuaFn.ZuaFnType(method_fn, .{}).trampoline();
 }
 
-/// Returns the number of methods declared on `T`.
+/// Generates a combined __index trampoline for types that have both regular
+/// named methods and a custom __index handler.
 ///
-/// This is used to size the temporary `__index` table before populating it.
+/// This trampoline first checks if the key matches any regular method names, and if so dispatches to the corresponding method. If not, it falls back to the custom
+/// __index handler
+fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
+    const methods = comptime Meta.getMeta(T).methods;
+    const methods_type = comptime @TypeOf(methods);
+    const custom_trampoline = comptime selectTrampoline(@field(methods, "__index")).?;
+
+    return struct {
+        fn index(L: [*c]lua.State) callconv(.c) c_int {
+            if (lua.valueType(L, 2) == .string) {
+                const key = lua.toString(L, 2) orelse return 0;
+                inline for (@typeInfo(methods_type).@"struct".fields) |field| {
+                    if (comptime !std.mem.startsWith(u8, field.name, "__")) {
+                        if (std.mem.eql(u8, key, field.name)) {
+                            const method_fn = comptime @field(methods, field.name);
+                            lua.pushFunction(L, comptime selectTrampoline(method_fn));
+                            return 1;
+                        }
+                    }
+                }
+            }
+            return custom_trampoline(L);
+        }
+    }.index;
+}
+
+/// Returns the total number of methods declared on `T`.
 fn methodCount(comptime T: type) i32 {
     const methods = comptime Meta.getMeta(T).methods;
     return @intCast(@typeInfo(@TypeOf(methods)).@"struct".fields.len);
+}
+
+/// Returns the number of non-metamethods (those not starting with `__`) on `T`.
+///
+/// This determines whether a separate `__index` table needs to be built.
+fn regularMethodCount(comptime T: type) i32 {
+    const methods = comptime Meta.getMeta(T).methods;
+    comptime var count: i32 = 0;
+    inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
+        if (!std.mem.startsWith(u8, field.name, "__")) count += 1;
+    }
+    return count;
 }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+
+### Fixed
+- Correctly encode registry-owned `Table`, `Function`, and `Userdata` handles by pushing them from the Lua registry with `lua.rawGetI` instead of treating the registry reference as a stack index.
+- Support object userdata types that declare a custom `__index` alongside named methods by generating a combined `__index` trampoline that dispatches regular method names first and falls back to the custom handler.
+
 ## 0.7.1
 
 ### Added
