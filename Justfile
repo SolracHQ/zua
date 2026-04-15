@@ -23,7 +23,8 @@ list-examples:
         object-slices \
         nested-handle-ownership \
         custom-hooks \
-        repl
+        repl \
+        iterable
 
 run-example name:
     zig build "run-example-{{name}}"

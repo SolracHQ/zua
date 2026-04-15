@@ -57,7 +57,7 @@ const Counter = struct {
     }
 
     pub fn toString(ctx: *zua.Context, self: *Counter) []const u8 {
-        const arena = ctx.allocator();
+        const arena = ctx.arena();
         const msg = std.fmt.allocPrint(arena, "Counter({d})", .{self.count}) catch {
             ctx.err = "out of memory";
             return "";

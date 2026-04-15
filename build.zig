@@ -90,6 +90,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "example-nested-handle-ownership", .path = "example/nested-handle-ownership.zig" },
         .{ .name = "example-custom-hooks", .path = "example/custom-hooks.zig" },
         .{ .name = "example-repl", .path = "example/repl.zig" },
+        .{ .name = "example-iterable", .path = "example/iterable.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

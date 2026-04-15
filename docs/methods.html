@@ -242,7 +242,7 @@ print(c.count)    -- 5  (fields are directly readable on table strategy)
 <h2 id="context-in-methods"><a class="header" href="#context-in-methods">Context in methods</a></h2>
 <p><code>*zua.Context</code> can appear as the first parameter before <code>self</code> in any method. zua skips it when matching parameters to Lua arguments, the same way it does for top-level functions:</p>
 <pre><code class="language-zig">pub fn toString(ctx: *zua.Context, self: Point) ![]const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+    return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
         catch return ctx.fail("out of memory");
 }
 </code></pre>
@@ -263,7 +263,7 @@ print(c.count)    -- 5  (fields are directly readable on table strategy)
     }
 
     pub fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
-        return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+        return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
             catch return ctx.fail("out of memory");
     }
 

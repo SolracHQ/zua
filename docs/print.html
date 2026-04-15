@@ -366,7 +366,7 @@ print(add(5, nil))  -- 5
 <h2 id="adding-context-to-a-function"><a class="header" href="#adding-context-to-a-function">Adding context to a function</a></h2>
 <p>Declare <code>*zua.Context</code> as the first parameter. zua recognizes it at compile time and skips it when matching Lua arguments, so from Lua’s perspective nothing changes.</p>
 <pre><code class="language-zig">fn greet(ctx: *zua.Context, name: []const u8) []const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "hello, {s}", .{name})
+    return std.fmt.allocPrint(ctx.arena(), "hello, {s}", .{name})
         catch unreachable;
 }
 
@@ -377,7 +377,7 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <pre><code class="language-lua">print(greet("world"))  -- hello, world
 </code></pre>
 <h2 id="the-call-arena"><a class="header" href="#the-call-arena">The call arena</a></h2>
-<p><code>ctx.allocator()</code> returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.</p>
+<p><code>ctx.arena()</code> returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>An arena allocator hands out memory in one direction and frees everything at once. It is very fast and needs no per-allocation bookkeeping. The trade-off is that you cannot free individual items, only the whole arena. Since zua’s call arena is freed automatically, individual frees would not make sense anyway.</p>
@@ -385,22 +385,22 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <p>The string returned by <code>greet</code> above is allocated from the arena. zua copies it into Lua’s own memory before the arena is freed, so the Lua side always holds a valid string regardless of what happens to the arena.</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.state.allocator</code> and manage the lifetime yourself.</p>
+<p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.heap()</code> and manage the lifetime yourself.</p>
 </blockquote>
-<h2 id="ctxallocator-vs-ctxstateallocator"><a class="header" href="#ctxallocator-vs-ctxstateallocator">ctx.allocator vs ctx.state.allocator</a></h2>
+<h2 id="ctxallocator-vs-ctxstateallocator"><a class="header" href="#ctxallocator-vs-ctxstateallocator">ctx.allocator vs ctx.heap()</a></h2>
 <p>There are two allocators available inside a zua callback:</p>
 <ul>
-<li><code>ctx.allocator()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>
-<li><code>ctx.state.allocator</code> is the persistent allocator. Survives across calls, must be freed manually, typically in a <code>__gc</code> handler.</li>
+<li><code>ctx.arena()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>
+<li><code>ctx.heap()</code> is the persistent allocator. Survives across calls, must be freed manually, typically in a <code>__gc</code> handler.</li>
 </ul>
-<p>Use <code>ctx.allocator()</code> for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use <code>ctx.state.allocator</code> for anything that needs to outlive the call: object fields, stored callbacks, owned resources.</p>
+<p>Use <code>ctx.arena()</code> for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use <code>ctx.heap()</code> for anything that needs to outlive the call: object fields, stored callbacks, owned resources.</p>
 <pre><code class="language-zig">const Entry = struct {
     pub const ZUA_META = zua.Meta.Object(Entry, .{
         .label = getLabel,
         .__gc = cleanup,
     });
 
-    // allocated from ctx.state.allocator, survives across calls
+    // allocated from ctx.heap(), survives across calls
     label: []const u8,
 
     pub fn getLabel(self: *Entry) []const u8 {
@@ -408,12 +408,12 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Entry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !Entry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return Entry{ .label = owned };
 }
@@ -443,7 +443,7 @@ print(err)  -- division by zero
 </code></pre>
 <p>For a message built at runtime, use <code>ctx.failWithFmt</code>:</p>
 <pre><code class="language-zig">fn openFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024)
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024)
         catch |err| return ctx.failWithFmt("cannot open '{s}': {s}", .{ path, @errorName(err) });
 }
 </code></pre>
@@ -451,7 +451,7 @@ print(err)  -- division by zero
 <h2 id="zig-errors-reaching-the-trampoline"><a class="header" href="#zig-errors-reaching-the-trampoline">Zig errors reaching the trampoline</a></h2>
 <p>If a Zig error escapes your function without being caught, the trampoline catches it and converts it to a Lua error. Use <code>zig_err_fmt</code> in <code>ZuaFn.new</code> to control the message:</p>
 <pre><code class="language-zig">fn readFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024);
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024);
 }
 
 globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
@@ -463,7 +463,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
 <p>When you need to build the error message dynamically based on which error occurred, use <code>zig_err_hook</code>:</p>
 <pre><code class="language-zig">fn describeError(ctx: *zua.Context, err: anyerror) void {
     ctx.err = std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "file error ({s}): check path and permissions",
         .{@errorName(err)},
     ) catch "file error";
@@ -474,7 +474,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
     .zig_err_hook  = describeError,
 }));
 </code></pre>
-<p>The hook sets <code>ctx.err</code>. If it allocates, use <code>ctx.allocator()</code> so zua owns and frees the string after raising the error.</p>
+<p>The hook sets <code>ctx.err</code>. If it allocates, use <code>ctx.arena()</code> so zua owns and frees the string after raising the error.</p>
 <h2 id="catching-errors-from-zig"><a class="header" href="#catching-errors-from-zig">Catching errors from Zig</a></h2>
 <p>Errors from <code>executor.execute</code> and <code>executor.eval</code> work like any Zig error. When the call fails, <code>ctx.err</code> holds the Lua error message:</p>
 <pre><code class="language-zig">executor.execute(&amp;ctx, .{ .code = .{ .string = "this is not valid lua" } }) catch |err| {
@@ -490,7 +490,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
     std.debug.print("error: {s}\n", .{ctx.err orelse "unknown"});
     if (executor.stack_trace) |trace| {
         std.debug.print("traceback:\n{s}\n", .{trace});
-        ctx.state.allocator.free(trace);
+        ctx.heap().free(trace);
     }
 };
 </code></pre>
@@ -746,7 +746,7 @@ print(c.count)    -- 5  (fields are directly readable on table strategy)
 <h2 id="context-in-methods"><a class="header" href="#context-in-methods">Context in methods</a></h2>
 <p><code>*zua.Context</code> can appear as the first parameter before <code>self</code> in any method. zua skips it when matching parameters to Lua arguments, the same way it does for top-level functions:</p>
 <pre><code class="language-zig">pub fn toString(ctx: *zua.Context, self: Point) ![]const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+    return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
         catch return ctx.fail("out of memory");
 }
 </code></pre>
@@ -767,7 +767,7 @@ print(c.count)    -- 5  (fields are directly readable on table strategy)
     }
 
     pub fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
-        return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+        return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
             catch return ctx.fail("out of memory");
     }
 
@@ -820,17 +820,17 @@ print(tostring(c))  -- (4, 6)
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *TextEntry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return TextEntry{ .label = owned };
 }
 </code></pre>
-<p><code>cleanup</code> receives <code>*zua.Context</code> like any other zua callback, so it has access to <code>ctx.state.allocator</code> for freeing persistent memory. The <code>label</code> slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.</p>
+<p><code>cleanup</code> receives <code>*zua.Context</code> like any other zua callback, so it has access to <code>ctx.heap()</code> for freeing persistent memory. The <code>label</code> slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.</p>
 <h2 id="what-__gc-does-not-cover"><a class="header" href="#what-__gc-does-not-cover">What __gc does not cover</a></h2>
 <p><code>__gc</code> is only called for the <strong>userdata allocation itself</strong>, meaning the struct fields that live inline inside the userdata block. Fields of type <code>i32</code>, <code>f64</code>, <code>bool</code>, and similar scalar types live inline and are collected automatically with the userdata; you do not need to do anything for them.</p>
 <p>Fields that point to external memory, <code>[]const u8</code>, <code>*T</code>, or any other pointer, point to memory outside the userdata block that Lua does not know about. Those must be freed in <code>__gc</code>.</p>
@@ -867,7 +867,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Connection) void {
-        ctx.state.allocator.free(self.host);
+        ctx.heap().free(self.host);
         if (self.on_data) |cb| cb.release();
     }
 };
@@ -1423,8 +1423,8 @@ print(sum_all())                -- 0
 <pre><code class="language-zig">fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
-        if (i &gt; 0) try buf.appendSlice(ctx.allocator(), ", ");
-        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+        if (i &gt; 0) try buf.appendSlice(ctx.arena(), ", ");
+        try buf.appendSlice(ctx.arena(), @tagName(prim));
     }
     return buf.items;
 }

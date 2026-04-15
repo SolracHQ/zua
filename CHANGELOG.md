@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+
+### Breaking
+- `Context.allocator()` was removed in favor of `Context.arena()` for scratch allocations and `Context.heap()` for persistent state allocations.
+
+### Added
+- `ctx.arena()` exposes the call-local arena allocator for temporary allocations that live only for the duration of the current Lua callback.
+- `ctx.heap()` exposes the persistent state allocator for values that must outlive the current call.
+- Moved `Primitive` from `Mapper.Decoder` into `Mapper` so primitive types are available to both decoding and encoding paths.
+- Added support for encoding and decoding `Primitive` values directly.
+- Updated `mise.toml` to use Zig `0.16.0` from the stable release channel.
+
 ## 0.7.2
 
 ### Fixed

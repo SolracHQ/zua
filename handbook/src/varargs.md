@@ -83,8 +83,8 @@ A common use for `VarArgs` is logging or debugging functions that accept anythin
 fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
-        if (i > 0) try buf.appendSlice(ctx.allocator(), ", ");
-        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+        if (i > 0) try buf.appendSlice(ctx.arena(), ", ");
+        try buf.appendSlice(ctx.arena(), @tagName(prim));
     }
     return buf.items;
 }

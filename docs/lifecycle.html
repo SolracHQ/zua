@@ -191,17 +191,17 @@
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *TextEntry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return TextEntry{ .label = owned };
 }
 </code></pre>
-<p><code>cleanup</code> receives <code>*zua.Context</code> like any other zua callback, so it has access to <code>ctx.state.allocator</code> for freeing persistent memory. The <code>label</code> slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.</p>
+<p><code>cleanup</code> receives <code>*zua.Context</code> like any other zua callback, so it has access to <code>ctx.heap()</code> for freeing persistent memory. The <code>label</code> slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.</p>
 <h2 id="what-__gc-does-not-cover"><a class="header" href="#what-__gc-does-not-cover">What __gc does not cover</a></h2>
 <p><code>__gc</code> is only called for the <strong>userdata allocation itself</strong>, meaning the struct fields that live inline inside the userdata block. Fields of type <code>i32</code>, <code>f64</code>, <code>bool</code>, and similar scalar types live inline and are collected automatically with the userdata; you do not need to do anything for them.</p>
 <p>Fields that point to external memory, <code>[]const u8</code>, <code>*T</code>, or any other pointer, point to memory outside the userdata block that Lua does not know about. Those must be freed in <code>__gc</code>.</p>
@@ -238,7 +238,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Connection) void {
-        ctx.state.allocator.free(self.host);
+        ctx.heap().free(self.host);
         if (self.on_data) |cb| cb.release();
     }
 };

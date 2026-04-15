@@ -73,6 +73,9 @@ fn MetaData(
             comptime NewProxyType: type,
             comptime handler: EncodeHook(T, NewProxyType),
         ) MetaData(T, strat, methods, NewProxyType) {
+            if (comptime strat == .capture)
+                @compileError("capture strategy types do not support encode hooks");
+
             assertEncodeReturnDiffers(T, NewProxyType);
             return .{
                 .strategy = self.strategy,
@@ -89,6 +92,9 @@ fn MetaData(
             self: @This(),
             comptime handler: DecodeHook(T),
         ) MetaData(T, strat, methods, ProxyType) {
+            if (comptime strat == .capture)
+                @compileError("capture strategy types do not support decode hooks");
+
             return .{
                 .strategy = self.strategy,
                 .methods = self.methods,

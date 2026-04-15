@@ -43,7 +43,7 @@ pub fn TableView(comptime T: type) type {
                 else => return ctx.failWithFmtTyped(@This(), "expected table but got {s}", .{@tagName(primitive)}),
             };
 
-            const ptr = ctx.allocator().create(T) catch return ctx.failTyped(@This(), "out of memory");
+            const ptr = ctx.arena().create(T) catch return ctx.failTyped(@This(), "out of memory");
             const index = switch (table.handle) {
                 inline else => |idx| idx,
             };

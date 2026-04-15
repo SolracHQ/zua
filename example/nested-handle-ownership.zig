@@ -50,7 +50,7 @@ const Root = struct {
         const first_child = self.group.children[0].get();
         const extra_child = self.group.extra.other.get();
         return std.fmt.allocPrint(
-            ctx.allocator(),
+            ctx.arena(),
             "root with first child={d}:{s} and extra={d}:{s}",
             .{ first_child.id, first_child.name, extra_child.id, extra_child.name },
         ) catch try ctx.failTyped([]const u8, "out of memory");

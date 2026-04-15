@@ -25,7 +25,7 @@ const Counter = struct {
 
     pub fn toString(ctx: *zua.Context, self: *Counter) ![]const u8 {
         return std.fmt.allocPrint(
-            ctx.allocator(),
+            ctx.arena(),
             "Counter({d})",
             .{self.count},
         ) catch try ctx.failTyped([]const u8, "out of memory");
@@ -54,8 +54,8 @@ fn makeRangeCondition(min: f64, max: f64) Condition {
 
 fn describeCondition(ctx: *zua.Context, cond: Condition) ![]const u8 {
     return switch (cond) {
-        .eq => |value| std.fmt.allocPrint(ctx.allocator(), "eq {d}", .{value}),
-        .in_range => |range| std.fmt.allocPrint(ctx.allocator(), "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
+        .eq => |value| std.fmt.allocPrint(ctx.arena(), "eq {d}", .{value}),
+        .in_range => |range| std.fmt.allocPrint(ctx.arena(), "in_range {{ min = {d}, max = {d} }}", .{ range.min, range.max }),
     } catch try ctx.failTyped([]const u8, "out of memory");
 }
 

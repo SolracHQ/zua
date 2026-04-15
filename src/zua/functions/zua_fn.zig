@@ -224,7 +224,8 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
             else
                 total;
             return Mapper.Decoder.parseTuple(ctx, 1, effective_count, types) catch |err| {
-                std.debug.print("argument decoding failed: {any}\n", .{err});
+                std.debug.print("{s}, {d}\n", .{ @typeName(@TypeOf(function)), effective_count });
+                std.debug.print("argument decoding failed: {s}\n", .{ctx.err orelse @errorName(err)});
                 setParseError(ctx);
                 return error.Failed;
             };
@@ -243,7 +244,7 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                 return;
             }
 
-            ctx.err = std.fmt.allocPrint(ctx.allocator(), error_config.parse_err_fmt, .{ctx.err orelse fallback}) catch fallback;
+            ctx.err = std.fmt.allocPrint(ctx.arena(), error_config.parse_err_fmt, .{ctx.err orelse fallback}) catch fallback;
         }
 
         /// Calls the wrapped function with decoded arguments, injecting `ctx`,
@@ -311,7 +312,7 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                 hook(ctx, err);
                 return ctx.err orelse @errorName(err);
             }
-            return std.fmt.allocPrint(ctx.allocator(), error_config.zig_err_fmt, .{@errorName(err)}) catch @errorName(err);
+            return std.fmt.allocPrint(ctx.arena(), error_config.zig_err_fmt, .{@errorName(err)}) catch @errorName(err);
         }
 
         fn returnValueCount() usize {

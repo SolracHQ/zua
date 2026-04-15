@@ -8,7 +8,7 @@ Declare `*zua.Context` as the first parameter. zua recognizes it at compile time
 
 ```zig
 fn greet(ctx: *zua.Context, name: []const u8) []const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "hello, {s}", .{name})
+    return std.fmt.allocPrint(ctx.arena(), "hello, {s}", .{name})
         catch unreachable;
 }
 
@@ -23,7 +23,7 @@ print(greet("world"))  -- hello, world
 
 ## The call arena
 
-`ctx.allocator()` returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.
+`ctx.arena()` returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.
 
 > [!NOTE]
 > An arena allocator hands out memory in one direction and frees everything at once. It is very fast and needs no per-allocation bookkeeping. The trade-off is that you cannot free individual items, only the whole arena. Since zua's call arena is freed automatically, individual frees would not make sense anyway.
@@ -31,16 +31,16 @@ print(greet("world"))  -- hello, world
 The string returned by `greet` above is allocated from the arena. zua copies it into Lua's own memory before the arena is freed, so the Lua side always holds a valid string regardless of what happens to the arena.
 
 > [!WARNING]
-> Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with `ctx.state.allocator` and manage the lifetime yourself.
+> Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with `ctx.heap()` and manage the lifetime yourself.
 
-## ctx.allocator vs ctx.state.allocator
+## ctx.allocator vs ctx.heap()
 
 There are two allocators available inside a zua callback:
 
-- `ctx.allocator()` is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.
-- `ctx.state.allocator` is the persistent allocator. Survives across calls, must be freed manually, typically in a `__gc` handler.
+- `ctx.arena()` is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.
+- `ctx.heap()` is the persistent allocator. Survives across calls, must be freed manually, typically in a `__gc` handler.
 
-Use `ctx.allocator()` for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use `ctx.state.allocator` for anything that needs to outlive the call: object fields, stored callbacks, owned resources.
+Use `ctx.arena()` for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use `ctx.heap()` for anything that needs to outlive the call: object fields, stored callbacks, owned resources.
 
 ```zig
 const Entry = struct {
@@ -49,7 +49,7 @@ const Entry = struct {
         .__gc = cleanup,
     });
 
-    // allocated from ctx.state.allocator, survives across calls
+    // allocated from ctx.heap(), survives across calls
     label: []const u8,
 
     pub fn getLabel(self: *Entry) []const u8 {
@@ -57,12 +57,12 @@ const Entry = struct {
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Entry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !Entry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return Entry{ .label = owned };
 }

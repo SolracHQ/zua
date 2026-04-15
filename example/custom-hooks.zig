@@ -54,7 +54,7 @@ const Address = struct {
     }
 
     pub fn toString(ctx: *zua.Context, self: *Address) ![]const u8 {
-        return std.fmt.allocPrint(ctx.allocator(), "0x{X}", .{self.inner}) catch
+        return std.fmt.allocPrint(ctx.arena(), "0x{X}", .{self.inner}) catch
             try ctx.failTyped([]const u8, "out of memory");
     }
 
@@ -94,7 +94,7 @@ fn defaultPriority() Priority {
 
 fn describePriority(ctx: *zua.Context, p: Priority) ![]const u8 {
     return std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "priority={s} ({})",
         .{ @tagName(p), @intFromEnum(p) },
     ) catch try ctx.failTyped([]const u8, "out of memory");

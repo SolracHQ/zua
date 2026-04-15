@@ -83,7 +83,7 @@ For `.object` methods, `self` is a pointer to the live Zig value inside the user
 
 ```zig
 pub fn toString(ctx: *zua.Context, self: Point) ![]const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+    return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
         catch return ctx.fail("out of memory");
 }
 ```
@@ -108,7 +108,7 @@ const Vec2 = struct {
     }
 
     pub fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
-        return std.fmt.allocPrint(ctx.allocator(), "({d}, {d})", .{ self.x, self.y })
+        return std.fmt.allocPrint(ctx.arena(), "({d}, {d})", .{ self.x, self.y })
             catch return ctx.fail("out of memory");
     }
 

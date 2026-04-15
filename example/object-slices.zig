@@ -27,7 +27,7 @@ const demo_processes = [_]Process{
 };
 
 fn listProcesses(ctx: *zua.Context) ![]const Process {
-    return ctx.allocator().dupe(Process, demo_processes[0..demo_processes.len]) catch try ctx.failTyped([]const Process, "out of memory");
+    return ctx.arena().dupe(Process, demo_processes[0..demo_processes.len]) catch try ctx.failTyped([]const Process, "out of memory");
 }
 
 pub fn main(init: std.process.Init) !void {

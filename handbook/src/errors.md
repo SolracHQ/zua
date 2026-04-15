@@ -22,7 +22,7 @@ For a message built at runtime, use `ctx.failWithFmt`:
 
 ```zig
 fn openFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024)
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024)
         catch |err| return ctx.failWithFmt("cannot open '{s}': {s}", .{ path, @errorName(err) });
 }
 ```
@@ -35,7 +35,7 @@ If a Zig error escapes your function without being caught, the trampoline catche
 
 ```zig
 fn readFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024);
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024);
 }
 
 globals.set(&ctx, "read_file", zua.ZuaFn.new(readFile, .{
@@ -51,7 +51,7 @@ When you need to build the error message dynamically based on which error occurr
 ```zig
 fn describeError(ctx: *zua.Context, err: anyerror) void {
     ctx.err = std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "file error ({s}): check path and permissions",
         .{@errorName(err)},
     ) catch "file error";
@@ -63,7 +63,7 @@ globals.set(&ctx, "read_file", zua.ZuaFn.new(readFile, .{
 }));
 ```
 
-The hook sets `ctx.err`. If it allocates, use `ctx.allocator()` so zua owns and frees the string after raising the error.
+The hook sets `ctx.err`. If it allocates, use `ctx.arena()` so zua owns and frees the string after raising the error.
 
 ## Catching errors from Zig
 
@@ -87,7 +87,7 @@ executor.execute(&ctx, .{
     std.debug.print("error: {s}\n", .{ctx.err orelse "unknown"});
     if (executor.stack_trace) |trace| {
         std.debug.print("traceback:\n{s}\n", .{trace});
-        ctx.state.allocator.free(trace);
+        ctx.heap().free(trace);
     }
 };
 ```

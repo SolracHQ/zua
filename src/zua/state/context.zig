@@ -11,8 +11,13 @@ pub const State = @import("state.zig");
 
 /// Shared global Zua `State` pointer used by the current callback. This pointer is borrowed for the duration of the invocation and is not owned by `Context`.
 state: *State,
-/// Arena allocator for temporary allocations made during the current ZuaFn invocation. It is freed by `deinit` and should only be used for transient values that do not need to survive after the callback returns.
-arena: std.heap.ArenaAllocator,
+/// Arena allocator for temporary allocations made during the current ZuaFn invocation.
+/// It is freed by `deinit` and should only be used for transient values that do not
+/// need to survive after the callback returns.
+///
+/// The public API exposes this through `ctx.arena()`; the backing field is named
+/// `__arena` to avoid conflicts with a user-facing property.
+__arena: std.heap.ArenaAllocator,
 /// Optional Lua-facing error message recorded when a runtime failure occurs.
 /// This may point to a static string or an arena allocation; `Context` never frees the message directly.
 err: ?[]const u8 = null,
@@ -35,10 +40,10 @@ err: ?[]const u8 = null,
 /// defer ctx.deinit();
 /// ```
 pub fn init(z: *State) Context {
-    const arena = std.heap.ArenaAllocator.init(z.allocator);
+    const __arena = std.heap.ArenaAllocator.init(z.allocator);
     return Context{
         .state = z,
-        .arena = arena,
+        .__arena = __arena,
     };
 }
 
@@ -54,20 +59,32 @@ pub fn init(z: *State) Context {
 /// // use ctx inside the callback
 /// ```
 pub fn deinit(self: *Context) void {
-    self.arena.deinit();
+    self.__arena.deinit();
 }
 
-/// Returns the allocator attached to this `Context`.
+/// Returns the temporary arena allocator attached to this `Context`.
 ///
-/// This allocator is intended for temporary allocations that only need to live until the current callback returns.
-/// Use it for error strings, scratch buffers, and transient helper data.
+/// This allocator is intended for transient allocations that only need to live until the current callback returns.
+/// Use it for error strings, scratch buffers, and temporary helper data.
 ///
 /// Returns:
-/// - std.mem.Allocator: An allocator backed by the context arena.
+/// - std.mem.Allocator: An allocator backed by the call-local arena.
 ///
-/// For allocations that must outlive the callback, use `z.allocator` instead.
-pub fn allocator(self: *Context) std.mem.Allocator {
-    return self.arena.allocator();
+/// For allocations that must outlive the callback, use `ctx.heap()` instead.
+pub fn arena(self: *Context) std.mem.Allocator {
+    return self.__arena.allocator();
+}
+
+/// Returns the persistent heap allocator associated with the shared `State`.
+///
+/// Use this allocator for values that must outlive the current Lua call,
+/// including object fields, stored callbacks, and owned resources.
+/// The caller is responsible for freeing allocations made from this allocator.
+///
+/// Returns:
+/// - std.mem.Allocator: The state allocator.
+pub fn heap(self: *Context) std.mem.Allocator {
+    return self.state.allocator;
 }
 
 /// Records a Lua-facing error message on the `Context` and returns `error.Failed`.
@@ -131,9 +148,8 @@ pub fn failTyped(self: *Context, comptime T: type, msg: []const u8) !T {
 ///     try ctx.failWithFmt("allocation failed: {s}", .{err});
 /// }
 /// ```
-pub fn failWithFmt(self: *Context, fmt: []const u8, args: anytype) !void {
-    const arena = self.allocator();
-    const msg = std.fmt.allocPrint(arena, fmt, args) catch
+pub fn failWithFmt(self: *Context, comptime fmt: []const u8, args: anytype) !void {
+    const msg = std.fmt.allocPrint(self.arena(), fmt, args) catch
         return error.Failed;
     self.err = msg;
     return error.Failed;
@@ -156,8 +172,7 @@ pub fn failWithFmt(self: *Context, fmt: []const u8, args: anytype) !void {
 /// const value = parseInput() orelse return ctx.failWithFmtTyped(i32, "invalid input: {s}", .{err});
 /// ```
 pub fn failWithFmtTyped(self: *Context, comptime T: type, comptime fmt: []const u8, args: anytype) !T {
-    const arena = self.allocator();
-    const msg = std.fmt.allocPrint(arena, fmt, args) catch
+    const msg = std.fmt.allocPrint(self.arena(), fmt, args) catch
         return error.Failed;
     self.err = msg;
     return error.Failed;

@@ -18,8 +18,8 @@ pub const Config = struct {
     },
     /// Controls whether a Lua stack traceback is captured and how it is stored.
     stack_trace: enum {
-        onArena,
-        owned,
+        arena,
+        heap,
         no,
     } = .no,
     /// If true, the error message from context is copied into the state allocator
@@ -98,13 +98,13 @@ pub fn eval(self: *Executor, ctx: *Context, comptime types: anytype, config: Con
 fn loadChunk(ctx: *Context, config: Config) lua.Error!void {
     return switch (config.code) {
         .string => {
-            const source = try ctx.state.allocator.dupeZ(u8, config.code.string);
-            defer ctx.state.allocator.free(source);
+            const source = try ctx.heap().dupeZ(u8, config.code.string);
+            defer ctx.heap().free(source);
             try lua.loadString(ctx.state.luaState, source);
         },
         .file => {
-            const path = try ctx.state.allocator.dupeZ(u8, config.code.file);
-            defer ctx.state.allocator.free(path);
+            const path = try ctx.heap().dupeZ(u8, config.code.file);
+            defer ctx.heap().free(path);
             try lua.loadFile(ctx.state.luaState, .{ .path = path });
         },
     };
@@ -128,7 +128,7 @@ fn setLuaError(self: *Executor, ctx: *Context, status: lua.Error, config: Config
     const message = try allocateErrorMessage(ctx, raw_message, config);
     ctx.err = message;
     self.lua_error_status = status;
-    if (config.take_error_ownership or config.stack_trace == .owned) {
+    if (config.take_error_ownership or config.stack_trace == .heap) {
         self.err = message;
         if (config.stack_trace != .no) self.stack_trace = message;
     } else {
@@ -139,17 +139,17 @@ fn setLuaError(self: *Executor, ctx: *Context, status: lua.Error, config: Config
 }
 
 fn allocateErrorMessage(ctx: *Context, raw_message: []const u8, config: Config) ![]const u8 {
-    const alloc = if (config.take_error_ownership or config.stack_trace == .owned)
-        ctx.state.allocator
+    const alloc = if (config.take_error_ownership or config.stack_trace == .heap)
+        ctx.heap()
     else
-        ctx.allocator();
+        ctx.arena();
 
     return alloc.dupe(u8, raw_message);
 }
 
 fn takeErrorOwnership(self: *Executor, ctx: *Context) !void {
     if (ctx.err) |msg| {
-        const owned = try ctx.state.allocator.dupe(u8, msg);
+        const owned = try ctx.heap().dupe(u8, msg);
         self.err = owned;
     }
 }

@@ -20,6 +20,8 @@ const Mapper = @import("mapper.zig");
 
 pub const Encoder = @This();
 
+pub const Primitive = Mapper.Primitive;
+
 /// Pushes a Zig value onto the Lua stack.
 ///
 /// The value is converted according to its compile-time type, including custom
@@ -46,6 +48,11 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
         } else {
             lua.pushNil(ctx.state.luaState);
         }
+        return;
+    }
+
+    if (comptime T == Primitive) {
+        pushLuaPrimitive(ctx, value);
         return;
     }
 
@@ -196,6 +203,24 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
             fillTable(ctx, nested, value);
         },
         else => @compileError("unsupported push type: " ++ @typeName(T)),
+    }
+}
+
+/// Pushes a `Primitive` value onto the Lua stack using the appropriate Lua API call.
+///
+/// This function is used by the encoder when a Zig value is represented as a `Primitive`
+/// for custom encode hooks or when the value is already a `Primitive`.
+pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) void {
+    switch (value) {
+        .nil => lua.pushNil(ctx.state.luaState),
+        .boolean => |b| lua.pushBoolean(ctx.state.luaState, b),
+        .integer => |i| lua.pushInteger(ctx.state.luaState, i),
+        .float => |f| lua.pushNumber(ctx.state.luaState, f),
+        .string => |s| lua.pushString(ctx.state.luaState, s),
+        .table => |t| pushValue(ctx, t),
+        .function => |f| pushValue(ctx, f),
+        .light_userdata => |p| lua.pushLightUserdata(ctx.state.luaState, p),
+        .userdata => |u| pushValue(ctx, u),
     }
 }
 

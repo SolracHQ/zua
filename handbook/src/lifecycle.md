@@ -20,18 +20,18 @@ const TextEntry = struct {
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *TextEntry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return TextEntry{ .label = owned };
 }
 ```
 
-`cleanup` receives `*zua.Context` like any other zua callback, so it has access to `ctx.state.allocator` for freeing persistent memory. The `label` slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.
+`cleanup` receives `*zua.Context` like any other zua callback, so it has access to `ctx.heap()` for freeing persistent memory. The `label` slice was duplicated from Lua string memory into the state allocator when the object was created, so it needs to be freed explicitly.
 
 ## What __gc does not cover
 
@@ -75,7 +75,7 @@ const Connection = struct {
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Connection) void {
-        ctx.state.allocator.free(self.host);
+        ctx.heap().free(self.host);
         if (self.on_data) |cb| cb.release();
     }
 };

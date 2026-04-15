@@ -22,24 +22,7 @@ const Mapper = @import("mapper.zig");
 
 pub const Decoder = @This();
 
-/// Decoded Lua primitive value, used by custom decode hooks.
-///
-/// Represents a Lua value after type-checking but before type-specific decoding.
-/// The `table` variant holds a borrowed handle valid for the duration of the
-/// decode hook execution (the value remains on the stack).
-pub const Primitive =
-    union(enum) {
-        /// Represents a Lua `nil` or absent value.
-        nil,
-        boolean: bool,
-        integer: i64,
-        float: f64,
-        string: []const u8,
-        table: Table,
-        function: Function,
-        light_userdata: *anyopaque,
-        userdata: Userdata,
-    };
+pub const Primitive = Mapper.Primitive;
 
 /// Variadic Lua arguments captured as a slice of primitives.
 ///
@@ -265,6 +248,14 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         if (prim == .nil) return null;
         return try decodeValue(ctx, prim, Mapper.optionalChild(T));
     }
+
+    if (comptime T == Primitive) return prim;
+
+    if (comptime T == void) {
+        if (prim != .nil) return ctx.failTyped(T, "expected nil for void type");
+        return;
+    }
+
     if (prim == .nil) return ctx.failTyped(T, "expected value, got nil");
 
     if (comptime isHandlerType(T)) {
@@ -325,7 +316,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 /// Builds a `VarArgs` value from `count` consecutive Lua stack slots starting
 /// at `start_index`. The resulting slice is allocated from the context arena.
 pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !VarArgs {
-    const args = try ctx.allocator().alloc(Primitive, count);
+    const args = try ctx.arena().alloc(Primitive, count);
     for (0..count) |i| {
         args[i] = try buildPrimitive(ctx.state, start_index + @as(lua.StackIndex, @intCast(i)));
     }
@@ -498,8 +489,8 @@ fn decodeSlice(comptime T: type, ctx: *Context, table: Table) !T {
         inline else => |idx| idx,
     };
     const len = lua.rawLen(ctx.state.luaState, index);
-    const slice = try ctx.allocator().alloc(Element, @intCast(len));
-    errdefer ctx.allocator().free(slice);
+    const slice = try ctx.arena().alloc(Element, @intCast(len));
+    errdefer ctx.arena().free(slice);
 
     for (0..@intCast(len)) |i| {
         slice[i] = try table.get(ctx, @as(i64, @intCast(i + 1)), Element);

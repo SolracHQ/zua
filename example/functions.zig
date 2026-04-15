@@ -7,7 +7,7 @@ fn add(a: i32, b: i32) i32 {
 
 fn greet(ctx: *zua.Context, name: []const u8) ![]const u8 {
     return std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "Hello, {s}!",
         .{name},
     ) catch try ctx.failTyped([]const u8, "out of memory");
@@ -62,8 +62,8 @@ fn sumAll(ctx: *zua.Context, args: zua.VarArgs) !i64 {
 fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
-        if (i > 0) try buf.appendSlice(ctx.allocator(), ", ");
-        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+        if (i > 0) try buf.appendSlice(ctx.arena(), ", ");
+        try buf.appendSlice(ctx.arena(), @tagName(prim));
     }
     return buf.items;
 }
