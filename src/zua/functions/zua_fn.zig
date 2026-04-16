@@ -223,9 +223,7 @@ fn ZuaFn(comptime function: anytype, comptime kind: CallbackKind, comptime error
                 @min(total, @as(lua.StackCount, @intCast(decodedParameterCount())))
             else
                 total;
-            return Mapper.Decoder.parseTuple(ctx, 1, effective_count, types) catch |err| {
-                std.debug.print("{s}, {d}\n", .{ @typeName(@TypeOf(function)), effective_count });
-                std.debug.print("argument decoding failed: {s}\n", .{ctx.err orelse @errorName(err)});
+            return Mapper.Decoder.parseTuple(ctx, 1, effective_count, types) catch {
                 setParseError(ctx);
                 return error.Failed;
             };

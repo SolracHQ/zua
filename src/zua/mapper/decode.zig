@@ -196,14 +196,14 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .object => {
             const raw = switch (prim) {
                 .userdata => |p| p,
-                else => return ctx.failTyped(T, "expected userdata"),
+                else => return ctx.failWithFmtTyped(T, "expected userdata but got {s}", .{@tagName(prim)}),
             };
             return Object(Pointee).from(raw).get();
         },
         .ptr => {
             const raw = switch (prim) {
                 .light_userdata => |p| p,
-                else => return ctx.failTyped(T, "expected light userdata"),
+                else => return ctx.failWithFmtTyped(T, "expected light userdata but got {s}", .{@tagName(prim)}),
             };
             return @ptrCast(@alignCast(raw));
         },
@@ -296,17 +296,17 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         },
         .int => switch (prim) {
             .integer => |i| std.math.cast(T, i) orelse return ctx.failTyped(T, "integer out of range"),
-            else => ctx.failTyped(T, "expected integer"),
+            else => ctx.failWithFmtTyped(T, "expected integer but got {s}", .{@tagName(prim)}),
         },
         .float => switch (prim) {
             .float => |f| @floatCast(f),
             .integer => |i| @floatFromInt(i),
-            else => ctx.failTyped(T, "expected float"),
+            else => ctx.failWithFmtTyped(T, "expected float but got {s}", .{@tagName(prim)}),
         },
         else => if (comptime Mapper.isStringValueType(T))
             switch (prim) {
                 .string => |s| s,
-                else => ctx.failTyped(T, "expected string"),
+                else => ctx.failWithFmtTyped(T, "expected string but got {s}", .{@tagName(prim)}),
             }
         else
             @compileError("unsupported decode type: " ++ @typeName(T)),

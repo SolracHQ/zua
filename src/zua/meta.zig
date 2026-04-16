@@ -9,11 +9,7 @@ const Mapper = @import("mapper/mapper.zig");
 const Primitive = Mapper.Decoder.Primitive;
 const Context = @import("state/context.zig");
 
-/// Public API overview:
-/// - `Strategy` selects the Lua representation for a Zig type.
-/// - `Object`, `Table`, `Ptr`, `Capture`, and `strEnum` declare metadata on a type.
-/// - `getMeta(T)` returns the metadata for any type, applying defaults.
-///
+/// The translation strategy for a type determines how it is represented in Lua and what operations are supported on it. The strategy is the core piece of metadata
 pub const Strategy = enum {
     /// The value is represented as a Lua table.
     table,
@@ -36,7 +32,7 @@ pub const Strategy = enum {
 /// This helper is used by `MetaData` to represent encode hooks that take the
 /// current call `Context` and a Zig value of type `T`, then return a proxy type
 /// to push into Lua.
-fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
+pub fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
     return fn (*Context, T) ProxyType;
 }
 
@@ -44,7 +40,7 @@ fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
 ///
 /// This helper represents a hook that receives a Lua `Primitive` and the
 /// current evaluation `Context`, then returns a decoded `T` or fails.
-fn DecodeHook(comptime T: type) type {
+pub fn DecodeHook(comptime T: type) type {
     return fn (*Context, Primitive) anyerror!T;
 }
 
