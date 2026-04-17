@@ -22,7 +22,7 @@ pub const Object = @import("zua/typed/object.zig").Object;
 pub const TableView = @import("zua/typed/view.zig").TableView;
 
 // Functions
-pub const ZuaFn = @import("zua/functions/zua_fn.zig");
+pub const Native = @import("zua/functions/native.zig");
 
 // Luz-Zig mapping layer
 pub const Mapper = @import("zua/mapper/mapper.zig");

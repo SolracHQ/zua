@@ -40,7 +40,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "list_processes", zua.ZuaFn.new(listProcesses, .{
+    globals.set(&ctx, "list_processes", zua.Native.new(listProcesses, .{
         .parse_err_fmt = "list_processes expects no arguments: {s}",
     }));
 

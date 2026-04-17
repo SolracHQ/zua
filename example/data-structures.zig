@@ -54,10 +54,10 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "print_point", zua.ZuaFn.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }));
-    globals.set(&ctx, "create_config", zua.ZuaFn.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }));
-    globals.set(&ctx, "get_config_value", zua.ZuaFn.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }));
-    globals.set(&ctx, "sum_numbers", zua.ZuaFn.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }));
+    globals.set(&ctx, "print_point", zua.Native.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }));
+    globals.set(&ctx, "create_config", zua.Native.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }));
+    globals.set(&ctx, "get_config_value", zua.Native.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }));
+    globals.set(&ctx, "sum_numbers", zua.Native.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }));
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\-- Create and pass tables

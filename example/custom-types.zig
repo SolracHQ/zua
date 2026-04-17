@@ -4,7 +4,7 @@ const zua = @import("zua");
 const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
-        .increment = zua.ZuaFn.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
+        .increment = zua.Native.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
         .reset = reset,
         .__tostring = toString,
     });

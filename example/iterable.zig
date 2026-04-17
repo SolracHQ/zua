@@ -19,7 +19,7 @@ pub fn closure(state: *IteratorState, unknown: ?void, prev: ?usize) ?usize {
     return current;
 }
 
-fn range(start: usize, end: usize, step: usize) zua.ZuaFn.ZuaFnClosureType(closure, .{}) {
+fn range(start: usize, end: usize, step: usize) zua.Native.Closure(closure, .{}) {
     return .{ .initial = .{
         .start = start,
         .end = end,

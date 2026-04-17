@@ -109,9 +109,9 @@ pub fn main(init: std.process.Init) !void {
     globals.set(&ctx, "add", add);
     globals.set(&ctx, "multiply", multiply);
     globals.set(&ctx, "Counter", makeCounter);
-    globals.set(&ctx, "Vector", zua.ZuaFn.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
-    globals.set(&ctx, "map_with_callback", zua.ZuaFn.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
-    globals.set(&ctx, "filter_and_sum", zua.ZuaFn.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
+    globals.set(&ctx, "Vector", zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
+    globals.set(&ctx, "map_with_callback", zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
+    globals.set(&ctx, "filter_and_sum", zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
     globals.set(&ctx, "multi_return_example", multiReturnExample);
 
     const code =

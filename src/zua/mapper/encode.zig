@@ -15,7 +15,7 @@ const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
 const Meta = @import("../meta.zig");
 const MetaTable = @import("../metatable.zig");
-const ZuaFn = @import("../functions/zua_fn.zig");
+const Native = @import("../functions/native.zig");
 const Mapper = @import("mapper.zig");
 
 pub const Encoder = @This();
@@ -71,7 +71,7 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
     }
 
     if (comptime @typeInfo(T) == .@"fn") {
-        pushValue(ctx, ZuaFn.new(value, .{}));
+        pushValue(ctx, Native.new(value, .{}));
         return;
     }
 

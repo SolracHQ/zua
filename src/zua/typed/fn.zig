@@ -5,7 +5,7 @@
 //! API while preserving the expected argument and return shapes.
 
 const Function = @import("../handlers/function.zig");
-const ZuaFn = @import("../functions/zua_fn.zig");
+const Native = @import("../functions/native.zig");
 const Context = @import("../state/context.zig");
 const Mapper = @import("../mapper/mapper.zig");
 const Meta = @import("../meta.zig");
@@ -118,7 +118,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
 fn callbackWrapperType(comptime callback: anytype) type {
     const callback_type = @TypeOf(callback);
     if (comptime @typeInfo(callback_type) == .@"fn") {
-        return @TypeOf(ZuaFn.new(callback, .{}));
+        return @TypeOf(Native.new(callback, .{}));
     }
     if (comptime @typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaFn")) {
         return callback_type;

@@ -9,6 +9,7 @@
 - `ctx.arena()` exposes the call-local arena allocator for temporary allocations that live only for the duration of the current Lua callback.
 - `ctx.heap()` exposes the persistent state allocator for values that must outlive the current call.
 - Moved `Primitive` from `Mapper.Decoder` into `Mapper` so primitive types are available to both decoding and encoding paths.
+- Replaced the vague `ZuaFn` public interface with explicit `NativeFn` and `Closure` wrapper constructors. `ZuaFn` conflated callback wrapping and user-facing closure/error-handling APIs, while `Native` now clearly refers to Zig native callback wrappers and `Closure` refers to wrapped callbacks with captured state.
 - Added support for encoding and decoding `Primitive` values directly.
 - Updated `mise.toml` to use Zig `0.16.0` from the stable release channel.
 

@@ -3,7 +3,6 @@ const lua = @import("../../lua/lua.zig");
 const Table = @import("../handlers/table.zig").Table;
 const Mapper = @import("../mapper/mapper.zig");
 const Context = @import("context.zig");
-const ZuaStateFn = @import("../functions/zua_fn.zig");
 const metatable = @import("../metatable.zig");
 
 const zua_registry_key: [:0]const u8 = "zua_zua";
