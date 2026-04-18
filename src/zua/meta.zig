@@ -53,11 +53,17 @@ pub fn DecodeHook(comptime T: type) type {
 /// optional encode/decode hooks for `T`. It is the underlying type behind
 /// `Object()`, `Table()`, `Ptr()`, and `strEnum()`.
 fn MetaData(
-    comptime T: type,
+    comptime Type: type,
     comptime strat: Strategy,
     comptime methods: anytype,
     comptime ProxyType: type,
 ) type {
+    if (comptime !@hasDecl(Type, "ZUA_META") and !@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) {
+        @compileError("ZUA_META must exist and be pub const on " ++ @typeName(Type));
+    }
+
+    const T = if (@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__DEFAULT_GUARD_ORIGINAL_TYPE else Type;
+
     return struct {
         strategy: Strategy = strat,
         methods: @TypeOf(methods) = methods,
@@ -255,8 +261,8 @@ pub fn getMetaType(comptime T: type) type {
     const info = @typeInfo(T);
     if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
     if (comptime @hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META);
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void);
-    return MetaData(T, .table, .{}, void);
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void);
+    return MetaData(DefaultGuard(T), .table, .{}, void);
 }
 
 /// Returns the metadata value for `T`, applying default strategy rules.
@@ -278,8 +284,14 @@ pub fn getMeta(comptime T: type) getMetaType(T) {
     const info = @typeInfo(T);
     if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
     if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void){};
-    return MetaData(T, .table, .{}, void){};
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void){};
+    return MetaData(DefaultGuard(T), .table, .{}, void){};
+}
+
+pub fn DefaultGuard(comptime T: type) type {
+    return struct {
+        pub const __DEFAULT_GUARD_ORIGINAL_TYPE = T;
+    };
 }
 
 fn assertStructEnumOrUnion(comptime T: type) void {
