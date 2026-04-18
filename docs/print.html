@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -387,7 +387,7 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.heap()</code> and manage the lifetime yourself.</p>
 </blockquote>
-<h2 id="ctxallocator-vs-ctxstateallocator"><a class="header" href="#ctxallocator-vs-ctxstateallocator">ctx.allocator vs ctx.heap()</a></h2>
+<h2 id="ctxallocator-vs-ctxheap"><a class="header" href="#ctxallocator-vs-ctxheap">ctx.allocator vs ctx.heap()</a></h2>
 <p>There are two allocators available inside a zua callback:</p>
 <ul>
 <li><code>ctx.arena()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>
@@ -654,6 +654,21 @@ print(e.address)  -- nil  (fields are not accessible)
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p><code>ZUA_META</code> must be declared as <code>pub const ZUA_META</code>. If it is not public, zua will not see the metadata and the strategy, methods, and hooks on the type will not be applied.</p>
 </blockquote>
+<h2 id="list-style-objects"><a class="header" href="#list-style-objects">List-style objects</a></h2>
+<p>For sequence-like userdata values, use <code>zua.Meta.List(T, getElements, methods)</code> as a convenience builder.</p>
+<p>This helper creates <code>.object</code> metadata for a container type and automatically generates the common Lua collection methods:</p>
+<ul>
+<li><code>get(self, index)</code> returns the element at 1-based index or <code>nil</code>.</li>
+<li><code>__index</code> makes <code>list[1]</code> syntax work.</li>
+<li><code>__len</code> makes <code>#list</code> return the element count.</li>
+<li><code>iter</code> supports <code>for x in list do</code> iteration.</li>
+</ul>
+<p><code>getElements</code> must be a comptime function returning a slice of the list’s elements:</p>
+<pre><code class="language-zig">fn getElements(self: *ProcList) []zua.Object(Process) {
+    return self.processes.items;
+}
+</code></pre>
+<p>You can still add custom metadata like <code>__gc</code> and <code>__tostring</code>, but <code>Meta.List</code> reserves the generated method names and rejects collisions with user methods.</p>
 <h2 id="ptr"><a class="header" href="#ptr">.ptr</a></h2>
 <p>The <code>.ptr</code> strategy is the minimal opaque strategy: just a light userdata pointer. No metatable, no methods. Lua can hold the value and pass it back, but cannot do anything else with it.</p>
 <pre><code class="language-zig">const ScanContext = struct {
@@ -703,6 +718,10 @@ print(scale(ctx, 10))  -- Zig receives the *ScanContext back
 print(p:distance())  -- 5
 </code></pre>
 <p>The keys in the method list become the Lua method names. The values are Zig function references, and the same <code>ZuaFn.new</code> wrapper that works for top-level functions works here too, covered below.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>zua.Meta.List</code> is a helper for sequence-like <code>.object</code> values. It generates common collection methods such as <code>get</code>, <code>__index</code>, <code>__len</code>, and <code>iter</code>, and merges them with your custom methods. Do not redeclare those generated names in the supplied <code>methods</code> struct.</p>
+</blockquote>
 <h2 id="self-types-for-table-methods"><a class="header" href="#self-types-for-table-methods">Self types for .table methods</a></h2>
 <p>For <code>.table</code> methods, <code>self</code> can be either the struct type or a <code>zua.Table</code> handle:</p>
 <ul>
@@ -921,24 +940,21 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
 
     pub fn getValue(self: *Address) u64 { return self.inner; }
 
-    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !Address {
+    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Address {
         return switch (prim) {
             .integer  =&gt; |n| .{ .inner = @intCast(n) },
             .string   =&gt; |s| blk: {
                 const digits = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
                 break :blk .{ .inner = std.fmt.parseInt(u64, digits, 16)
-                    catch return ctx.failTyped(Address, "invalid hex address") };
+                    catch return ctx.failTyped(?Address, "invalid hex address") };
             },
-            .userdata =&gt; |ptr| blk: {
-                const a: *Address = @ptrCast(@alignCast(ptr.get()));
-                break :blk .{ .inner = a.inner };
-            },
-            else =&gt; ctx.failTyped(Address, "expected integer, hex string, or Address"),
+            .userdata =&gt; null, // allow the default object decode path for existing Address handles
+            else =&gt; ctx.failTyped(?Address, "expected integer, hex string, or Address"),
         };
     }
 };
 </code></pre>
-<p>Now any function that takes <code>Address</code> by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions.</p>
+<p>Now any function that takes <code>Address</code> by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions. The hook only handles the special integer/string cases; returning <code>null</code> for userdata lets the normal object decode path handle existing handles.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
 <p>The decode hook fires when the type is decoded as a plain value <code>T</code>. It does not fire for <code>*T</code> receivers in <code>.object</code> methods; those extract the raw userdata pointer directly. So <code>fn method(self: *Address)</code> always receives the Lua userdata handle, while <code>fn f(addr: Address)</code> goes through the hook and accepts all the forms the hook handles.</p>
@@ -998,7 +1014,7 @@ setDirection("east")       -- accepts the string name
 <li>came from calling <code>.takeOwnership()</code>: <strong>registry-owned</strong>.</li>
 </ul>
 <h2 id="takeownership-and-release"><a class="header" href="#takeownership-and-release">takeOwnership and release</a></h2>
-<p>Call <code>.takeOwnership()</code> on any handle to move it into the Lua registry. The returned handle is registry-owned and survives until you call <code>.release()</code>:</p>
+<p>Call <code>.takeOwnership()</code> on any handle to move it into the Lua registry and release the original stack-owned reference when applicable. The returned handle is registry-owned and survives until you call <code>.release()</code>:</p>
 <pre><code class="language-zig">var stored: ?zua.Function = null;
 
 fn setCallback(_: *zua.Context, cb: zua.Function) void {
@@ -1013,6 +1029,7 @@ fn clearCallback() void {
     }
 }
 </code></pre>
+<p>If you need a second registry-owned copy without releasing the original handle, use <code>.owned()</code> instead.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
 <p>Registry-owned handles must be released with <code>.release()</code> when you no longer need them. Failing to release leaks the Lua reference and prevents the garbage collector from collecting the function or table.</p>
@@ -1199,11 +1216,13 @@ fn makeWrapper(_: *zua.Context, node: zua.Object(Node)) Wrapper {
 local w = makeWrapper(n)
 print(w:get_node())  -- 42
 </code></pre>
-<p><code>node.get()</code> returns <code>*Node</code>, a direct pointer into the Lua userdata memory. <code>.takeOwnership()</code> moves the handle into the registry so it survives beyond the current callback. <code>.release()</code> in <code>__gc</code> unanchors it so the GC can collect both the <code>Node</code> and the <code>Wrapper</code> when they go out of scope.</p>
+<p><code>node.get()</code> returns <code>*Node</code>, a direct pointer into the Lua userdata memory. <code>.takeOwnership()</code> moves the handle into the registry and releases the old stack-owned reference when applicable, so it is the right choice for newly created userdata values. <code>.release()</code> in <code>__gc</code> unanchors it so the GC can collect both the <code>Node</code> and the <code>Wrapper</code> when they go out of scope.</p>
+<p>If you need to keep the original handle alive while also creating a registry-owned copy, use <code>.owned()</code> instead of <code>.takeOwnership()</code>.</p>
 <p><code>zua.Object(T)</code> performs compile-time validation: <code>T</code> must not be a raw function type, and it must declare <code>.object</code> strategy metadata. This catches invalid object-handle declarations before the code compiles.</p>
 <p>Key rules:</p>
 <ul>
 <li><code>zua.Object(T)</code> decoded from a function parameter is a <strong>borrowed</strong> handle. Call <code>.takeOwnership()</code> if the value must outlive the current callback.</li>
+<li>Use <code>.owned()</code> only when you explicitly need to keep the original handle alive as well.</li>
 <li>Do not embed <code>T</code> directly in a table-strategy struct. Use <code>zua.Object(T)</code> instead.</li>
 <li>Release registry-owned <code>Object(T)</code> handles in <code>__gc</code> to avoid leaking the Lua reference.</li>
 </ul>

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -200,7 +200,7 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.heap()</code> and manage the lifetime yourself.</p>
 </blockquote>
-<h2 id="ctxallocator-vs-ctxstateallocator"><a class="header" href="#ctxallocator-vs-ctxstateallocator">ctx.allocator vs ctx.heap()</a></h2>
+<h2 id="ctxallocator-vs-ctxheap"><a class="header" href="#ctxallocator-vs-ctxheap">ctx.allocator vs ctx.heap()</a></h2>
 <p>There are two allocators available inside a zua callback:</p>
 <ul>
 <li><code>ctx.arena()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>

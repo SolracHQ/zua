@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -207,24 +207,21 @@
 
     pub fn getValue(self: *Address) u64 { return self.inner; }
 
-    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !Address {
+    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Address {
         return switch (prim) {
             .integer  =&gt; |n| .{ .inner = @intCast(n) },
             .string   =&gt; |s| blk: {
                 const digits = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
                 break :blk .{ .inner = std.fmt.parseInt(u64, digits, 16)
-                    catch return ctx.failTyped(Address, "invalid hex address") };
+                    catch return ctx.failTyped(?Address, "invalid hex address") };
             },
-            .userdata =&gt; |ptr| blk: {
-                const a: *Address = @ptrCast(@alignCast(ptr.get()));
-                break :blk .{ .inner = a.inner };
-            },
-            else =&gt; ctx.failTyped(Address, "expected integer, hex string, or Address"),
+            .userdata =&gt; null, // allow the default object decode path for existing Address handles
+            else =&gt; ctx.failTyped(?Address, "expected integer, hex string, or Address"),
         };
     }
 };
 </code></pre>
-<p>Now any function that takes <code>Address</code> by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions.</p>
+<p>Now any function that takes <code>Address</code> by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions. The hook only handles the special integer/string cases; returning <code>null</code> for userdata lets the normal object decode path handle existing handles.</p>
 <blockquote class="blockquote-tag blockquote-tag-important">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
 <p>The decode hook fires when the type is decoded as a plain value <code>T</code>. It does not fire for <code>*T</code> receivers in <code>.object</code> methods; those extract the raw userdata pointer directly. So <code>fn method(self: *Address)</code> always receives the Lua userdata handle, while <code>fn f(addr: Address)</code> goes through the hook and accepts all the forms the hook handles.</p>
