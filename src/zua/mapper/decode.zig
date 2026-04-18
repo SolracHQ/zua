@@ -281,7 +281,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         if (comptime Meta.getMeta(T).decode_hook) |hook| {
-            return try hook(ctx, prim);
+            if (try hook(ctx, prim)) |decoded| return decoded;
         }
     }
 
@@ -366,7 +366,7 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
     if (strategy == .object or strategy == .ptr) {
-        return decodeHostPtr(T, prim, ctx);
+        return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
     if (T == Table) {
@@ -398,7 +398,7 @@ fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
     if (strategy == .object or strategy == .ptr) {
-        return decodeHostPtr(T, prim, ctx);
+        return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
     const table = switch (prim) {
@@ -419,7 +419,7 @@ fn decodeEnum(comptime T: type, prim: Primitive, ctx: *Context) !T {
     };
     const tag = std.math.cast(std.meta.Tag(T), value) orelse
         return ctx.failTyped(T, "integer out of range");
-    return std.meta.intToEnum(T, tag) catch ctx.failTyped(T, "invalid enum value");
+    return @enumFromInt(tag);
 }
 
 /// Decodes a Lua table into a Zig struct by field name.

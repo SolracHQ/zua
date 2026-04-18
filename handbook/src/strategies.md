@@ -58,6 +58,27 @@ The value is allocated as Lua userdata and its lifetime is managed by the Lua ga
 > [!WARNING]
 > `ZUA_META` must be declared as `pub const ZUA_META`. If it is not public, zua will not see the metadata and the strategy, methods, and hooks on the type will not be applied.
 
+## List-style objects
+
+For sequence-like userdata values, use `zua.Meta.List(T, getElements, methods)` as a convenience builder.
+
+This helper creates `.object` metadata for a container type and automatically generates the common Lua collection methods:
+
+- `get(self, index)` returns the element at 1-based index or `nil`.
+- `__index` makes `list[1]` syntax work.
+- `__len` makes `#list` return the element count.
+- `iter` supports `for x in list do` iteration.
+
+`getElements` must be a comptime function returning a slice of the list's elements:
+
+```zig
+fn getElements(self: *ProcList) []zua.Object(Process) {
+    return self.processes.items;
+}
+```
+
+You can still add custom metadata like `__gc` and `__tostring`, but `Meta.List` reserves the generated method names and rejects collisions with user methods.
+
 ## .ptr
 
 The `.ptr` strategy is the minimal opaque strategy: just a light userdata pointer. No metatable, no methods. Lua can hold the value and pass it back, but cannot do anything else with it.

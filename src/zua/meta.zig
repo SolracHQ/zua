@@ -40,8 +40,11 @@ pub fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
 ///
 /// This helper represents a hook that receives a Lua `Primitive` and the
 /// current evaluation `Context`, then returns a decoded `T` or fails.
+///
+/// In the case the developer wants to only decode certain primitives but
+/// continue with the default path for others can just return null to indicate the default decoding should be used.
 pub fn DecodeHook(comptime T: type) type {
-    return fn (*Context, Primitive) anyerror!T;
+    return fn (*Context, Primitive) anyerror!?T;
 }
 
 /// Internal metadata type used by `ZUA_META` builders.
@@ -106,6 +109,20 @@ fn MetaData(
 /// Object strategy types are represented as full userdata in Lua and
 /// expose methods through a metatable. Use this for Zig values that need
 /// identity, mutability, and controlled behavior from Lua.
+///
+/// Example:
+/// ```zig
+/// const Process = struct {
+///     pub const ZUA_META = zua.Meta.Object(Process, .{
+///         .__gc = cleanup,
+///         .__tostring = display,
+///         .getParentPid = getParentPid,
+///     });
+///
+///     pid: std.posix.pid_t,
+///     name: []const u8,
+/// };
+/// ```
 pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, methods, void) {
     assertStructEnumOrUnion(T);
     return .{ .methods = methods };
@@ -115,6 +132,15 @@ pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, 
 ///
 /// Table strategy types are represented as Lua tables with fields mapped from
 /// Zig struct members or union variants. This is the default strategy.
+///
+/// Example:
+/// ```zig
+/// const Point = struct {
+///     pub const ZUA_META = zua.Meta.Table(Point, .{});
+///     x: i32,
+///     y: i32,
+/// };
+/// ```
 pub fn Table(comptime T: type, comptime methods: anytype) MetaData(T, .table, methods, void) {
     assertStructEnumOrUnion(T);
     assertTaggedIfUnion(T);
@@ -183,6 +209,40 @@ pub fn strEnum(comptime T: type, comptime methods: anytype) MetaData(T, .table, 
     };
 }
 
+/// Declare `T` as a list-type `.object` translation strategy.
+///
+/// This builds a userdata-backed list object that supports Lua indexing,
+/// length queries, and iterator semantics. The `getElements` accessor is
+/// used to derive element values and implement the generated methods:
+/// `get`, `__index`, `__len`, and `iter`.
+///
+/// User-provided `methods` are merged with the generated list methods, and
+/// compile-time collisions are rejected so generated names stay stable.
+///
+/// `getElements` must be a comptime function taking `*T` and returning a
+/// slice of element values.
+///
+/// Example:
+/// ```zig
+/// const Process = struct { /* ... */ };
+/// const ProcList = struct {
+///     pub const ZUA_META = zua.Meta.List(ProcList, getElements, .{
+///         .__gc = deinit,
+///         .__tostring = display,
+///     });
+///
+///     processes: std.ArrayList(zua.Object(Process)),
+/// };
+///
+/// fn getElements(self: *ProcList) []zua.Object(Process) {
+///     return self.processes.items;
+/// }
+/// ```
+pub fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype) MetaData(T, .object, mergeMethodSets(generateListMethodsSet(T, getElements), methods), void) {
+    assertNoListCollisions(methods);
+    return .{};
+}
+
 /// Returns the compile-time metadata type for `T`.
 ///
 /// This helper is used internally to determine the metadata layout for a
@@ -193,10 +253,9 @@ pub fn strEnum(comptime T: type, comptime methods: anytype) MetaData(T, .table, 
 /// compile time without depending on a concrete metadata value.
 pub fn getMetaType(comptime T: type) type {
     const info = @typeInfo(T);
-    if (info == .@"fn") @compileError("function types are not supported by getMeta");
-    if (@hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META);
-    if (@hasDecl(T, "ZUA_TRANSLATION_STRATEGY")) return @TypeOf(T.ZUA_TRANSLATION_STRATEGY);
-    if (info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void);
+    if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
+    if (comptime @hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META);
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void);
     return MetaData(T, .table, .{}, void);
 }
 
@@ -217,10 +276,9 @@ pub fn getMetaType(comptime T: type) type {
 /// ```
 pub fn getMeta(comptime T: type) getMetaType(T) {
     const info = @typeInfo(T);
-    if (info == .@"fn") @compileError("function types are not supported by getMeta");
-    if (@hasDecl(T, "ZUA_META")) return T.ZUA_META;
-    if (@hasDecl(T, "ZUA_TRANSLATION_STRATEGY")) return T.ZUA_TRANSLATION_STRATEGY;
-    if (info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void){};
+    if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
+    if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void){};
     return MetaData(T, .table, .{}, void){};
 }
 
@@ -252,17 +310,157 @@ fn strEnumEncode(comptime T: type) fn (*Context, T) []const u8 {
     }.encode;
 }
 
-fn strEnumDecode(comptime T: type) fn (*Context, Primitive) anyerror!T {
+fn strEnumDecode(comptime T: type) DecodeHook(T) {
     return struct {
-        fn decode(ctx: *Context, primitive: Primitive) anyerror!T {
+        fn decode(ctx: *Context, primitive: Primitive) anyerror!?T {
             const str = switch (primitive) {
                 .string => |s| s,
-                else => return ctx.failTyped(T, "expected string"),
+                else => return ctx.failTyped(?T, "expected string"),
             };
             inline for (std.meta.fields(T)) |field| {
                 if (std.mem.eql(u8, str, field.name)) return @field(T, field.name);
             }
-            return ctx.failTyped(T, "invalid enum value");
+            return ctx.failTyped(?T, "invalid enum value");
         }
     }.decode;
+}
+
+/// Derives the element type from a getElements accessor function.
+///
+/// `getElements` must be a comptime function with an explicit return type
+/// of a slice, such as `[]T` or `[]const T`. The returned slice element type
+/// becomes the list element type for generated iterator and indexing helpers.
+fn ElementType(comptime getElements: anytype) type {
+    const R = @typeInfo(@TypeOf(getElements)).@"fn".return_type orelse
+        @compileError("getElements must have an explicit return type");
+    const info = @typeInfo(R);
+    if (info != .pointer or info.pointer.size != .slice)
+        @compileError("getElements must return a slice");
+    return info.pointer.child;
+}
+
+/// Validates that none of the reserved List method names appear in user methods.
+/// Reserved names are those generated by List: get, iter, __index, __len.
+fn assertNoListCollisions(comptime methods: anytype) void {
+    const reserved = [_][]const u8{ "get", "iter", "__index", "__len" };
+    inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
+        inline for (reserved) |name| {
+            if (comptime std.mem.eql(u8, field.name, name))
+                @compileError("List already generates '" ++ name ++ "'; remove it from methods or use Object instead");
+        }
+    }
+}
+
+/// Computes a merged struct type for two method sets.
+///
+/// This is an internal helper used by `List` to create a combined method
+/// struct from generated list methods and any user-provided method table.
+/// Both input values must be comptime structs, and the resulting type is a
+/// new synthetic struct containing all fields from `a` and `b`.
+fn mergeMethodType(comptime a: anytype, comptime b: anytype) type {
+    const fa = @typeInfo(@TypeOf(a)).@"struct".fields;
+    const fb = @typeInfo(@TypeOf(b)).@"struct".fields;
+
+    var names: [fa.len + fb.len][]const u8 = undefined;
+    var types: [fa.len + fb.len]type = undefined;
+    var attributes: [fa.len + fb.len]std.builtin.Type.StructField.Attributes = undefined;
+    var n = 0;
+    for (fa) |field| {
+        names[n] = field.name;
+        types[n] = field.type;
+        attributes[n] = .{
+            .@"comptime" = field.is_comptime,
+            .@"align" = field.alignment,
+            .default_value_ptr = field.default_value_ptr,
+        };
+        n += 1;
+    }
+    for (fb) |field| {
+        names[n] = field.name;
+        types[n] = field.type;
+        attributes[n] = .{
+            .@"comptime" = field.is_comptime,
+            .@"align" = field.alignment,
+            .default_value_ptr = field.default_value_ptr,
+        };
+        n += 1;
+    }
+    return @Struct(.auto, null, &names, &types, &attributes);
+}
+
+/// Merges two comptime method sets into one struct value.
+///
+/// The result is a concrete struct value whose fields are copied from `a`
+/// followed by `b`. This is used by `List` so generated methods and user
+/// methods can coexist on the same metadata value.
+///
+/// If both sets contain the same method name, the merge is invalid and should
+/// be rejected earlier by `assertNoListCollisions`.
+fn mergeMethodSets(comptime a: anytype, comptime b: anytype) mergeMethodType(a, b) {
+    const R = mergeMethodType(a, b);
+    var result: R = undefined;
+    const fa = @typeInfo(@TypeOf(a)).@"struct".fields;
+    const fb = @typeInfo(@TypeOf(b)).@"struct".fields;
+    inline for (fa) |f| @field(result, f.name) = @field(a, f.name);
+    inline for (fb) |f| @field(result, f.name) = @field(b, f.name);
+    return result;
+}
+
+fn generatedListMethods(comptime L: type, comptime getElements: anytype) type {
+    const T = ElementType(getElements);
+    const Handlers = @import("handlers/handlers.zig");
+    const Native = @import("functions/native.zig");
+
+    return struct {
+        /// Returns the element at 1-based `index`, or null when out of range.
+        pub fn get(self: *L, index: usize) ?T {
+            if (index == 0) return null;
+            const elems = getElements(self);
+            if (index - 1 < elems.len) return elems[index - 1];
+            return null;
+        }
+
+        /// Lua `__index` metamethod forwarding to `get`.
+        pub fn __index(self: *L, index: usize) ?T {
+            return get(self, index);
+        }
+
+        /// Lua `__len` metamethod returning the element count.
+        pub fn __len(self: *L, _: *L) usize {
+            return getElements(self).len;
+        }
+
+        fn iget(self: *L, index: usize) !struct { ?usize, ?T } {
+            const elem = get(self, index);
+            const next = if (elem != null) index + 1 else null;
+            return .{ next, elem };
+        }
+
+        /// Iterator constructor for `for ... in` loops over the list.
+        pub fn iter(self: Handlers.Userdata) struct {
+            Native.NativeFn(iget, .{}),
+            Handlers.Userdata,
+            ?usize,
+        } {
+            return .{ .{}, self, 1 };
+        }
+    };
+}
+
+/// Build the generated method set used by `List`.
+///
+/// This returns a struct type containing the list helpers `get`, `__index`,
+/// `__len`, and `iter`, which can then be merged with user-defined methods.
+fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(.{
+    .get = generatedListMethods(L, getElements).get,
+    .__index = generatedListMethods(L, getElements).__index,
+    .__len = generatedListMethods(L, getElements).__len,
+    .iter = generatedListMethods(L, getElements).iter,
+}) {
+    return .{
+        .get = generatedListMethods(L, getElements).get,
+        .__index = generatedListMethods(L, getElements).__index,
+        .__len = generatedListMethods(L, getElements).__len,
+        .iter = generatedListMethods(L, getElements).iter,
+    };
 }

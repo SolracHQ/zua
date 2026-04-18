@@ -37,10 +37,10 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         ///
         /// The hook path is intentionally minimal: only actual Lua functions are
         /// accepted, and any other Lua value fails with `expected function`.
-        fn decode(ctx: *Context, prim: Mapper.Decoder.Primitive) anyerror!@This() {
+        fn decode(ctx: *Context, prim: Mapper.Decoder.Primitive) anyerror!?@This() {
             return switch (prim) {
                 .function => |f| @This().from(f),
-                else => ctx.failTyped(@This(), "expected function"),
+                else => ctx.failTyped(?@This(), "expected function"),
             };
         }
 

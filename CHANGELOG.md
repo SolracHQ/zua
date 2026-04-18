@@ -4,6 +4,10 @@
 
 ### Breaking
 - `Context.allocator()` was removed in favor of `Context.arena()` for scratch allocations and `Context.heap()` for persistent state allocations.
+- `DecodeHook` signatures now return `anyerror!?T` instead of `anyerror!T`, allowing hooks to return `null` and continue the normal decode path for inputs that only need special handling in specific cases.
+
+### Fixed
+- Fixed handle ownership promotion for `Table`, `Function`, and `Userdata`: `takeOwnership()` now releases the original stack-owned handle after creating the registry reference. This prevents leaked Lua stack slots and avoids crashes when many handles are promoted, such as unfiltered `lumem:scan()` results.
 
 ### Added
 - `ctx.arena()` exposes the call-local arena allocator for temporary allocations that live only for the duration of the current Lua callback.
@@ -11,6 +15,7 @@
 - Moved `Primitive` from `Mapper.Decoder` into `Mapper` so primitive types are available to both decoding and encoding paths.
 - Replaced the vague `ZuaFn` public interface with explicit `NativeFn` and `Closure` wrapper constructors. `ZuaFn` conflated callback wrapping and user-facing closure/error-handling APIs, while `Native` now clearly refers to Zig native callback wrappers and `Closure` refers to wrapped callbacks with captured state.
 - Added support for encoding and decoding `Primitive` values directly.
+- Added `zua.Meta.List(T, getElements, methods)` for list-like userdata backed by generated indexing, length, and iterator helpers.
 - Updated `mise.toml` to use Zig `0.16.0` from the stable release channel.
 
 ## 0.7.2

@@ -13,23 +13,66 @@ pub const Handlers = @This();
 /// must be cleaned up explicitly. It is used by the `Table`, `Function`, and
 /// `Userdata` handler implementations to manage lifetime correctly across the
 /// Lua API.
-pub const HandleOwnership = enum {
+const lua = @import("../../lua/lua.zig");
+const State = @import("../state/state.zig");
+const Mapper = @import("../mapper/mapper.zig");
+
+pub const Handle = union(enum) {
     /// The handle references a Lua value on the current stack frame.
     /// No cleanup is required because the caller owns the stack slot.
-    borrowed,
+    borrowed: lua.StackIndex,
 
     /// The handle owns a stack slot and must be released when no longer needed.
     /// This is typically used for values created by a helper function that pushes
     /// a new Lua value onto the stack.
-    stack_owned,
+    stack_owned: lua.StackIndex,
 
     /// The handle owns a registry reference and must call `release()` to free it.
     /// This mode is used for values that need to survive beyond the current
     /// Lua stack frame.
-    registry_owned,
-};
+    registry_owned: c_int,
 
-const Mapper = @import("../mapper/mapper.zig");
+    pub fn owned(self: Handle, state: *State) Handle {
+        return switch (self) {
+            .registry_owned => self,
+            .borrowed => |idx| {
+                lua.pushValue(state.luaState, idx);
+                const ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);
+                return .{ .registry_owned = ref };
+            },
+            .stack_owned => |idx| {
+                lua.pushValue(state.luaState, idx);
+                const ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);
+                return .{ .registry_owned = ref };
+            },
+        };
+    }
+
+    pub fn takeOwnership(self: Handle, state: *State) Handle {
+        return switch (self) {
+            .registry_owned => self,
+            .borrowed => |idx| {
+                lua.pushValue(state.luaState, idx);
+                const ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);
+                return .{ .registry_owned = ref };
+            },
+            .stack_owned => |idx| {
+                lua.pushValue(state.luaState, idx);
+                const ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);
+                lua.remove(state.luaState, idx);
+                return .{ .registry_owned = ref };
+            },
+        };
+    }
+
+    pub fn release(self: Handle, state: *State) void {
+        switch (self) {
+            .borrowed => {},
+            .stack_owned => |idx| lua.remove(state.luaState, idx),
+            .registry_owned => |ref| lua.unref(state.luaState, lua.REGISTRY_INDEX, ref),
+        }
+    }
+};
 
 pub const Table = @import("table.zig");
 pub const Function = @import("function.zig");

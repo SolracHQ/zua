@@ -31,6 +31,9 @@ print(p:distance())  -- 5
 
 The keys in the method list become the Lua method names. The values are Zig function references, and the same `ZuaFn.new` wrapper that works for top-level functions works here too, covered below.
 
+> [!NOTE]
+> `zua.Meta.List` is a helper for sequence-like `.object` values. It generates common collection methods such as `get`, `__index`, `__len`, and `iter`, and merges them with your custom methods. Do not redeclare those generated names in the supplied `methods` struct.
+
 ## Self types for .table methods
 
 For `.table` methods, `self` can be either the struct type or a `zua.Table` handle:

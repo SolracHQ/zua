@@ -1,3 +1,13 @@
+//! Guided tour example for zua.
+//!
+//! This example demonstrates the library's core surface:
+//! - exporting Zig functions and values into Lua
+//! - table-backed structs with method metadata
+//! - object-backed userdata with live mutation and `__tostring`
+//! - callbacks from Lua into Zig and back
+//! - array processing and multi-value returns
+//!
+
 const std = @import("std");
 const zua = @import("zua");
 
@@ -10,7 +20,7 @@ fn multiply(a: f64, b: f64) f64 {
     return a * b;
 }
 
-// A custom type with methods
+// A custom type with methods and table-backed semantics
 const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
         .length = length,
@@ -38,7 +48,7 @@ const Vector2 = struct {
     }
 };
 
-// A stateful object
+// A stateful object backed by userdata and exposed via methods
 const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
