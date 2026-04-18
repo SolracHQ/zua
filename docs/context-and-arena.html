@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -179,7 +179,7 @@
 <h2 id="adding-context-to-a-function"><a class="header" href="#adding-context-to-a-function">Adding context to a function</a></h2>
 <p>Declare <code>*zua.Context</code> as the first parameter. zua recognizes it at compile time and skips it when matching Lua arguments, so from Lua’s perspective nothing changes.</p>
 <pre><code class="language-zig">fn greet(ctx: *zua.Context, name: []const u8) []const u8 {
-    return std.fmt.allocPrint(ctx.allocator(), "hello, {s}", .{name})
+    return std.fmt.allocPrint(ctx.arena(), "hello, {s}", .{name})
         catch unreachable;
 }
 
@@ -190,7 +190,7 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <pre><code class="language-lua">print(greet("world"))  -- hello, world
 </code></pre>
 <h2 id="the-call-arena"><a class="header" href="#the-call-arena">The call arena</a></h2>
-<p><code>ctx.allocator()</code> returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.</p>
+<p><code>ctx.arena()</code> returns an arena allocator that lives for the duration of the current call. You can allocate strings, slices, and any temporary value from it without worrying about freeing them individually. zua frees the entire arena automatically after the trampoline has pushed your return value into Lua.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>An arena allocator hands out memory in one direction and frees everything at once. It is very fast and needs no per-allocation bookkeeping. The trade-off is that you cannot free individual items, only the whole arena. Since zua’s call arena is freed automatically, individual frees would not make sense anyway.</p>
@@ -198,22 +198,22 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
 <p>The string returned by <code>greet</code> above is allocated from the arena. zua copies it into Lua’s own memory before the arena is freed, so the Lua side always holds a valid string regardless of what happens to the arena.</p>
 <blockquote class="blockquote-tag blockquote-tag-warning">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.state.allocator</code> and manage the lifetime yourself.</p>
+<p>Do not hold a pointer into arena memory after the call returns. The memory is gone. If you need a value to outlive the call, for example a string stored in a struct field, allocate it with <code>ctx.heap()</code> and manage the lifetime yourself.</p>
 </blockquote>
-<h2 id="ctxallocator-vs-ctxstateallocator"><a class="header" href="#ctxallocator-vs-ctxstateallocator">ctx.allocator vs ctx.state.allocator</a></h2>
+<h2 id="ctxallocator-vs-ctxheap"><a class="header" href="#ctxallocator-vs-ctxheap">ctx.allocator vs ctx.heap()</a></h2>
 <p>There are two allocators available inside a zua callback:</p>
 <ul>
-<li><code>ctx.allocator()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>
-<li><code>ctx.state.allocator</code> is the persistent allocator. Survives across calls, must be freed manually, typically in a <code>__gc</code> handler.</li>
+<li><code>ctx.arena()</code> is the call arena. Fast, automatic cleanup, valid only for the duration of the current call.</li>
+<li><code>ctx.heap()</code> is the persistent allocator. Survives across calls, must be freed manually, typically in a <code>__gc</code> handler.</li>
 </ul>
-<p>Use <code>ctx.allocator()</code> for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use <code>ctx.state.allocator</code> for anything that needs to outlive the call: object fields, stored callbacks, owned resources.</p>
+<p>Use <code>ctx.arena()</code> for anything that is only needed to produce the return value: formatted strings, temporary buffers, intermediate slices. Use <code>ctx.heap()</code> for anything that needs to outlive the call: object fields, stored callbacks, owned resources.</p>
 <pre><code class="language-zig">const Entry = struct {
     pub const ZUA_META = zua.Meta.Object(Entry, .{
         .label = getLabel,
         .__gc = cleanup,
     });
 
-    // allocated from ctx.state.allocator, survives across calls
+    // allocated from ctx.heap(), survives across calls
     label: []const u8,
 
     pub fn getLabel(self: *Entry) []const u8 {
@@ -221,12 +221,12 @@ globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
     }
 
     pub fn cleanup(ctx: *zua.Context, self: *Entry) void {
-        ctx.state.allocator.free(self.label);
+        ctx.heap().free(self.label);
     }
 };
 
 fn makeEntry(ctx: *zua.Context, label: []const u8) !Entry {
-    const owned = ctx.state.allocator.dupe(u8, label)
+    const owned = ctx.heap().dupe(u8, label)
         catch return ctx.fail("out of memory");
     return Entry{ .label = owned };
 }

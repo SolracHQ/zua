@@ -3,7 +3,7 @@
 //! centralize the logic for pushing arguments, calling Lua, and decoding results.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const HandleOwnership = @import("../handlers/handlers.zig").HandleOwnership;
+const Handle = @import("../handlers/handlers.zig").Handle;
 const Mapper = @import("../mapper/mapper.zig");
 const State = @import("../state/state.zig");
 const Context = @import("../state/context.zig").Context;
@@ -20,11 +20,7 @@ pub const Function = @This();
 state: *State,
 /// Ownership mode for the referenced Lua function value.
 /// The handle may represent a borrowed stack slot, a stack-owned slot, or a registry reference.
-handle: union(HandleOwnership) {
-    borrowed: lua.StackIndex,
-    stack_owned: lua.StackIndex,
-    registry_owned: c_int,
-},
+handle: Handle,
 
 /// Creates a borrowed function handle for a stack slot owned by another API operation.
 /// The borrowed handle does not own the stack slot and must not be released.
@@ -138,7 +134,7 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
     lua.protectedCall(self.state.luaState, arg_count, lua.MULT_RETURN, 0) catch {
         // Extract error message from Lua stack
         const error_msg = lua.toString(self.state.luaState, -1) orelse "unknown error";
-        const owned_msg = ctx.allocator().dupe(u8, error_msg) catch {
+        const owned_msg = ctx.arena().dupe(u8, error_msg) catch {
             lua.pop(self.state.luaState, 1);
             return try ctx.failTyped(Mapper.Decoder.ParseResult(res_types), "out of memory");
         };
@@ -167,23 +163,22 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
 ///
 /// Example:
 /// ```zig
-/// const owned_fn = fn_handle.takeOwnership();
+/// const owned_fn = fn_handle.owned();
 /// defer owned_fn.release();
 /// ```
-pub fn takeOwnership(self: Function) Function {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
-
-    // Push the function onto the stack
-    lua.pushValue(self.state.luaState, index);
-
-    // Store in registry
-    const ref = lua.ref(self.state.luaState, lua.REGISTRY_INDEX);
-
+pub fn owned(self: Function) Function {
     return .{
         .state = self.state,
-        .handle = .{ .registry_owned = ref },
+        .handle = self.handle.owned(self.state),
+    };
+}
+
+/// Anchors this function in the Lua registry and removes the old stack-owned
+/// handle if applicable.
+pub fn takeOwnership(self: Function) Function {
+    return .{
+        .state = self.state,
+        .handle = self.handle.takeOwnership(self.state),
     };
 }
 
@@ -194,9 +189,5 @@ pub fn takeOwnership(self: Function) Function {
 /// fn_handle.release();
 /// ```
 pub fn release(self: Function) void {
-    switch (self.handle) {
-        .borrowed => {},
-        .stack_owned => |index| lua.remove(self.state.luaState, index),
-        .registry_owned => |ref| lua.unref(self.state.luaState, lua.REGISTRY_INDEX, ref),
-    }
+    self.handle.release(self.state);
 }

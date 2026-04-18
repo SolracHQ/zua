@@ -41,25 +41,22 @@ const Address = struct {
 
     pub fn getValue(self: *Address) u64 { return self.inner; }
 
-    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !Address {
+    fn decodeHook(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Address {
         return switch (prim) {
             .integer  => |n| .{ .inner = @intCast(n) },
             .string   => |s| blk: {
                 const digits = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
                 break :blk .{ .inner = std.fmt.parseInt(u64, digits, 16)
-                    catch return ctx.failTyped(Address, "invalid hex address") };
+                    catch return ctx.failTyped(?Address, "invalid hex address") };
             },
-            .userdata => |ptr| blk: {
-                const a: *Address = @ptrCast(@alignCast(ptr.get()));
-                break :blk .{ .inner = a.inner };
-            },
-            else => ctx.failTyped(Address, "expected integer, hex string, or Address"),
+            .userdata => null, // allow the default object decode path for existing Address handles
+            else => ctx.failTyped(?Address, "expected integer, hex string, or Address"),
         };
     }
 };
 ```
 
-Now any function that takes `Address` by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions.
+Now any function that takes `Address` by value accepts integers, hex strings, and existing handles from Lua without any changes to those functions. The hook only handles the special integer/string cases; returning `null` for userdata lets the normal object decode path handle existing handles.
 
 > [!IMPORTANT]
 > The decode hook fires when the type is decoded as a plain value `T`. It does not fire for `*T` receivers in `.object` methods; those extract the raw userdata pointer directly. So `fn method(self: *Address)` always receives the Lua userdata handle, while `fn f(addr: Address)` goes through the hook and accepts all the forms the hook handles.

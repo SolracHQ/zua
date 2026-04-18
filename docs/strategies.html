@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -221,6 +221,21 @@ print(e.address)  -- nil  (fields are not accessible)
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
 <p><code>ZUA_META</code> must be declared as <code>pub const ZUA_META</code>. If it is not public, zua will not see the metadata and the strategy, methods, and hooks on the type will not be applied.</p>
 </blockquote>
+<h2 id="list-style-objects"><a class="header" href="#list-style-objects">List-style objects</a></h2>
+<p>For sequence-like userdata values, use <code>zua.Meta.List(T, getElements, methods)</code> as a convenience builder.</p>
+<p>This helper creates <code>.object</code> metadata for a container type and automatically generates the common Lua collection methods:</p>
+<ul>
+<li><code>get(self, index)</code> returns the element at 1-based index or <code>nil</code>.</li>
+<li><code>__index</code> makes <code>list[1]</code> syntax work.</li>
+<li><code>__len</code> makes <code>#list</code> return the element count.</li>
+<li><code>iter</code> supports <code>for x in list do</code> iteration.</li>
+</ul>
+<p><code>getElements</code> must be a comptime function returning a slice of the list’s elements:</p>
+<pre><code class="language-zig">fn getElements(self: *ProcList) []zua.Object(Process) {
+    return self.processes.items;
+}
+</code></pre>
+<p>You can still add custom metadata like <code>__gc</code> and <code>__tostring</code>, but <code>Meta.List</code> reserves the generated method names and rejects collisions with user methods.</p>
 <h2 id="ptr"><a class="header" href="#ptr">.ptr</a></h2>
 <p>The <code>.ptr</code> strategy is the minimal opaque strategy: just a light userdata pointer. No metatable, no methods. Lua can hold the value and pass it back, but cannot do anything else with it.</p>
 <pre><code class="language-zig">const ScanContext = struct {

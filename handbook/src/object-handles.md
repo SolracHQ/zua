@@ -43,12 +43,15 @@ local w = makeWrapper(n)
 print(w:get_node())  -- 42
 ```
 
-`node.get()` returns `*Node`, a direct pointer into the Lua userdata memory. `.takeOwnership()` moves the handle into the registry so it survives beyond the current callback. `.release()` in `__gc` unanchors it so the GC can collect both the `Node` and the `Wrapper` when they go out of scope.
+`node.get()` returns `*Node`, a direct pointer into the Lua userdata memory. `.takeOwnership()` moves the handle into the registry and releases the old stack-owned reference when applicable, so it is the right choice for newly created userdata values. `.release()` in `__gc` unanchors it so the GC can collect both the `Node` and the `Wrapper` when they go out of scope.
+
+If you need to keep the original handle alive while also creating a registry-owned copy, use `.owned()` instead of `.takeOwnership()`.
 
 `zua.Object(T)` performs compile-time validation: `T` must not be a raw function type, and it must declare `.object` strategy metadata. This catches invalid object-handle declarations before the code compiles.
 
 Key rules:
 - `zua.Object(T)` decoded from a function parameter is a **borrowed** handle. Call `.takeOwnership()` if the value must outlive the current callback.
+- Use `.owned()` only when you explicitly need to keep the original handle alive as well.
 - Do not embed `T` directly in a table-strategy struct. Use `zua.Object(T)` instead.
 - Release registry-owned `Object(T)` handles in `__gc` to avoid leaking the Lua reference.
 

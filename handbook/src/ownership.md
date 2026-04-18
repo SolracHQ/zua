@@ -20,7 +20,7 @@ You can tell which mode a handle is in by how you got it:
 
 ## takeOwnership and release
 
-Call `.takeOwnership()` on any handle to move it into the Lua registry. The returned handle is registry-owned and survives until you call `.release()`:
+Call `.takeOwnership()` on any handle to move it into the Lua registry and release the original stack-owned reference when applicable. The returned handle is registry-owned and survives until you call `.release()`:
 
 ```zig
 var stored: ?zua.Function = null;
@@ -37,6 +37,8 @@ fn clearCallback() void {
     }
 }
 ```
+
+If you need a second registry-owned copy without releasing the original handle, use `.owned()` instead.
 
 > [!IMPORTANT]
 > Registry-owned handles must be released with `.release()` when you no longer need them. Failing to release leaks the Lua reference and prevents the garbage collector from collecting the function or table.

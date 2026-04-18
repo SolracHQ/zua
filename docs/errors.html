@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -188,7 +188,7 @@ print(err)  -- division by zero
 </code></pre>
 <p>For a message built at runtime, use <code>ctx.failWithFmt</code>:</p>
 <pre><code class="language-zig">fn openFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024)
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024)
         catch |err| return ctx.failWithFmt("cannot open '{s}': {s}", .{ path, @errorName(err) });
 }
 </code></pre>
@@ -196,7 +196,7 @@ print(err)  -- division by zero
 <h2 id="zig-errors-reaching-the-trampoline"><a class="header" href="#zig-errors-reaching-the-trampoline">Zig errors reaching the trampoline</a></h2>
 <p>If a Zig error escapes your function without being caught, the trampoline catches it and converts it to a Lua error. Use <code>zig_err_fmt</code> in <code>ZuaFn.new</code> to control the message:</p>
 <pre><code class="language-zig">fn readFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
-    return std.fs.cwd().readFileAlloc(ctx.allocator(), path, 1024 * 1024);
+    return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024);
 }
 
 globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
@@ -208,7 +208,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
 <p>When you need to build the error message dynamically based on which error occurred, use <code>zig_err_hook</code>:</p>
 <pre><code class="language-zig">fn describeError(ctx: *zua.Context, err: anyerror) void {
     ctx.err = std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "file error ({s}): check path and permissions",
         .{@errorName(err)},
     ) catch "file error";
@@ -219,7 +219,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
     .zig_err_hook  = describeError,
 }));
 </code></pre>
-<p>The hook sets <code>ctx.err</code>. If it allocates, use <code>ctx.allocator()</code> so zua owns and frees the string after raising the error.</p>
+<p>The hook sets <code>ctx.err</code>. If it allocates, use <code>ctx.arena()</code> so zua owns and frees the string after raising the error.</p>
 <h2 id="catching-errors-from-zig"><a class="header" href="#catching-errors-from-zig">Catching errors from Zig</a></h2>
 <p>Errors from <code>executor.execute</code> and <code>executor.eval</code> work like any Zig error. When the call fails, <code>ctx.err</code> holds the Lua error message:</p>
 <pre><code class="language-zig">executor.execute(&amp;ctx, .{ .code = .{ .string = "this is not valid lua" } }) catch |err| {
@@ -235,7 +235,7 @@ globals.set(&amp;ctx, "read_file", zua.ZuaFn.new(readFile, .{
     std.debug.print("error: {s}\n", .{ctx.err orelse "unknown"});
     if (executor.stack_trace) |trace| {
         std.debug.print("traceback:\n{s}\n", .{trace});
-        ctx.state.allocator.free(trace);
+        ctx.heap().free(trace);
     }
 };
 </code></pre>

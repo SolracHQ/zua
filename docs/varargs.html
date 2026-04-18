@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cb82f4e1.js";
+            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -243,8 +243,8 @@ print(sum_all())                -- 0
 <pre><code class="language-zig">fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
-        if (i &gt; 0) try buf.appendSlice(ctx.allocator(), ", ");
-        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+        if (i &gt; 0) try buf.appendSlice(ctx.arena(), ", ");
+        try buf.appendSlice(ctx.arena(), @tagName(prim));
     }
     return buf.items;
 }

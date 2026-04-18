@@ -1,3 +1,13 @@
+//! Guided tour example for zua.
+//!
+//! This example demonstrates the library's core surface:
+//! - exporting Zig functions and values into Lua
+//! - table-backed structs with method metadata
+//! - object-backed userdata with live mutation and `__tostring`
+//! - callbacks from Lua into Zig and back
+//! - array processing and multi-value returns
+//!
+
 const std = @import("std");
 const zua = @import("zua");
 
@@ -10,7 +20,7 @@ fn multiply(a: f64, b: f64) f64 {
     return a * b;
 }
 
-// A custom type with methods
+// A custom type with methods and table-backed semantics
 const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
         .length = length,
@@ -38,7 +48,7 @@ const Vector2 = struct {
     }
 };
 
-// A stateful object
+// A stateful object backed by userdata and exposed via methods
 const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
@@ -57,7 +67,7 @@ const Counter = struct {
     }
 
     pub fn toString(ctx: *zua.Context, self: *Counter) []const u8 {
-        const arena = ctx.allocator();
+        const arena = ctx.arena();
         const msg = std.fmt.allocPrint(arena, "Counter({d})", .{self.count}) catch {
             ctx.err = "out of memory";
             return "";
@@ -109,9 +119,9 @@ pub fn main(init: std.process.Init) !void {
     globals.set(&ctx, "add", add);
     globals.set(&ctx, "multiply", multiply);
     globals.set(&ctx, "Counter", makeCounter);
-    globals.set(&ctx, "Vector", zua.ZuaFn.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
-    globals.set(&ctx, "map_with_callback", zua.ZuaFn.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
-    globals.set(&ctx, "filter_and_sum", zua.ZuaFn.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
+    globals.set(&ctx, "Vector", zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
+    globals.set(&ctx, "map_with_callback", zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
+    globals.set(&ctx, "filter_and_sum", zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
     globals.set(&ctx, "multi_return_example", multiReturnExample);
 
     const code =

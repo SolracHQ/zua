@@ -6,16 +6,12 @@
 
 pub const Userdata = @This();
 
-const HandleOwnership = @import("handlers.zig").HandleOwnership;
+const Handle = @import("handlers.zig").Handle;
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig");
 
 state: *State,
-handle: union(HandleOwnership) {
-    borrowed: lua.StackIndex,
-    stack_owned: lua.StackIndex,
-    registry_owned: c_int,
-},
+handle: Handle,
 
 /// Creates a borrowed raw userdata handle for a stack slot owned by another API operation.
 ///
@@ -47,21 +43,26 @@ pub fn create(state: *State, size: usize) Userdata {
     return Userdata.fromStack(state, -1);
 }
 
-/// Anchors this userdata in the Lua registry for persistent storage.
+/// Creates a new registry-owned userdata handle without releasing the
+/// original stack or borrowed handle.
 ///
-/// The returned handle owns the registry reference and may be released with
-/// `release()` when it is no longer needed.
-pub fn takeOwnership(self: @This()) @This() {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
-
-    lua.pushValue(self.state.luaState, index);
-    const ref = lua.ref(self.state.luaState, lua.REGISTRY_INDEX);
-
+/// This keeps the existing handle alive while also anchoring a copy in the registry.
+pub fn owned(self: @This()) @This() {
     return .{
         .state = self.state,
-        .handle = .{ .registry_owned = ref },
+        .handle = self.handle.owned(self.state),
+    };
+}
+
+/// Anchors this userdata in the Lua registry and releases the old stack-owned
+/// handle if applicable.
+///
+/// Promote a stack-owned userdata into registry ownership without leaving the
+/// original stack slot behind.
+pub fn takeOwnership(self: @This()) @This() {
+    return .{
+        .state = self.state,
+        .handle = self.handle.takeOwnership(self.state),
     };
 }
 
@@ -70,11 +71,7 @@ pub fn takeOwnership(self: @This()) @This() {
 /// Borrowed handles are a no-op. Stack-owned handles remove the slot from the
 /// Lua stack. Registry-owned handles unref the registry reference.
 pub fn release(self: @This()) void {
-    switch (self.handle) {
-        .borrowed => {},
-        .stack_owned => |index| lua.remove(self.state.luaState, index),
-        .registry_owned => |ref| lua.unref(self.state.luaState, lua.REGISTRY_INDEX, ref),
-    }
+    self.handle.release(self.state);
 }
 
 /// Returns the raw userdata pointer stored inside this handle.

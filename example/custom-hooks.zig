@@ -16,22 +16,22 @@ const Priority = enum(u8) {
         return @tagName(p);
     }
 
-    fn decodeStrOrInt(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !Priority {
+    fn decodeStrOrInt(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !?Priority {
         switch (primitive) {
             .string => |s| {
                 inline for (std.meta.fields(Priority)) |field| {
                     if (std.mem.eql(u8, s, field.name)) return @field(Priority, field.name);
                 }
-                return ctx.failTyped(Priority, "unknown priority name");
+                return ctx.failTyped(?Priority, "unknown priority name");
             },
             .integer => |n| {
                 const byte = std.math.cast(u8, n) orelse
-                    return ctx.failTyped(Priority, "priority integer out of range");
+                    return ctx.failTyped(?Priority, "priority integer out of range");
                 if (byte > @intFromEnum(Priority.high))
-                    return ctx.failTyped(Priority, "invalid priority integer");
+                    return ctx.failTyped(?Priority, "invalid priority integer");
                 return @enumFromInt(byte);
             },
-            else => return ctx.failTyped(Priority, "expected string or integer for Priority"),
+            else => return ctx.failTyped(?Priority, "expected string or integer for Priority"),
         }
     }
 };
@@ -54,11 +54,11 @@ const Address = struct {
     }
 
     pub fn toString(ctx: *zua.Context, self: *Address) ![]const u8 {
-        return std.fmt.allocPrint(ctx.allocator(), "0x{X}", .{self.inner}) catch
+        return std.fmt.allocPrint(ctx.arena(), "0x{X}", .{self.inner}) catch
             try ctx.failTyped([]const u8, "out of memory");
     }
 
-    fn decodeHook(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !Address {
+    fn decodeHook(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !?Address {
         return switch (primitive) {
             .integer => |n| .{ .inner = @intCast(n) },
             .string => |s| blk: {
@@ -67,14 +67,11 @@ const Address = struct {
                 else
                     s;
                 const n = std.fmt.parseInt(u64, digits, 16) catch
-                    return ctx.failTyped(Address, "invalid hex address string");
+                    return ctx.failTyped(?Address, "invalid hex address string");
                 break :blk .{ .inner = n };
             },
-            .userdata => |ptr| blk: {
-                const addr: *Address = @ptrCast(@alignCast(ptr.get()));
-                break :blk .{ .inner = addr.inner };
-            },
-            else => ctx.failTyped(Address, "expected integer, hex string, or Address handle"),
+            .userdata => null, // allow decoder default path to handle existing Address handles
+            else => ctx.failTyped(?Address, "expected integer, hex string, or Address handle"),
         };
     }
 };
@@ -94,7 +91,7 @@ fn defaultPriority() Priority {
 
 fn describePriority(ctx: *zua.Context, p: Priority) ![]const u8 {
     return std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "priority={s} ({})",
         .{ @tagName(p), @intFromEnum(p) },
     ) catch try ctx.failTyped([]const u8, "out of memory");

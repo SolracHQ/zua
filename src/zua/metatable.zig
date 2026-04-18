@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
-const ZuaFn = @import("functions/zua_fn.zig");
+const Native = @import("functions/native.zig");
 const Meta = @import("meta.zig");
 const State = @import("state/state.zig");
 const Context = @import("state/context.zig");
@@ -104,7 +104,7 @@ fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
         return method_fn_type.trampoline();
     }
 
-    return ZuaFn.ZuaFnType(method_fn, .{}).trampoline();
+    return Native.NativeFn(method_fn, .{}).trampoline();
 }
 
 /// Generates a combined __index trampoline for types that have both regular

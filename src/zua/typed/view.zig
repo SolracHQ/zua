@@ -37,13 +37,13 @@ pub fn TableView(comptime T: type) type {
         /// remains valid until the callback returns. The view holds the raw
         /// table handle so it can later synchronize the typed copy back into
         /// Lua.
-        pub fn decode(ctx: *Context, primitive: Primitive) !@This() {
+        pub fn decode(ctx: *Context, primitive: Primitive) !?@This() {
             const table = switch (primitive) {
                 .table => |tbl| tbl,
-                else => return ctx.failWithFmtTyped(@This(), "expected table but got {s}", .{@tagName(primitive)}),
+                else => return ctx.failWithFmtTyped(?@This(), "expected table but got {s}", .{@tagName(primitive)}),
             };
 
-            const ptr = ctx.allocator().create(T) catch return ctx.failTyped(@This(), "out of memory");
+            const ptr = ctx.arena().create(T) catch return ctx.failTyped(?@This(), "out of memory");
             const index = switch (table.handle) {
                 inline else => |idx| idx,
             };

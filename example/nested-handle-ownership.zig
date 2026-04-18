@@ -50,7 +50,7 @@ const Root = struct {
         const first_child = self.group.children[0].get();
         const extra_child = self.group.extra.other.get();
         return std.fmt.allocPrint(
-            ctx.allocator(),
+            ctx.arena(),
             "root with first child={d}:{s} and extra={d}:{s}",
             .{ first_child.id, first_child.name, extra_child.id, extra_child.name },
         ) catch try ctx.failTyped([]const u8, "out of memory");
@@ -107,9 +107,9 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "make_leaf", zua.ZuaFn.new(makeLeaf, .{ .parse_err_fmt = "make_leaf expects (number, string): {s}" }));
-    globals.set(&ctx, "make_root", zua.ZuaFn.new(makeRoot, .{ .parse_err_fmt = "make_root expects (leaf, leaf, leaf, leaf, leaf, leaf): {s}" }));
-    globals.set(&ctx, "make_holder", zua.ZuaFn.new(makeHolder, .{ .parse_err_fmt = "make_holder expects (root): {s}" }));
+    globals.set(&ctx, "make_leaf", zua.Native.new(makeLeaf, .{ .parse_err_fmt = "make_leaf expects (number, string): {s}" }));
+    globals.set(&ctx, "make_root", zua.Native.new(makeRoot, .{ .parse_err_fmt = "make_root expects (leaf, leaf, leaf, leaf, leaf, leaf): {s}" }));
+    globals.set(&ctx, "make_holder", zua.Native.new(makeHolder, .{ .parse_err_fmt = "make_holder expects (root): {s}" }));
 
     executor.execute(&ctx, .{ .code = .{ .string =
         \\local function build_and_drop()

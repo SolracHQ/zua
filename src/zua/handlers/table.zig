@@ -2,10 +2,12 @@
 //! They support borrowed, stack-owned, and registry-owned lifetimes and centralize conversions between Zig values and Lua tables.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const HandleOwnership = @import("../handlers/handlers.zig").HandleOwnership;
+const Handle = @import("../handlers/handlers.zig").Handle;
 const Mapper = @import("../mapper/mapper.zig");
 const Context = @import("../state/context.zig").Context;
 const State = @import("../state/state.zig");
+const Function = @import("function.zig");
+const Userdata = @import("userdata.zig").Userdata;
 
 /// Errors returned by typed table reads.
 pub const Error = error.Failed;
@@ -18,11 +20,7 @@ pub const Table = @This();
 state: *State,
 /// Ownership mode for the referenced Lua table value.
 /// The handle may represent a borrowed stack slot, a stack-owned slot, or a registry reference.
-handle: union(HandleOwnership) {
-    borrowed: lua.StackIndex,
-    stack_owned: lua.StackIndex,
-    registry_owned: c_int,
-},
+handle: Handle,
 
 /// Creates a stack-owned table handle that must be released via `release()`.
 ///
@@ -117,20 +115,25 @@ pub fn from(state: *State, value: anytype) Table {
 ///
 /// Example:
 /// ```zig
-/// const owned = tbl.takeOwnership();
+/// const owned = tbl.owned();
 /// defer owned.release();
 /// ```
-pub fn takeOwnership(self: Table) Table {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
-
-    lua.pushValue(self.state.luaState, index);
-    const ref = lua.ref(self.state.luaState, lua.REGISTRY_INDEX);
-
+pub fn owned(self: Table) Table {
     return .{
         .state = self.state,
-        .handle = .{ .registry_owned = ref },
+        .handle = self.handle.owned(self.state),
+    };
+}
+
+/// Anchors this table in the Lua registry and releases the old stack-owned
+/// handle if applicable.
+///
+/// Promote a stack-owned table into registry ownership without leaving the
+/// original stack slot behind.
+pub fn takeOwnership(self: Table) Table {
+    return .{
+        .state = self.state,
+        .handle = self.handle.takeOwnership(self.state),
     };
 }
 
@@ -190,24 +193,6 @@ pub fn get(self: Table, ctx: *Context, key: anytype, comptime T: type) !T {
         _ = lua.getField(self.state.luaState, index, coerceStringKey(key));
     } else {
         _ = lua.getIndex(self.state.luaState, index, coerceIntegerKey(key));
-    }
-
-    if (T == Table) {
-        if (lua.valueType(self.state.luaState, -1) != .table) {
-            lua.pop(self.state.luaState, 1);
-            try ctx.fail("expected table");
-        }
-
-        const tbl = Table.fromStack(self.state, -1);
-        return tbl;
-    }
-
-    defer lua.pop(self.state.luaState, 1);
-    if (lua.valueType(self.state.luaState, -1) == .none or lua.valueType(self.state.luaState, -1) == .nil) {
-        if (comptime @typeInfo(T) == .optional) {
-            return null;
-        }
-        try ctx.fail("key not found");
     }
 
     return try Mapper.Decoder.decodeAt(ctx, -1, T);
@@ -312,11 +297,7 @@ pub fn setMetatable(self: Table, mt: Table) void {
 /// tbl.release();
 /// ```
 pub fn release(self: Table) void {
-    switch (self.handle) {
-        .borrowed => {},
-        .stack_owned => |index| lua.remove(self.state.luaState, index),
-        .registry_owned => |ref| lua.unref(self.state.luaState, lua.REGISTRY_INDEX, ref),
-    }
+    self.handle.release(self.state);
 }
 
 // Key helpers

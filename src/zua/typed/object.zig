@@ -46,10 +46,10 @@ pub fn Object(comptime T: type) type {
         /// Decodes a Lua userdata primitive into the typed object wrapper.
         ///
         /// Only raw Lua userdata values are accepted.
-        fn decode(ctx: *Context, handle: Primitive) !@This() {
+        fn decode(ctx: *Context, handle: Primitive) !?@This() {
             return switch (handle) {
                 .userdata => |p| @This().from(p),
-                else => return ctx.failTyped(@This(), "expected userdata"),
+                else => return ctx.failTyped(?@This(), "expected userdata"),
             };
         }
 

@@ -5,9 +5,29 @@ const std = @import("std");
 
 const lua = @import("../../lua/lua.zig");
 const Context = @import("../state/context.zig");
+const Handlers = @import("../handlers/handlers.zig");
 
 pub const Decoder = @import("decode.zig");
 pub const Encoder = @import("encode.zig");
+
+/// Decoded Lua primitive value, used by custom decode hooks.
+///
+/// Represents a Lua value after type-checking but before type-specific decoding.
+/// The `table` variant holds a borrowed handle valid for the duration of the
+/// decode hook execution (the value remains on the stack).
+pub const Primitive =
+    union(enum) {
+        /// Represents a Lua `nil` or absent value.
+        nil,
+        boolean: bool,
+        integer: i64,
+        float: f64,
+        string: []const u8,
+        table: Handlers.Table,
+        function: Handlers.Function,
+        light_userdata: *anyopaque,
+        userdata: Handlers.Userdata,
+    };
 
 pub fn isOptional(comptime T: type) bool {
     return @typeInfo(T) == .optional;

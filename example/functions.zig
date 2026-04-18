@@ -7,7 +7,7 @@ fn add(a: i32, b: i32) i32 {
 
 fn greet(ctx: *zua.Context, name: []const u8) ![]const u8 {
     return std.fmt.allocPrint(
-        ctx.allocator(),
+        ctx.arena(),
         "Hello, {s}!",
         .{name},
     ) catch try ctx.failTyped([]const u8, "out of memory");
@@ -62,8 +62,8 @@ fn sumAll(ctx: *zua.Context, args: zua.VarArgs) !i64 {
 fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
-        if (i > 0) try buf.appendSlice(ctx.allocator(), ", ");
-        try buf.appendSlice(ctx.allocator(), @tagName(prim));
+        if (i > 0) try buf.appendSlice(ctx.arena(), ", ");
+        try buf.appendSlice(ctx.arena(), @tagName(prim));
     }
     return buf.items;
 }
@@ -131,11 +131,11 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "add", zua.ZuaFn.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }));
-    globals.set(&ctx, "greet", zua.ZuaFn.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }));
-    globals.set(&ctx, "divide", zua.ZuaFn.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }));
-    globals.set(&ctx, "apply_twice", zua.ZuaFn.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }));
-    globals.set(&ctx, "CallbackRegistry", zua.ZuaFn.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }));
+    globals.set(&ctx, "add", zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }));
+    globals.set(&ctx, "greet", zua.Native.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }));
+    globals.set(&ctx, "divide", zua.Native.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }));
+    globals.set(&ctx, "apply_twice", zua.Native.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }));
+    globals.set(&ctx, "CallbackRegistry", zua.Native.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }));
 
     var increment_handle = zua.Function.create(z, increment);
     const owned_increment = increment_handle.takeOwnership();
@@ -148,10 +148,10 @@ pub fn main(init: std.process.Init) !void {
     defer owned_typed_increment.release();
 
     // Closures: each newClosure call produces an independent captured state.
-    globals.set(&ctx, "sum_all", zua.ZuaFn.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }));
-    globals.set(&ctx, "describe_args", zua.ZuaFn.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }));
-    globals.set(&ctx, "counter_by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}));
-    globals.set(&ctx, "counter_by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+    globals.set(&ctx, "sum_all", zua.Native.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }));
+    globals.set(&ctx, "describe_args", zua.Native.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }));
+    globals.set(&ctx, "counter_by_one", zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}));
+    globals.set(&ctx, "counter_by_ten", zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\print("add(10, 20) =", add(10, 20))

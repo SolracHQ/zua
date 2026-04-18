@@ -22,24 +22,7 @@ const Mapper = @import("mapper.zig");
 
 pub const Decoder = @This();
 
-/// Decoded Lua primitive value, used by custom decode hooks.
-///
-/// Represents a Lua value after type-checking but before type-specific decoding.
-/// The `table` variant holds a borrowed handle valid for the duration of the
-/// decode hook execution (the value remains on the stack).
-pub const Primitive =
-    union(enum) {
-        /// Represents a Lua `nil` or absent value.
-        nil,
-        boolean: bool,
-        integer: i64,
-        float: f64,
-        string: []const u8,
-        table: Table,
-        function: Function,
-        light_userdata: *anyopaque,
-        userdata: Userdata,
-    };
+pub const Primitive = Mapper.Primitive;
 
 /// Variadic Lua arguments captured as a slice of primitives.
 ///
@@ -213,14 +196,14 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .object => {
             const raw = switch (prim) {
                 .userdata => |p| p,
-                else => return ctx.failTyped(T, "expected userdata"),
+                else => return ctx.failWithFmtTyped(T, "expected userdata but got {s}", .{@tagName(prim)}),
             };
             return Object(Pointee).from(raw).get();
         },
         .ptr => {
             const raw = switch (prim) {
                 .light_userdata => |p| p,
-                else => return ctx.failTyped(T, "expected light userdata"),
+                else => return ctx.failWithFmtTyped(T, "expected light userdata but got {s}", .{@tagName(prim)}),
             };
             return @ptrCast(@alignCast(raw));
         },
@@ -265,6 +248,14 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         if (prim == .nil) return null;
         return try decodeValue(ctx, prim, Mapper.optionalChild(T));
     }
+
+    if (comptime T == Primitive) return prim;
+
+    if (comptime T == void) {
+        if (prim != .nil) return ctx.failTyped(T, "expected nil for void type");
+        return;
+    }
+
     if (prim == .nil) return ctx.failTyped(T, "expected value, got nil");
 
     if (comptime isHandlerType(T)) {
@@ -290,7 +281,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         if (comptime Meta.getMeta(T).decode_hook) |hook| {
-            return try hook(ctx, prim);
+            if (try hook(ctx, prim)) |decoded| return decoded;
         }
     }
 
@@ -305,17 +296,17 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         },
         .int => switch (prim) {
             .integer => |i| std.math.cast(T, i) orelse return ctx.failTyped(T, "integer out of range"),
-            else => ctx.failTyped(T, "expected integer"),
+            else => ctx.failWithFmtTyped(T, "expected integer but got {s}", .{@tagName(prim)}),
         },
         .float => switch (prim) {
             .float => |f| @floatCast(f),
             .integer => |i| @floatFromInt(i),
-            else => ctx.failTyped(T, "expected float"),
+            else => ctx.failWithFmtTyped(T, "expected float but got {s}", .{@tagName(prim)}),
         },
         else => if (comptime Mapper.isStringValueType(T))
             switch (prim) {
                 .string => |s| s,
-                else => ctx.failTyped(T, "expected string"),
+                else => ctx.failWithFmtTyped(T, "expected string but got {s}", .{@tagName(prim)}),
             }
         else
             @compileError("unsupported decode type: " ++ @typeName(T)),
@@ -325,7 +316,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 /// Builds a `VarArgs` value from `count` consecutive Lua stack slots starting
 /// at `start_index`. The resulting slice is allocated from the context arena.
 pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !VarArgs {
-    const args = try ctx.allocator().alloc(Primitive, count);
+    const args = try ctx.arena().alloc(Primitive, count);
     for (0..count) |i| {
         args[i] = try buildPrimitive(ctx.state, start_index + @as(lua.StackIndex, @intCast(i)));
     }
@@ -375,7 +366,7 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
     if (strategy == .object or strategy == .ptr) {
-        return decodeHostPtr(T, prim, ctx);
+        return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
     if (T == Table) {
@@ -407,7 +398,7 @@ fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
     if (strategy == .object or strategy == .ptr) {
-        return decodeHostPtr(T, prim, ctx);
+        return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
     const table = switch (prim) {
@@ -428,7 +419,7 @@ fn decodeEnum(comptime T: type, prim: Primitive, ctx: *Context) !T {
     };
     const tag = std.math.cast(std.meta.Tag(T), value) orelse
         return ctx.failTyped(T, "integer out of range");
-    return std.meta.intToEnum(T, tag) catch ctx.failTyped(T, "invalid enum value");
+    return @enumFromInt(tag);
 }
 
 /// Decodes a Lua table into a Zig struct by field name.
@@ -498,8 +489,8 @@ fn decodeSlice(comptime T: type, ctx: *Context, table: Table) !T {
         inline else => |idx| idx,
     };
     const len = lua.rawLen(ctx.state.luaState, index);
-    const slice = try ctx.allocator().alloc(Element, @intCast(len));
-    errdefer ctx.allocator().free(slice);
+    const slice = try ctx.arena().alloc(Element, @intCast(len));
+    errdefer ctx.arena().free(slice);
 
     for (0..@intCast(len)) |i| {
         slice[i] = try table.get(ctx, @as(i64, @intCast(i + 1)), Element);
