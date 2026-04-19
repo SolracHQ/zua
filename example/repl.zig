@@ -50,8 +50,8 @@ pub fn main(init: std.process.Init) !void {
     defer globals.release();
 
     // Register host functions into the Lua REPL environment.
-    globals.set(&ctx, "example", example);
-    globals.set(&ctx, "custom_magic", example);
+    try globals.set(&ctx, "example", example);
+    try globals.set(&ctx, "custom_magic", example);
 
     try zua.Repl.run(z, .{
         // First line shown when the REPL starts.

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0
+
+I will use this version to add more comptime checks and improve message in current ones for better UX.
+
+### Breaking
+- `Mapper.Encoder.pushValue(ctx, value)` now returns `!void` instead of `void`. Pushing long slices to Lua can now fail if the slice length exceeds Lua's maximum table size, making error handling necessary in all call sites.
+- `Table.set(ctx, key, value)` now returns `!void` instead of `void` because it delegates to `pushValue` which can now fail.
+- `EncodeHook(T, ProxyType)` signature changed: hooks now have explicit error handling in their return type. The hook may now return `!?ProxyType`, allowing failures during the encode transformation.
+- `EncodeHook` `ProxyType` parameter can now be the same type as the input `T`, enabling value transformation and filtering via the optional `?` escape hatch. If the hook returns `null`, the default encoding path is used; if it returns an error, encoding fails; if it returns a non-null value, that value is pushed to Lua.
+
+### Added
+- Debug-mode metadata validation now catches misspelled `ZUA_META` constants during `getMetaType` evaluation.
+- Improved comptime and runtime error reporting for decode and encode paths.
+
 ## 0.8.0
 
 ### Breaking

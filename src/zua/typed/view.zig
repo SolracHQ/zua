@@ -57,8 +57,8 @@ pub fn TableView(comptime T: type) type {
         /// This is automatically called when the view is returned from a
         /// callback, so callers only need to call `sync()` explicitly when the
         /// handle is mutated but not returned.
-        pub fn encode(ctx: *Context, self: @This()) Table {
-            self.sync(ctx);
+        pub fn encode(ctx: *Context, self: @This()) !?Table {
+            try self.sync(ctx);
             return self.handle;
         }
 
@@ -66,16 +66,16 @@ pub fn TableView(comptime T: type) type {
         ///
         /// This is useful for cases where the view is modified and the callback
         /// continues using the same Lua table before returning.
-        pub fn sync(self: @This(), ctx: *Context) void {
-            Mapper.Encoder.fillTable(ctx, self.handle, self.ref.*);
+        pub fn sync(self: @This(), ctx: *Context) !void {
+            try Mapper.Encoder.fillTable(ctx, self.handle, self.ref.*);
         }
 
         /// Converts the view's table handle to registry ownership.
         ///
         /// The typed mirror is copied into the state allocator so the view can
         /// outlive the current callback frame.
-        pub fn takeOwnership(self: @This()) @This() {
-            const ref = self.handle.state.allocator().create(T) catch @panic("out of memory");
+        pub fn takeOwnership(self: @This()) !@This() {
+            const ref = self.handle.state.allocator.create(T) catch return error.OutOfMemory;
             ref.* = self.ref.*;
             return .{ .handle = self.handle.takeOwnership(), .ref = ref };
         }
@@ -86,7 +86,7 @@ pub fn TableView(comptime T: type) type {
         /// the state allocator and the table handle is released.
         pub fn release(self: @This()) void {
             switch (self.handle.handle) {
-                .registry_owned => self.handle.state.allocator().destroy(self.ref),
+                .registry_owned => self.handle.state.allocator.destroy(self.ref),
                 else => {},
             }
             self.handle.release();

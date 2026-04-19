@@ -38,7 +38,7 @@ pub const ErrorConfig = trampoline.ErrorConfig;
 pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) type {
     const FunctionType = @TypeOf(function);
     if (comptime @typeInfo(FunctionType) != .@"fn") {
-        @compileError("Binding.native expects a function, got " ++ @typeName(FunctionType));
+        @compileError("NativeFn expects a function, got " ++ @typeName(FunctionType));
     }
 
     const fn_info = comptime @typeInfo(FunctionType).@"fn";
@@ -70,7 +70,7 @@ pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) 
 pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) type {
     const FunctionType = @TypeOf(function);
     if (comptime @typeInfo(FunctionType) != .@"fn") {
-        @compileError("Binding.closure expects a function, got " ++ @typeName(FunctionType));
+        @compileError("Closure expects a function, got " ++ @typeName(FunctionType));
     }
 
     const fn_info = comptime @typeInfo(FunctionType).@"fn";

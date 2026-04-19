@@ -39,12 +39,12 @@ pub const Primitive = Mapper.Primitive;
 /// Mapper.Encoder.pushValue(ctx, 123);
 /// Mapper.Encoder.pushValue(ctx, "hello");
 /// ```
-pub fn pushValue(ctx: *Context, value: anytype) void {
+pub fn pushValue(ctx: *Context, value: anytype) !void {
     const T = @TypeOf(value);
 
     if (comptime Mapper.isOptional(T)) {
         if (value) |unwrapped| {
-            pushValue(ctx, unwrapped);
+            try pushValue(ctx, unwrapped);
         } else {
             lua.pushNil(ctx.state.luaState);
         }
@@ -52,8 +52,7 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
     }
 
     if (comptime T == Primitive) {
-        pushLuaPrimitive(ctx, value);
-        return;
+        return pushLuaPrimitive(ctx, value);
     }
 
     if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaFn")) {
@@ -71,17 +70,17 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
     }
 
     if (comptime @typeInfo(T) == .@"fn") {
-        pushValue(ctx, Native.new(value, .{}));
-        return;
+        return try pushValue(ctx, Native.new(value, .{}));
     }
 
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Meta.getMeta(T);
         if (comptime meta.encode_hook) |encode_hook| {
-            const encoded = encode_hook(ctx, value);
-            pushValue(ctx, encoded);
-            return;
+            if (try encode_hook(ctx, value)) |encoded| {
+                return pushValue(ctx, encoded);
+            }
+            // If the hook returns null, fall back to default encoding
         }
     }
 
@@ -103,13 +102,38 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
             lua.pushBoolean(ctx.state.luaState, value);
         },
         .int, .comptime_int => {
-            lua.pushInteger(ctx.state.luaState, std.math.cast(lua.Integer, value) orelse @panic("integer value out of range for Lua"));
+            lua.pushInteger(ctx.state.luaState, std.math.cast(lua.Integer, value) orelse try ctx.failWithFmtTyped(lua.Integer, "integer value {d} out of range for Lua", .{value}));
         },
         .float, .comptime_float => {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
         },
-        .@"enum" => {
-            lua.pushInteger(ctx.state.luaState, @intFromEnum(value));
+        .@"enum", .@"struct", .@"union" => {
+            const strategy = comptime Meta.getMeta(T).strategy;
+
+            // Handle .object strategy: allocate as userdata with metatable
+            if (comptime strategy == .object) {
+                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
+                ptr.* = value;
+                MetaTable.attachMetatable(ctx.state, T);
+                return;
+            }
+
+            // Handle .ptr strategy: error (cannot push by value, would lose pointer)
+            if (comptime strategy == .ptr) {
+                @compileError(std.fmt.comptimePrint("Cannot push {s} with .ptr strategy by value: the pointer address would be lost. Return a *{s} instead. (Custom encode hooks do not yet support pointer types; if you need this feature, please open an issue.)", .{ @typeName(T), @typeName(T) }));
+            }
+
+            // Handle .table strategy: type-specific encoding
+            if (comptime @typeInfo(T) == .@"enum") {
+                lua.pushInteger(ctx.state.luaState, @intFromEnum(value));
+                return; // Numbers in Lua can't have metatables, in case methods are needed for the enum use .object strategy instead
+            } else {
+                lua.createTable(ctx.state.luaState, inferArrayCapacity(value), inferRecordCapacity(value));
+                const nested = Table.fromStack(ctx.state, -1);
+                try fillTable(ctx, nested, value);
+            }
+
+            MetaTable.attachMetatable(ctx.state, T);
         },
         .pointer => |ptr_info| switch (ptr_info.size) {
             .one => {
@@ -123,11 +147,11 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
                     return;
                 }
 
-                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union") {
+                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum") {
                     const strategy = comptime Meta.getMeta(Pointee).strategy;
 
                     if (strategy == .object) {
-                        @compileError("cannot push *T where T is .object: the metatable would be lost. Return T by value instead");
+                        @compileError(std.fmt.comptimePrint("Cannot push *{s} where {s} uses .object strategy: the metatable and identity would be lost. Return {s} by value instead to preserve metatable behavior and enable proper method dispatch.", .{ @typeName(Pointee), @typeName(Pointee), @typeName(Pointee) }));
                     }
 
                     if (strategy == .ptr) {
@@ -135,74 +159,29 @@ pub fn pushValue(ctx: *Context, value: anytype) void {
                         return;
                     }
 
-                    @compileError("cannot push pointer to .table type");
+                    @compileError(std.fmt.comptimePrint("Pointer to {s} (strategy .{s}) cannot be pushed: only .ptr strategy types can be pushed as light userdata pointers. For .object types, push by value instead to preserve metatable behavior. For .table types, there is no workaround; please open an issue with your use case.", .{ @typeName(Pointee), @tagName(strategy) }));
                 }
 
-                @compileError("unsupported push type: " ++ @typeName(T));
+                @compileError(std.fmt.comptimePrint("Pointer to {s} is not yet supported for encoding. Please open an issue with your use case. (Custom encode hooks do not yet support pointer types; this requires a PtrEncodeHook design that is still pending.)", .{@typeName(Pointee)}));
             },
             .slice => {
                 if (comptime Mapper.isStringValueType(T)) {
-                    @compileError("unsupported push type: " ++ @typeName(T));
+                    @compileError("This path must be unreachable since we already push string-like types as Lua strings above. Report a bug if you hit this error.");
                 }
-
-                lua.createTable(ctx.state.luaState, std.math.cast(i32, value.len) orelse @panic("slice too large"), 0);
+                const size = std.math.cast(i32, value.len) orelse try ctx.failWithFmtTyped(i32, "Slice is too large to push as Lua table: length {d} exceeds Lua's maximum table size {d}", .{ value.len, std.math.maxInt(c_int) });
+                lua.createTable(ctx.state.luaState, size, 0);
                 const nested = Table.fromStack(ctx.state, -1);
-                fillTable(ctx, nested, value);
+                try fillTable(ctx, nested, value);
                 return;
             },
-            else => @compileError("unsupported push type: " ++ @typeName(T)),
-        },
-        .@"struct" => {
-            const strategy = comptime Meta.getMeta(T).strategy;
-
-            if (strategy == .object) {
-                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
-                ptr.* = value;
-                MetaTable.attachMetatable(ctx.state, T);
-                return;
-            }
-
-            if (strategy == .ptr) {
-                @compileError("cannot push .zig_ptr type by value: push a *T instead");
-            }
-
-            // .table strategy (including anonymous structs)
-            lua.createTable(ctx.state.luaState, inferArrayCapacity(value), inferRecordCapacity(value));
-            const nested = Table.fromStack(ctx.state, -1);
-            fillTable(ctx, nested, value);
-
-            MetaTable.attachMetatable(ctx.state, T);
-        },
-        .@"union" => {
-            const strategy = comptime Meta.getMeta(T).strategy;
-
-            if (strategy == .object) {
-                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
-                ptr.* = value;
-                MetaTable.attachMetatable(ctx.state, T);
-                return;
-            }
-
-            if (strategy == .ptr) {
-                @compileError("cannot push .zig_ptr union by value: push a *T instead");
-            }
-
-            lua.createTable(ctx.state.luaState, 0, 1);
-            const table = Table.fromStack(ctx.state, -1);
-            switch (value) {
-                inline else => |v, tag| {
-                    table.set(ctx, @tagName(tag), v);
-                },
-            }
-
-            MetaTable.attachMetatable(ctx.state, T);
+            else => @compileError(std.fmt.comptimePrint("Pointer size {s} for {s} is not supported for encoding. Please open an issue with your use case. (Custom encode hooks do not yet support pointer types; this requires a PtrEncodeHook design that is still pending.)", .{ @tagName(ptr_info.size), @typeName(T) })),
         },
         .array => {
             lua.createTable(ctx.state.luaState, inferArrayCapacity(value), 0);
             const nested = Table.fromStack(ctx.state, -1);
-            fillTable(ctx, nested, value);
+            try fillTable(ctx, nested, value);
         },
-        else => @compileError("unsupported push type: " ++ @typeName(T)),
+        else => @compileError(std.fmt.comptimePrint("Type {s} is not yet supported for encoding. If you need this supported, please open an issue with your use case.", .{@typeName(T)})),
     }
 }
 
@@ -237,40 +216,47 @@ pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) void {
 ///
 /// Returns:
 /// - void: The table is mutated in place.
-pub fn fillTable(ctx: *Context, table: Table, value: anytype) void {
+pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
     const T = @TypeOf(value);
 
     switch (@typeInfo(T)) {
         .@"struct" => |info| {
             if (info.is_tuple) {
                 inline for (value, 0..) |item, index| {
-                    table.set(ctx, index + 1, item);
+                    try table.set(ctx, index + 1, item);
                 }
                 return;
             }
 
             inline for (info.fields) |field| {
-                table.set(ctx, field.name, @field(value, field.name));
+                try table.set(ctx, field.name, @field(value, field.name));
             }
         },
         .array => {
             for (value, 0..) |item, index| {
-                table.set(ctx, index + 1, item);
+                try table.set(ctx, index + 1, item);
             }
         },
         .pointer => |pointer| switch (pointer.size) {
             .slice => {
                 if (comptime Mapper.isStringValueType(T)) {
-                    @compileError("string-like values must be stored as Lua strings, not table fills");
+                    @compileError(std.fmt.comptimePrint("String-like value {s} cannot be filled into a Lua table: string values are always pushed as Lua strings, not tables.", .{@typeName(T)}));
                 }
 
                 for (value, 0..) |item, index| {
-                    table.set(ctx, index + 1, item);
+                    try table.set(ctx, index + 1, item);
                 }
             },
-            else => @compileError("unsupported table fill type: " ++ @typeName(T)),
+            else => @compileError(std.fmt.comptimePrint("Pointer size {s} for {s} is not supported for filling Lua tables. Only slices are supported.", .{ @tagName(pointer.size), @typeName(T) })),
         },
-        else => @compileError("unsupported table fill type: " ++ @typeName(T)),
+        .@"union" => {
+            switch (value) {
+                inline else => |v, tag| {
+                    try table.set(ctx, @tagName(tag), v);
+                },
+            }
+        },
+        else => @compileError(std.fmt.comptimePrint("Type {s} is not supported for filling Lua tables. Only structs, tuples, arrays, slices, and tagged unions are supported.", .{@typeName(T)})),
     }
 }
 
@@ -289,15 +275,16 @@ pub fn inferArrayCapacity(value: anytype) i32 {
 
     return switch (@typeInfo(T)) {
         .@"struct" => |info| if (info.is_tuple) @intCast(info.fields.len) else 0,
+        .@"union" => 0, // Tagged unions have no array elements
         .array => @intCast(value.len),
         .pointer => |pointer| switch (pointer.size) {
             .slice => if (comptime Mapper.isStringValueType(T))
-                @compileError("string-like values are not table-convertible")
+                @compileError(std.fmt.comptimePrint("String-like slice {s} cannot be converted to a Lua table: strings are always represented as Lua strings, not tables.", .{@typeName(T)}))
             else
                 std.math.cast(i32, value.len) orelse @panic("slice too large for Lua table"),
-            else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
+            else => @compileError(std.fmt.comptimePrint("Pointer size {s} for {s} is not supported for table conversion. Only slices are supported. Custom encode hooks do not yet support pointer types; if you need this feature, please open an issue.", .{ @tagName(pointer.size), @typeName(T) })),
         },
-        else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
+        else => @compileError(std.fmt.comptimePrint("Type {s} is not supported for array capacity inference. Only structs, unions, arrays, and slices are supported.", .{@typeName(T)})),
     };
 }
 
@@ -316,7 +303,8 @@ pub fn inferRecordCapacity(value: anytype) i32 {
 
     return switch (@typeInfo(T)) {
         .@"struct" => |info| if (info.is_tuple) 0 else @intCast(info.fields.len),
+        .@"union" => 1, // Tagged unions always have exactly one active variant
         .array, .pointer => 0,
-        else => @compileError("unsupported table conversion type: " ++ @typeName(T)),
+        else => @compileError(std.fmt.comptimePrint("Type {s} is not supported for record capacity inference. Only structs, unions, arrays, and slices are supported.", .{@typeName(T)})),
     };
 }

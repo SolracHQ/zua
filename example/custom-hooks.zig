@@ -12,7 +12,7 @@ const Priority = enum(u8) {
         .withEncode([]const u8, encodeStr)
         .withDecode(decodeStrOrInt);
 
-    fn encodeStr(_: *zua.Context, p: Priority) []const u8 {
+    fn encodeStr(_: *zua.Context, p: Priority) !?[]const u8 {
         return @tagName(p);
     }
 
@@ -113,10 +113,10 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "makeAddress", makeAddress);
-    globals.set(&ctx, "defaultPriority", defaultPriority);
-    globals.set(&ctx, "describePriority", describePriority);
-    globals.set(&ctx, "readAddress", readAddress);
+    try globals.set(&ctx, "makeAddress", makeAddress);
+    try globals.set(&ctx, "defaultPriority", defaultPriority);
+    try globals.set(&ctx, "describePriority", describePriority);
+    try globals.set(&ctx, "readAddress", readAddress);
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\-- Priority encodes as string, decodes from string or integer

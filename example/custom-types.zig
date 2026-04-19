@@ -73,10 +73,10 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "Counter", makeCounter);
-    globals.set(&ctx, "makeEqCondition", makeEqCondition);
-    globals.set(&ctx, "makeRangeCondition", makeRangeCondition);
-    globals.set(&ctx, "describeCondition", describeCondition);
+    try globals.set(&ctx, "Counter", makeCounter);
+    try globals.set(&ctx, "makeEqCondition", makeEqCondition);
+    try globals.set(&ctx, "makeRangeCondition", makeRangeCondition);
+    try globals.set(&ctx, "describeCondition", describeCondition);
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\local c = Counter()

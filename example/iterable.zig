@@ -37,7 +37,7 @@ pub fn main(init: std.process.Init) !void {
     var globals = state.globals();
     defer globals.release();
 
-    globals.set(&ctx, "range", range);
+    try globals.set(&ctx, "range", range);
 
     var exe = zua.Executor{};
     exe.execute(&ctx, .{ .stack_trace = .arena, .code = .{ .string =

@@ -29,7 +29,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         ///
         /// This is used by the encoder when a `Fn(ins, outs)` value is returned to
         /// or stored in Lua. It preserves the existing function ownership mode.
-        fn encode(_: *Context, self: @This()) Function {
+        fn encode(_: *Context, self: @This()) !?Function {
             return self.function;
         }
 
@@ -37,7 +37,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         ///
         /// The hook path is intentionally minimal: only actual Lua functions are
         /// accepted, and any other Lua value fails with `expected function`.
-        fn decode(ctx: *Context, prim: Mapper.Decoder.Primitive) anyerror!?@This() {
+        fn decode(ctx: *Context, prim: Mapper.Decoder.Primitive) !?@This() {
             return switch (prim) {
                 .function => |f| @This().from(f),
                 else => ctx.failTyped(?@This(), "expected function"),
@@ -93,7 +93,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
                     checkCallbackSignature(callback, ins, outs);
                 }
             }
-            Mapper.Encoder.pushValue(ctx, callback);
+            try Mapper.Encoder.pushValue(ctx, callback);
             return .{ .function = Function.fromStack(ctx.state, -1) };
         }
 
@@ -123,7 +123,7 @@ fn callbackWrapperType(comptime callback: anytype) type {
     if (comptime @typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaFn")) {
         return callback_type;
     }
-    @compileError("Fn.create expects a Zig function or a ZuaFn wrapper for signature validation");
+    @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
 }
 
 fn typeElementCount(comptime T: anytype) usize {
@@ -141,7 +141,7 @@ fn typeElementAt(comptime T: anytype, comptime index: usize) type {
         const ti = @typeInfo(T);
         if (ti == .@"struct" and ti.@"struct".is_tuple) return T[index];
         if (index == 0) return T;
-        @compileError("type index out of range");
+        @compileError("Index bigger than 0 is out of bounds for non-tuple type " ++ @typeName(T));
     }
     return T[index];
 }
