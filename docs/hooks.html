@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -186,7 +186,7 @@
     pub const ZUA_META = zua.Meta.Table(Status, .{})
         .withEncode([]const u8, encodeAsString);
 
-    fn encodeAsString(_: *zua.Context, status: Status) []const u8 {
+    fn encodeAsString(_: *zua.Context, status: Status) !?[]const u8 {
         return switch (status) {
             .idle    =&gt; "idle",
             .running =&gt; "running",
@@ -195,7 +195,7 @@
     }
 };
 </code></pre>
-<p>Now any function that returns <code>Status</code> pushes a Lua string instead of an integer. The hook must return a different type than its input; this is enforced at compile time to prevent infinite recursion.</p>
+<p>Now any function that returns <code>Status</code> pushes a Lua string instead of an integer. The hook returns <code>!?ProxyType</code>: returning <code>null</code> skips encoding and falls back to the default path, returning an error fails encoding. <code>ProxyType</code> may be the same type as <code>T</code>; use <code>null</code> as the escape hatch to avoid infinite recursion when the hook only needs to transform some values.</p>
 <h2 id="decode-hooks"><a class="header" href="#decode-hooks">Decode hooks</a></h2>
 <p>A decode hook lets a type accept multiple Lua value types. The hook receives a <code>Primitive</code> union that wraps the actual Lua value:</p>
 <pre><code class="language-zig">const Address = struct {

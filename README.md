@@ -1,22 +1,82 @@
 # zua
 
-A Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, and `defer` vs `longjmp` hazards are all handled automatically.
+A Zig library for embedding Lua. The goal is to make the boundary between the two languages mostly disappear: you pass Zig values to Lua, receive Lua values back into Zig, and none of it requires touching the Lua C API. Stack management, type conversion, memory allocation inside C callbacks, using `defer` without getting burned by `longjmp`, all handled automatically.
+
+When something goes wrong, you know why. Type mismatches produce typed error messages. Arity errors tell you what was expected. Custom hooks give you full control over how any type maps across the boundary, in both directions.
+
+## A taste
+
+Run Lua from Zig and decode the result:
 
 ```zig
-fn add(a: i32, b: i32) i32 {
-    return a + b;
+const z = try zua.State.init(gpa, io);
+defer z.deinit();
+var ctx = zua.Context.init(z);
+defer ctx.deinit();
+var executor = zua.Executor{};
+
+const result = try executor.eval(&ctx, i32, .{ .code = .{ .string = "return 2 + 3" } });
+// result == 5
+```
+
+Expose a Zig struct as a Lua table:
+
+```zig
+const Point = struct { x: f64, y: f64 };
+
+fn distance(a: Point, b: Point) f64 {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return @sqrt(dx * dx + dy * dy);
 }
 
-globals.set(&ctx, "add", add);
+try globals.set(&ctx, "distance", distance);
 ```
 
 ```lua
-print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): got string
+print(distance({x=0, y=0}, {x=3, y=4}))  -- 5.0
+print(distance({x=0, y=0}, "oops"))       -- error: distance expects (Point, Point): got string
 ```
 
-Argument decoding, return value encoding, and error dispatch happen automatically.
-Type mapping and metatable generation happen at comptime, so the binding layer has no runtime overhead.
+Expose a stateful Zig type as a Lua object with methods:
+
+```zig
+const Counter = struct {
+    pub const ZUA_META = zua.Meta.Object(Counter, .{
+        .increment = increment,
+        .value = getValue,
+        .__tostring = toString,
+    });
+
+    count: i32 = 0,
+
+    fn increment(self: *Counter, amount: i32) void { self.count += amount; }
+    fn getValue(self: *Counter) i32 { return self.count; }
+    fn toString(ctx: *zua.Context, self: *Counter) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "Counter({d})", .{self.count});
+    }
+};
+
+try globals.set(&ctx, "Counter", makeCounter);
+```
+
+```lua
+local c = Counter()
+c:increment(5)
+print(c)  -- Counter(5)
+```
+
+The [handbook](https://solrachq.github.io/zua/) covers all of it: structured data, object lifecycle, encode/decode hooks, closures, holding Lua callbacks from Zig, and the built-in REPL.
+
+## Abstraction levels
+
+zua is built in layers, all on top of the same encode/decode pipeline and raw handles. You can stop at any level:
+
+- Raw handles: `Table`, `Function`, `Userdata`, `Primitive`. Safe wrappers with zero overhead and full manual control.
+- Typed handles: `Fn(...)`, `Object(T)`, `TableView(T)`. Typed wrappers over handles with safe accessors.
+- Mapped Zig types: structs, unions, enums decoded automatically. `.table` strategy is mostly type casts and field reads, close to zero allocation. `.object` is a pointer cast. `.ptr` is the same without methods.
+
+The cost when crossing the boundary is the minimum possible. Comptime queries the struct shape directly, no reflection, no dynamic dispatch. You can mix levels freely.
 
 ## Installation
 
@@ -29,24 +89,17 @@ const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
 exe.root_module.addImport("zua", zua.module("zua"));
 ```
 
-Lua 5.4 is vendored under `vendor/lua`. No system Lua package is needed.
+## Dependencies
 
-## What it covers
+- [SolracHQ/lua](https://github.com/SolracHQ/lua): a fork of Lua 5.4 with a `build.zig` added. Pulled as a Zig package. I try to keep it updated when new Lua versions come out.
+- [linenoise](https://github.com/antirez/linenoise): vendored, with syntax highlight support added on top.
 
-- Structs passed as Lua tables, with optional and nested fields
-- Opaque objects with methods and `__gc` cleanup
-- Custom encode/decode hooks for any type
-- Closures with captured mutable state
-- Callbacks: holding and calling Lua functions from Zig
-- Variadic functions via `zua.VarArgs`
-- A built-in REPL with syntax highlighting, tab completion, and persistent history
-
-The [handbook](https://solrachq.github.io/zua/) walks through all of it from a simple `add` to full object lifecycle, without touching the Lua C API once.
+No system packages needed.
 
 ## Notes
 
-Developed on Linux (Fedora). Windows and macOS are untested. 
-Vendored dependencies are `linenoise` and Lua 5.4, both MIT-compatible. 
+Developed on Linux (Fedora). Windows and macOS are untested.
+
 Inspired by [mlua](https://github.com/mlua-rs/mlua).
 
 ## License

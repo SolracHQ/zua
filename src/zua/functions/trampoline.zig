@@ -70,7 +70,7 @@ pub fn make(
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
     const ReturnType = function_info.return_type orelse
-        @compileError("callback must have a return type");
+        @compileError("Zig native functions must have an explicit return type (use void if none)");
     const ActualReturnType = unwrapErrorUnion(ReturnType);
 
     comptime validateKind(kind, function_info);
@@ -116,7 +116,7 @@ pub fn make(
         fn execute(ctx: *Context) !void {
             const args = try decodeArgs(ctx);
             const result = try callFunction(ctx, args);
-            pushResult(ctx, result);
+            try pushResult(ctx, result);
         }
 
         fn decodeArgs(ctx: *Context) !Mapper.Decoder.ParseResult(decodedParameterTypes()) {
@@ -186,13 +186,13 @@ pub fn make(
             return if (comptime isErrorUnion(ReturnType)) try raw else raw;
         }
 
-        fn pushResult(ctx: *Context, result: ActualReturnType) void {
+        fn pushResult(ctx: *Context, result: ActualReturnType) !void {
             if (comptime returnValueCount() == 0) return;
 
             if (comptime isTuple(ActualReturnType)) {
-                inline for (result) |val| Mapper.Encoder.pushValue(ctx, val);
+                inline for (result) |val| try Mapper.Encoder.pushValue(ctx, val);
             } else {
-                Mapper.Encoder.pushValue(ctx, result);
+                try Mapper.Encoder.pushValue(ctx, result);
             }
         }
 
@@ -224,7 +224,7 @@ pub fn make(
                 if (comptime kind.hasCapture and i == kind.captureSlot()) continue;
                 if (comptime hasVarArgs(function_info) and i == function_info.params.len - 1) continue;
                 types[out] = param.type orelse
-                    @compileError("callback parameters must have concrete types");
+                    @compileError(std.fmt.comptimePrint("parameter #{d} has no type", .{i}));
                 out += 1;
             }
             return types;
@@ -247,17 +247,17 @@ fn validateVarArgs(comptime info: std.builtin.Type.Fn) void {
     inline for (info.params, 0..) |param, i| {
         const T = param.type orelse continue;
         if (T == Mapper.Decoder.VarArgs and i != info.params.len - 1) {
-            @compileError("VarArgs must be the last parameter of the callback");
+            @compileError(std.fmt.comptimePrint("VarArgs must be the last parameter of the zig native function, found at position #{d}", .{i}));
         }
     }
 }
 
 fn validateKind(comptime kind: ArgsConfig, comptime info: std.builtin.Type.Fn) void {
     if (kind.hasContext and info.params.len == 0) {
-        @compileError("callback with context must accept *Context as its first parameter");
+        @compileError("Zig native function with context must have at least one parameter for the context if declared as requiring context");
     }
     if (kind.hasCapture and captureParamIndex(info) == null) {
-        @compileError("closure callback must have exactly one capture parameter (*T where T has Meta.Capture)");
+        @compileError("Closure zig native function must have a capture parameter (a pointer to a struct/union/enum with Meta.Capture)");
     }
 }
 
@@ -266,7 +266,7 @@ fn captureParamIndex(comptime info: std.builtin.Type.Fn) ?usize {
     inline for (info.params, 0..) |param, i| {
         const T = param.type orelse continue;
         if (isCapturePointer(T)) {
-            if (found != null) @compileError("closures may only have one capture parameter");
+            if (found != null) @compileError(std.fmt.comptimePrint("Closure zig native function cannot have more than one capture parameter, found at positions #{d} and #{d}", .{ found.?, i }));
             found = i;
         }
     }
@@ -275,7 +275,7 @@ fn captureParamIndex(comptime info: std.builtin.Type.Fn) ?usize {
 
 fn captureParamPointee(comptime info: std.builtin.Type.Fn) type {
     const idx = captureParamIndex(info) orelse
-        @compileError("no capture parameter found");
+        @compileError("Closure zig native function must have a capture parameter (a pointer to a struct/union/enum with Meta.Capture)");
     const T = info.params[idx].type orelse unreachable;
     return @typeInfo(T).pointer.child;
 }
@@ -296,7 +296,7 @@ fn isCapturePointer(comptime T: type) bool {
 /// the second argument when `*Context` comes first.
 pub fn validateCapturePosition(comptime info: std.builtin.Type.Fn) void {
     const idx = captureParamIndex(info) orelse
-        @compileError("Binding.closure: function has no capture parameter (add *T where T declares Meta.Capture)");
+        @compileError("Closure zig native function must have a capture parameter (a pointer to a struct/union/enum with Meta.Capture)");
 
     const has_context = info.params.len > 0 and
         info.params[0].type != null and
@@ -304,7 +304,7 @@ pub fn validateCapturePosition(comptime info: std.builtin.Type.Fn) void {
 
     const expected: usize = if (has_context) 1 else 0;
     if (idx != expected) {
-        @compileError("Binding.closure: capture parameter must be first, or second when *Context is first");
+        @compileError("Closure zig native function: capture parameter must be first, or second when *Context is first");
     }
 }
 

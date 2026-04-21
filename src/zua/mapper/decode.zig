@@ -158,26 +158,32 @@ fn parseMulti(
     return values;
 }
 
+/// Small helper to build a consistent error message when a Lua value cannot be decoded into a Primitive.
+fn buildPrimitiveError(ctx: *Context, t: lua.Type) !Primitive {
+    return ctx.failWithFmtTyped(Primitive, "Lua reports {s} but decoding it failed", .{@tagName(t)});
+}
+
 /// Reads a Lua stack value at `index` into a `Primitive` variant.
 ///
 /// This helper extracts the Lua value from the stack without performing the
 /// final type-directed decode. It preserves borrowed handles for tables and
 /// functions, which remain valid only for the lifetime of the current stack
 /// frame.
-pub fn buildPrimitive(z: *State, index: lua.StackIndex) !Primitive {
-    return switch (lua.valueType(z.luaState, index)) {
-        .boolean => .{ .boolean = lua.toBoolean(z.luaState, index) },
-        .number => if (lua.isInteger(z.luaState, index))
-            .{ .integer = lua.toInteger(z.luaState, index) orelse return error.InvalidType }
+pub fn buildPrimitive(ctx: *Context, index: lua.StackIndex) !Primitive {
+    const state = ctx.state;
+    return switch (lua.valueType(state.luaState, index)) {
+        .boolean => .{ .boolean = lua.toBoolean(state.luaState, index) },
+        .number => if (lua.isInteger(state.luaState, index))
+            .{ .integer = lua.toInteger(state.luaState, index) orelse return buildPrimitiveError(ctx, .number) }
         else
-            .{ .float = lua.toNumber(z.luaState, index) orelse return error.InvalidType },
-        .string => .{ .string = lua.toString(z.luaState, index) orelse return error.InvalidType },
-        .table => .{ .table = Table.fromBorrowed(z, index) },
-        .function => .{ .function = Function.fromBorrowed(z, index) },
-        .userdata => .{ .userdata = Userdata.fromBorrowed(z, index) },
-        .light_userdata => .{ .light_userdata = lua.toLightUserdata(z.luaState, index) orelse return error.InvalidType },
+            .{ .float = lua.toNumber(state.luaState, index) orelse return buildPrimitiveError(ctx, .number) },
+        .string => .{ .string = lua.toString(state.luaState, index) orelse return buildPrimitiveError(ctx, .string) },
+        .table => .{ .table = Table.fromBorrowed(state, index) },
+        .function => .{ .function = Function.fromBorrowed(state, index) },
+        .userdata => .{ .userdata = Userdata.fromBorrowed(state, index) },
+        .light_userdata => .{ .light_userdata = lua.toLightUserdata(state.luaState, index) orelse return buildPrimitiveError(ctx, .light_userdata) },
         .nil, .none => .nil,
-        else => error.InvalidType,
+        else => buildPrimitiveError(ctx, .none),
     };
 }
 
@@ -211,14 +217,6 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
     }
 }
 
-fn isHandlerType(comptime T: type) bool {
-    return T == Table or T == Function or T == Userdata;
-}
-
-fn handlerExpectedTypeName(comptime T: type) []const u8 {
-    return if (comptime T == Table) "table" else if (comptime T == Function) "function" else "userdata";
-}
-
 /// Decodes a stack value at `index` into a Zig type `T`.
 ///
 /// This is the index-based entry point. It handles optional nil checks,
@@ -229,7 +227,7 @@ fn handlerExpectedTypeName(comptime T: type) []const u8 {
 ///   2. `buildPrimitive` at `index`
 ///   3. `decodeValue` for type-directed dispatch
 pub fn decodeAt(ctx: *Context, index: lua.StackIndex, comptime T: type) !T {
-    const prim = try buildPrimitive(ctx.state, index);
+    const prim = try buildPrimitive(ctx, index);
     return decodeValue(ctx, prim, T);
 }
 
@@ -256,26 +254,26 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         return;
     }
 
-    if (prim == .nil) return ctx.failTyped(T, "expected value, got nil");
+    if (prim == .nil) return ctx.failWithFmtTyped(T, "unexpected nil value for type {s}", .{@typeName(T)});
 
-    if (comptime isHandlerType(T)) {
+    if (comptime T == Table or T == Function or T == Userdata) {
         if (comptime T == Table) {
             return switch (prim) {
                 .table => |t| t,
-                else => ctx.failTyped(T, "expected table"),
+                else => ctx.failWithFmtTyped(T, "expected table but got {s}", .{@tagName(prim)}),
             };
         }
 
         if (comptime T == Function) {
             return switch (prim) {
                 .function => |f| f,
-                else => ctx.failTyped(T, "expected function"),
+                else => ctx.failWithFmtTyped(T, "expected function but got {s}", .{@tagName(prim)}),
             };
         }
 
         return switch (prim) {
             .userdata => |u| u,
-            else => ctx.failTyped(T, "expected userdata"),
+            else => ctx.failWithFmtTyped(T, "expected userdata but got {s}", .{@tagName(prim)}),
         };
     }
 
@@ -292,24 +290,37 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         .@"enum" => decodeEnum(T, prim, ctx),
         .bool => switch (prim) {
             .boolean => |b| b,
-            else => ctx.failTyped(T, "expected boolean"),
+            else => ctx.failWithFmtTyped(T, "expected boolean for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         },
-        .int => switch (prim) {
-            .integer => |i| std.math.cast(T, i) orelse return ctx.failTyped(T, "integer out of range"),
-            else => ctx.failWithFmtTyped(T, "expected integer but got {s}", .{@tagName(prim)}),
+        .int => {
+            return switch (prim) {
+                .integer => |i| std.math.cast(T, i) orelse ctx.failTyped(T, "integer out of range"),
+                else => ctx.failWithFmtTyped(T, "expected integer for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
+            };
         },
         .float => switch (prim) {
             .float => |f| @floatCast(f),
             .integer => |i| @floatFromInt(i),
-            else => ctx.failWithFmtTyped(T, "expected float but got {s}", .{@tagName(prim)}),
+            else => ctx.failWithFmtTyped(T, "expected float for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
+        },
+        .array => |arrayType| switch (prim) {
+            .table => |arrayLikeTable| {
+                const expected_size = arrayType.len;
+                const slice = try decodeSlice([]arrayType.child, ctx, arrayLikeTable);
+                if (slice.len != expected_size) {
+                    return ctx.failWithFmtTyped(T, "expected array of size {d} but got {d}", .{ expected_size, slice.len });
+                }
+                return slice[0..expected_size].*;
+            },
+            else => ctx.failWithFmtTyped(T, "expected array like table for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         },
         else => if (comptime Mapper.isStringValueType(T))
             switch (prim) {
                 .string => |s| s,
-                else => ctx.failWithFmtTyped(T, "expected string but got {s}", .{@tagName(prim)}),
+                else => ctx.failWithFmtTyped(T, "expected lua string for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
             }
         else
-            @compileError("unsupported decode type: " ++ @typeName(T)),
+            @compileError(std.fmt.comptimePrint("{T} is not decodable yet, If you want support please add an issue with your use case, if you need it urgently you can also use a custom decode hook to implement it yourself in the meantime.", .{@typeName(T)})),
     };
 }
 
@@ -318,7 +329,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !VarArgs {
     const args = try ctx.arena().alloc(Primitive, count);
     for (0..count) |i| {
-        args[i] = try buildPrimitive(ctx.state, start_index + @as(lua.StackIndex, @intCast(i)));
+        args[i] = try buildPrimitive(ctx, start_index + @as(lua.StackIndex, @intCast(i)));
     }
     return .{ .args = args };
 }
@@ -343,7 +354,7 @@ fn decodePointer(
     if (comptime ptr_info.size == .slice and !Mapper.isStringValueType(T)) {
         const table = switch (prim) {
             .table => |t| t,
-            else => return ctx.failTyped(T, "expected table"),
+            else => return ctx.failWithFmtTyped(T, "expected array like table for slice type {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         };
         return decodeSlice(T, ctx, table);
     }
@@ -351,11 +362,11 @@ fn decodePointer(
     if (comptime Mapper.isStringValueType(T)) {
         return switch (prim) {
             .string => |s| s,
-            else => ctx.failTyped(T, "expected string"),
+            else => ctx.failWithFmtTyped(T, "expected string for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         };
     }
 
-    @compileError("unsupported pointer type: " ++ @typeName(T));
+    @compileError(std.fmt.comptimePrint("unsupported pointer type {T}: please add a issue with your use case, or use a custom decode hook in the meantime", .{@typeName(T)}));
 }
 
 /// Decodes a non-pointer Zig struct value from a Lua primitive.
@@ -365,27 +376,27 @@ fn decodePointer(
 fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
-    if (strategy == .object or strategy == .ptr) {
+    if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
-    if (T == Table) {
+    if (comptime T == Table) {
         return switch (prim) {
             .table => |t| t,
-            else => ctx.failTyped(T, "expected table"),
+            else => ctx.failWithFmtTyped(T, "expected table for raw table handle but got {s}", .{@tagName(prim)}),
         };
     }
 
     if (comptime T == Function) {
         return switch (prim) {
             .function => |f| f,
-            else => ctx.failTyped(T, "expected function"),
+            else => ctx.failWithFmtTyped(T, "expected function for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         };
     }
 
     const table = switch (prim) {
         .table => |t| t,
-        else => return ctx.failTyped(T, "expected table"),
+        else => return ctx.failWithFmtTyped(T, "expected table for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
     };
     return decodeStruct(ctx, table, T);
 }
@@ -397,13 +408,13 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
 fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.getMeta(T).strategy;
 
-    if (strategy == .object or strategy == .ptr) {
+    if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
     }
 
     const table = switch (prim) {
         .table => |t| t,
-        else => return ctx.failTyped(T, "expected table"),
+        else => return ctx.failWithFmtTyped(T, "expected table for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
     };
     return decodeUnion(ctx, table, T);
 }
@@ -415,10 +426,10 @@ fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
 fn decodeEnum(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const value = switch (prim) {
         .integer => |v| v,
-        else => return ctx.failTyped(T, "expected integer"),
+        else => return ctx.failWithFmtTyped(T, "expected integer for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
     };
     const tag = std.math.cast(std.meta.Tag(T), value) orelse
-        return ctx.failTyped(T, "integer out of range");
+        return ctx.failWithFmtTyped(T, "integer out of range for {s}", .{@typeName(T)});
     return @enumFromInt(tag);
 }
 
@@ -463,12 +474,12 @@ pub fn decodeUnion(ctx: *Context, table: Table, comptime T: type) !T {
     inline for (@typeInfo(T).@"union".fields) |field| {
         const maybe_value = try table.get(ctx, field.name, ?field.type);
         if (maybe_value) |v| {
-            if (found != null) return ctx.failTyped(T, "ambiguous union variant");
+            if (found != null) return ctx.failWithFmtTyped(T, "ambiguous union variant for {s}: both {s} and {s} are present", .{ @typeName(T), @tagName(found.?), field.name });
             found = @unionInit(T, field.name, v);
         }
     }
 
-    return found orelse ctx.failTyped(T, "no matching union variant");
+    return found orelse ctx.failWithFmtTyped(T, "no matching union variant for {s}", .{@typeName(T)});
 }
 
 /// Decodes a Lua array table into a typed slice.

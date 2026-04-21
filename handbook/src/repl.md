@@ -26,8 +26,8 @@ defer ctx.deinit();
 const globals = z.globals();
 defer globals.release();
 
-globals.set(&ctx, "add",   add);
-globals.set(&ctx, "greet", zua.ZuaFn.new(greet, .{}));
+try globals.set(&ctx, "add",   add);
+try globals.set(&ctx, "greet", zua.ZuaFn.new(greet, .{}));
 
 try zua.Repl.run(z, .{});
 ```
@@ -155,8 +155,8 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.release();
-    globals.set(&ctx, "example",      example);
-    globals.set(&ctx, "custom_magic", example);
+    try globals.set(&ctx, "example",      example);
+    try globals.set(&ctx, "custom_magic", example);
 
     try zua.Repl.run(z, .{
         .welcome_message     = "Welcome to the zua REPL!\n",

@@ -149,7 +149,7 @@ pub fn takeOwnership(self: Table) Table {
 /// tbl.set(ctx, "name", "Alice");
 /// tbl.set(ctx, 1, 42);
 /// ```
-pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) void {
+pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) !void {
     const Key = @TypeOf(key);
     const index = switch (self.handle) {
         inline else => |idx| idx,
@@ -157,13 +157,13 @@ pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) void {
 
     if (comptime isStringKeyType(Key)) {
         const key_text = coerceStringKey(key);
-        Mapper.Encoder.pushValue(ctx, value);
+        try Mapper.Encoder.pushValue(ctx, value);
         lua.setField(self.state.luaState, index, key_text);
         return;
     }
 
     const key_value = coerceIntegerKey(key);
-    Mapper.Encoder.pushValue(ctx, value);
+    try Mapper.Encoder.pushValue(ctx, value);
     lua.setIndex(self.state.luaState, index, key_value);
 }
 
@@ -324,9 +324,9 @@ fn coerceStringKey(key: anytype) [:0]const u8 {
         .pointer => |pointer| switch (pointer.size) {
             .one => key,
             .slice => key,
-            else => @compileError("unsupported string key type: " ++ @typeName(T)),
+            else => @compileError("Unsupported string key type: " ++ @typeName(T)),
         },
-        else => @compileError("unsupported string key type: " ++ @typeName(T)),
+        else => @compileError("Unsupported string key type: " ++ @typeName(T)),
     };
 }
 
@@ -335,6 +335,6 @@ fn coerceIntegerKey(key: anytype) lua.Integer {
 
     return switch (@typeInfo(T)) {
         .comptime_int, .int => std.math.cast(lua.Integer, key) orelse @panic("table integer key out of range"),
-        else => @compileError("unsupported table key type: " ++ @typeName(T)),
+        else => @compileError("Unsupported table key type: " ++ @typeName(T)),
     };
 }

@@ -15,7 +15,7 @@ const Status = enum(u8) {
     pub const ZUA_META = zua.Meta.Table(Status, .{})
         .withEncode([]const u8, encodeAsString);
 
-    fn encodeAsString(_: *zua.Context, status: Status) []const u8 {
+    fn encodeAsString(_: *zua.Context, status: Status) !?[]const u8 {
         return switch (status) {
             .idle    => "idle",
             .running => "running",
@@ -25,7 +25,7 @@ const Status = enum(u8) {
 };
 ```
 
-Now any function that returns `Status` pushes a Lua string instead of an integer. The hook must return a different type than its input; this is enforced at compile time to prevent infinite recursion.
+Now any function that returns `Status` pushes a Lua string instead of an integer. The hook returns `!?ProxyType`: returning `null` skips encoding and falls back to the default path, returning an error fails encoding. `ProxyType` may be the same type as `T`; use `null` as the escape hatch to avoid infinite recursion when the hook only needs to transform some values.
 
 ## Decode hooks
 

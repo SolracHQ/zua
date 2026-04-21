@@ -89,7 +89,7 @@ const guide = Table.from(z, .{
     .tags    = [_][]const u8{ "zig", "lua" },
 });
 defer guide.release();
-globals.set(&ctx, "guide", guide);
+try globals.set(&ctx, "guide", guide);
 ```
 
 Struct fields become string keys. Arrays and slices become array-style tables with integer keys starting at 1. Nesting is recursive. For incremental construction, use `Table.create` and `set`:
@@ -97,10 +97,10 @@ Struct fields become string keys. Arrays and slices become array-style tables wi
 ```zig
 const entry = Table.create(z, 0, 3);
 defer entry.release();
-entry.set(&ctx, "address", "0x7fff1234");
-entry.set(&ctx, "type",    "f32");
-entry.set(&ctx, "value",   8.3);
-globals.set(&ctx, "entry", entry);
+try entry.set(&ctx, "address", "0x7fff1234");
+try entry.set(&ctx, "type",    "f32");
+try entry.set(&ctx, "value",   8.3);
+try globals.set(&ctx, "entry", entry);
 ```
 
 > [!NOTE]

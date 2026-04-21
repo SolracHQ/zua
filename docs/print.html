@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -176,20 +176,11 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-globals.set(&amp;ctx, "add", add);
-</code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
-</code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
+<p>zua is a Zig library for embedding Lua. The boundary between the two languages is meant to mostly disappear: you write ordinary Zig functions, register them, and they work from Lua. Structs decode from tables, errors propagate as Lua messages, and <code>defer</code> stays safe inside callbacks. None of that requires touching the Lua C API.</p>
+<p>When something goes wrong, you know why. Type mismatches name the expected type and what arrived instead. Custom encode and decode hooks give you full control over how any type crosses the boundary, in both directions, without abandoning the automatic path for everything else.</p>
+<p>The handbook builds from the ground up. Setup, then a first function, then richer types, then the parts you reach for when simple isn’t enough: object lifecycle, closures, holding Lua callbacks from Zig, the built-in REPL. Each chapter adds one thing and shows it working.</p>
 <h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
+<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need. Most chapters are self-contained: concepts are repeated where necessary so you can go straight to what you need without reading everything before it.</p>
 <ul>
 <li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
 <li><strong>First function</strong> - arguments, return values, error messages.</li>
@@ -252,7 +243,7 @@ defer ctx.deinit();
 <pre><code class="language-zig">const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add", add);
+try globals.set(&amp;ctx, "add", add);
 </code></pre>
 <p><code>globals()</code> returns a <strong>stack-owned handle</strong>. Call <code>.release()</code> when you are done registering, or use <code>defer</code> immediately as shown above. The registered functions remain available to Lua after the handle is released because zua stores them in the Lua VM, not in the handle itself.</p>
 <h2 id="putting-it-together"><a class="header" href="#putting-it-together">Putting it together</a></h2>
@@ -275,7 +266,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&amp;ctx, "add", add);
+    try globals.set(&amp;ctx, "add", add);
 
     try executor.execute(&amp;ctx, .{ .code = .{ .string = "print(add(1, 2))" } });
 }
@@ -558,15 +549,15 @@ process({ in_range = { min = 0, max = 255 } })
     .tags    = [_][]const u8{ "zig", "lua" },
 });
 defer guide.release();
-globals.set(&amp;ctx, "guide", guide);
+try globals.set(&amp;ctx, "guide", guide);
 </code></pre>
 <p>Struct fields become string keys. Arrays and slices become array-style tables with integer keys starting at 1. Nesting is recursive. For incremental construction, use <code>Table.create</code> and <code>set</code>:</p>
 <pre><code class="language-zig">const entry = Table.create(z, 0, 3);
 defer entry.release();
-entry.set(&amp;ctx, "address", "0x7fff1234");
-entry.set(&amp;ctx, "type",    "f32");
-entry.set(&amp;ctx, "value",   8.3);
-globals.set(&amp;ctx, "entry", entry);
+try entry.set(&amp;ctx, "address", "0x7fff1234");
+try entry.set(&amp;ctx, "type",    "f32");
+try entry.set(&amp;ctx, "value",   8.3);
+try globals.set(&amp;ctx, "entry", entry);
 </code></pre>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
@@ -743,7 +734,7 @@ print(p:distance())  -- 5
 
     pub fn increment(ctx: *zua.Context, self: zua.Table, delta: i32) !void {
         const current = try self.get(ctx, "count", i32);
-        self.set(ctx, "count", current + delta);
+        try self.set(ctx, "count", current + delta);
     }
 };
 </code></pre>
@@ -919,7 +910,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
     pub const ZUA_META = zua.Meta.Table(Status, .{})
         .withEncode([]const u8, encodeAsString);
 
-    fn encodeAsString(_: *zua.Context, status: Status) []const u8 {
+    fn encodeAsString(_: *zua.Context, status: Status) !?[]const u8 {
         return switch (status) {
             .idle    =&gt; "idle",
             .running =&gt; "running",
@@ -928,7 +919,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
     }
 };
 </code></pre>
-<p>Now any function that returns <code>Status</code> pushes a Lua string instead of an integer. The hook must return a different type than its input; this is enforced at compile time to prevent infinite recursion.</p>
+<p>Now any function that returns <code>Status</code> pushes a Lua string instead of an integer. The hook returns <code>!?ProxyType</code>: returning <code>null</code> skips encoding and falls back to the default path, returning an error fails encoding. <code>ProxyType</code> may be the same type as <code>T</code>; use <code>null</code> as the escape hatch to avoid infinite recursion when the hook only needs to transform some values.</p>
 <h2 id="decode-hooks"><a class="header" href="#decode-hooks">Decode hooks</a></h2>
 <p>A decode hook lets a type accept multiple Lua value types. The hook receives a <code>Primitive</code> union that wraps the actual Lua value:</p>
 <pre><code class="language-zig">const Address = struct {
@@ -1039,14 +1030,14 @@ fn clearCallback() void {
 <pre><code class="language-zig">const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add", add);
+try globals.set(&amp;ctx, "add", add);
 // release() happens here, at end of scope
 </code></pre>
 <p>If you return a stack-owned handle from a callback, the trampoline takes ownership and you do not call <code>.release()</code> yourself:</p>
-<pre><code class="language-zig">fn makeTable(ctx: *zua.Context) zua.Table {
+<pre><code class="language-zig">fn makeTable(ctx: *zua.Context) !zua.Table {
     const t = Table.create(z, 0, 2);
-    t.set(ctx, "x", 1);
-    t.set(ctx, "y", 2);
+    try t.set(ctx, "x", 1);
+    try t.set(ctx, "y", 2);
     return t;  // trampoline takes ownership, do not release
 }
 </code></pre>
@@ -1109,8 +1100,8 @@ fn storeTable(_: *zua.Context, t: zua.Table) void {
 const label = try t.get(ctx, "label", []const u8);  // string key
 </code></pre>
 <p><code>Table.set</code> writes a field. It accepts any type that zua knows how to encode:</p>
-<pre><code class="language-zig">t.set(ctx, "result", 42);
-t.set(ctx, "status", "ok");
+<pre><code class="language-zig">try t.set(ctx, "result", 42);
+try t.set(ctx, "status", "ok");
 </code></pre>
 <h2 id="zuafunction-as-a-parameter"><a class="header" href="#zuafunction-as-a-parameter">zua.Function as a parameter</a></h2>
 <p>Declare <code>zua.Function</code> as a parameter to receive a Lua function and call it from Zig:</p>
@@ -1253,9 +1244,9 @@ fn buildScene(bg: zua.Object(Texture), click: zua.Function) Scene {
 <h2 id="hiding-a-pointer-on-a-table"><a class="header" href="#hiding-a-pointer-on-a-table">Hiding a pointer on a table</a></h2>
 <p>Sometimes you want a Lua-facing table with public fields but a private Zig pointer backing it. Store the pointer as a light userdata key with a name that signals it is private by convention:</p>
 <pre><code class="language-zig">const entry_table = Table.create(z, 0, 3);
-entry_table.set(&amp;ctx, "address", "0x7fff1234");
+try entry_table.set(&amp;ctx, "address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
-entry_table.set(&amp;ctx, "get", zua.ZuaFn.new(entryGet, .{}));
+try entry_table.set(&amp;ctx, "get", zua.ZuaFn.new(entryGet, .{}));
 </code></pre>
 <p>Inside the method, retrieve it:</p>
 <pre><code class="language-zig">fn entryGet(ctx: *zua.Context, self: zua.Table) !f64 {
@@ -1285,7 +1276,7 @@ fn counterTick(s: *CounterState) i32 {
 }
 </code></pre>
 <p>Then register the closure with an initial value:</p>
-<pre><code class="language-zig">globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
+<pre><code class="language-zig">try globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
     counterTick,
     CounterState{ .count = 0, .step = 1 },
     .{},
@@ -1296,8 +1287,8 @@ print(counter())  -- 2
 print(counter())  -- 3
 </code></pre>
 <p>Each call to <code>newClosure</code> allocates a <strong>fresh, independent</strong> capture. Registering the same function twice with different initial values gives two closures that never share state:</p>
-<pre><code class="language-zig">globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
-globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+<pre><code class="language-zig">try globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
+try globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
 </code></pre>
 <pre><code class="language-lua">print(by_one())  -- 1
 print(by_one())  -- 2
@@ -1470,8 +1461,8 @@ defer ctx.deinit();
 const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add",   add);
-globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
+try globals.set(&amp;ctx, "add",   add);
+try globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
 
 try zua.Repl.run(z, .{});
 </code></pre>
@@ -1575,8 +1566,8 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.release();
-    globals.set(&amp;ctx, "example",      example);
-    globals.set(&amp;ctx, "custom_magic", example);
+    try globals.set(&amp;ctx, "example",      example);
+    try globals.set(&amp;ctx, "custom_magic", example);
 
     try zua.Repl.run(z, .{
         .welcome_message     = "Welcome to the zua REPL!\n",

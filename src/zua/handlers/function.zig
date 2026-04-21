@@ -90,11 +90,11 @@ pub fn create(state: *State, callback: anytype) Function {
     {
         var ctx = Context.init(state);
         defer ctx.deinit();
-        Mapper.Encoder.pushValue(&ctx, callback);
+        Mapper.Encoder.pushValue(&ctx, callback) catch @panic("This must never happen, push a function to lua cannot fail in the zig sense, lua will just panic, so if you see this, please report a bug");
         return Function.fromStack(state, -1);
     }
 
-    @compileError("Function.create expects a Zig function or a ZuaFn wrapper");
+    @compileError("Function.create expects a Zig function or a NativeFn/Closure wrapper");
 }
 
 /// Calls the Lua function with the given arguments and decodes return values.
@@ -127,7 +127,7 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
     const ArgsTuple = @TypeOf(args);
     const arg_count = @typeInfo(ArgsTuple).@"struct".fields.len;
     inline for (args) |arg| {
-        Mapper.Encoder.pushValue(ctx, arg);
+        try Mapper.Encoder.pushValue(ctx, arg);
     }
 
     // Call the function

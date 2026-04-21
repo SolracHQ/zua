@@ -41,10 +41,10 @@ const Vector2 = struct {
         return Vector2{ .x = self.x / len, .y = self.y / len };
     }
 
-    pub fn translate(ctx: *zua.Context, self: zua.TableView(Vector2), dx: f64, dy: f64) void {
+    pub fn translate(ctx: *zua.Context, self: zua.TableView(Vector2), dx: f64, dy: f64) !void {
         self.ref.x += dx;
         self.ref.y += dy;
-        self.sync(ctx);
+        try self.sync(ctx);
     }
 };
 
@@ -116,13 +116,13 @@ pub fn main(init: std.process.Init) !void {
     defer globals.release();
 
     // Register functions
-    globals.set(&ctx, "add", add);
-    globals.set(&ctx, "multiply", multiply);
-    globals.set(&ctx, "Counter", makeCounter);
-    globals.set(&ctx, "Vector", zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
-    globals.set(&ctx, "map_with_callback", zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
-    globals.set(&ctx, "filter_and_sum", zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
-    globals.set(&ctx, "multi_return_example", multiReturnExample);
+    try globals.set(&ctx, "add", add);
+    try globals.set(&ctx, "multiply", multiply);
+    try globals.set(&ctx, "Counter", makeCounter);
+    try globals.set(&ctx, "Vector", zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
+    try globals.set(&ctx, "map_with_callback", zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
+    try globals.set(&ctx, "filter_and_sum", zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
+    try globals.set(&ctx, "multi_return_example", multiReturnExample);
 
     const code =
         \\-- Basic function calls

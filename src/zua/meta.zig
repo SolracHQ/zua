@@ -32,8 +32,14 @@ pub const Strategy = enum {
 /// This helper is used by `MetaData` to represent encode hooks that take the
 /// current call `Context` and a Zig value of type `T`, then return a proxy type
 /// to push into Lua.
+///
+/// In the case the developer wants to only encode certain values but continue with
+/// the default path for others can just return null to indicate the default encoding should be used.
+///
+/// the optional return also allow use the hook to transform the value returning the same type but with different content,
+/// for example to implement a custom string encoding for a struct while still pushing it as a table.
 pub fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
-    return fn (*Context, T) ProxyType;
+    return fn (*Context, T) anyerror!?ProxyType;
 }
 
 /// Internal alias for a custom decode hook signature.
@@ -53,11 +59,22 @@ pub fn DecodeHook(comptime T: type) type {
 /// optional encode/decode hooks for `T`. It is the underlying type behind
 /// `Object()`, `Table()`, `Ptr()`, and `strEnum()`.
 fn MetaData(
-    comptime T: type,
+    comptime Type: type,
     comptime strat: Strategy,
     comptime methods: anytype,
     comptime ProxyType: type,
 ) type {
+    // Fires only when someone calls Table(..), Object(..), etc. with a type
+    // that has no visible ZUA_META. Lazy evaluation means this only runs when
+    // getMeta forces evaluation by iterating public declarations, so if it
+    // fires the most likely cause is a misspelling or a declaration outside
+    // the type body.
+    if (comptime !@hasDecl(Type, "ZUA_META") and !@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) {
+        @compileError(@typeName(Type) ++ " has no visible ZUA_META: is it misspelled or declared outside the type?");
+    }
+
+    const T = if (@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__DEFAULT_GUARD_ORIGINAL_TYPE else Type;
+
     return struct {
         strategy: Strategy = strat,
         methods: @TypeOf(methods) = methods,
@@ -73,9 +90,7 @@ fn MetaData(
             comptime handler: EncodeHook(T, NewProxyType),
         ) MetaData(T, strat, methods, NewProxyType) {
             if (comptime strat == .capture)
-                @compileError("capture strategy types do not support encode hooks");
-
-            assertEncodeReturnDiffers(T, NewProxyType);
+                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support encode hook");
             return .{
                 .strategy = self.strategy,
                 .methods = self.methods,
@@ -92,7 +107,7 @@ fn MetaData(
             comptime handler: DecodeHook(T),
         ) MetaData(T, strat, methods, ProxyType) {
             if (comptime strat == .capture)
-                @compileError("capture strategy types do not support decode hooks");
+                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support decode hook");
 
             return .{
                 .strategy = self.strategy,
@@ -124,7 +139,7 @@ fn MetaData(
 /// };
 /// ```
 pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, methods, void) {
-    assertStructEnumOrUnion(T);
+    assertContainerType(T);
     return .{ .methods = methods };
 }
 
@@ -142,7 +157,7 @@ pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, 
 /// };
 /// ```
 pub fn Table(comptime T: type, comptime methods: anytype) MetaData(T, .table, methods, void) {
-    assertStructEnumOrUnion(T);
+    assertContainerType(T);
     assertTaggedIfUnion(T);
     return .{ .methods = methods };
 }
@@ -153,7 +168,7 @@ pub fn Table(comptime T: type, comptime methods: anytype) MetaData(T, .table, me
 /// metatable or field access. Use this for opaque handles that Lua should
 /// not inspect or mutate.
 pub fn Ptr(comptime T: type) MetaData(T, .ptr, .{}, void) {
-    assertStructEnumOrUnion(T);
+    assertContainerType(T);
     return .{};
 }
 
@@ -190,7 +205,7 @@ pub fn Ptr(comptime T: type) MetaData(T, .ptr, .{}, void) {
 /// };
 /// ```
 pub fn Capture(comptime T: type, comptime methods: anytype) MetaData(T, .capture, methods, void) {
-    assertStructEnumOrUnion(T);
+    assertContainerType(T);
     return .{ .methods = methods };
 }
 
@@ -239,6 +254,7 @@ pub fn strEnum(comptime T: type, comptime methods: anytype) MetaData(T, .table, 
 /// }
 /// ```
 pub fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype) MetaData(T, .object, mergeMethodSets(generateListMethodsSet(T, getElements), methods), void) {
+    assertContainerType(T);
     assertNoListCollisions(methods);
     return .{};
 }
@@ -252,11 +268,19 @@ pub fn List(comptime T: type, comptime getElements: anytype, comptime methods: a
 /// Internally this is used by code that needs to compute metadata shape at
 /// compile time without depending on a concrete metadata value.
 pub fn getMetaType(comptime T: type) type {
+    assertContainerType(T);
+    // Force evaluation of all public declarations in debug builds so
+    // misspelled ZUA_META constants are caught at compile time.
+    // Skipped in release to preserve lazy evaluation semantics.
+    if (comptime @import("builtin").mode == .Debug) {
+        inline for (comptime std.meta.declarations(T)) |decl| {
+            _ = &@field(T, decl.name);
+        }
+    }
     const info = @typeInfo(T);
-    if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
     if (comptime @hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META);
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void);
-    return MetaData(T, .table, .{}, void);
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void);
+    return MetaData(DefaultGuard(T), .table, .{}, void);
 }
 
 /// Returns the metadata value for `T`, applying default strategy rules.
@@ -275,18 +299,17 @@ pub fn getMetaType(comptime T: type) type {
 /// const strategy = meta.strategy;
 /// ```
 pub fn getMeta(comptime T: type) getMetaType(T) {
+    assertContainerType(T);
     const info = @typeInfo(T);
-    if (comptime info == .@"fn") @compileError("function types are not supported by getMeta");
     if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(T, .object, .{}, void){};
-    return MetaData(T, .table, .{}, void){};
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void){};
+    return MetaData(DefaultGuard(T), .table, .{}, void){};
 }
 
-fn assertStructEnumOrUnion(comptime T: type) void {
-    switch (@typeInfo(T)) {
-        .@"struct", .@"enum", .@"union" => {},
-        else => @compileError(@typeName(T) ++ " must be a struct, enum, or union"),
-    }
+pub fn DefaultGuard(comptime T: type) type {
+    return struct {
+        pub const __DEFAULT_GUARD_ORIGINAL_TYPE = T;
+    };
 }
 
 fn assertTaggedIfUnion(comptime T: type) void {
@@ -297,14 +320,16 @@ fn assertTaggedIfUnion(comptime T: type) void {
     }
 }
 
-fn assertEncodeReturnDiffers(comptime T: type, comptime R: type) void {
-    if (T == R)
-        @compileError("encode hook return type must differ from " ++ @typeName(T) ++ " to prevent infinite recursion");
+fn assertContainerType(comptime T: type) void {
+    const info = @typeInfo(T);
+    if (comptime info != .@"struct" and info != .@"union" and info != .@"enum" and info != .@"opaque") {
+        @compileError(@typeName(T) ++ " is not a struct, union, enum, or opaque type and cannot be used with meta strategies that require field mapping");
+    }
 }
 
-fn strEnumEncode(comptime T: type) fn (*Context, T) []const u8 {
+fn strEnumEncode(comptime T: type) EncodeHook(T, []const u8) {
     return struct {
-        fn encode(_: *Context, value: T) []const u8 {
+        fn encode(_: *Context, value: T) !?[]const u8 {
             return @tagName(value);
         }
     }.encode;
@@ -335,7 +360,7 @@ fn ElementType(comptime getElements: anytype) type {
         @compileError("getElements must have an explicit return type");
     const info = @typeInfo(R);
     if (info != .pointer or info.pointer.size != .slice)
-        @compileError("getElements must return a slice");
+        @compileError("getElements must return a slice type, got " ++ @typeName(R));
     return info.pointer.child;
 }
 

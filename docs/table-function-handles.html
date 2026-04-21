@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -202,8 +202,8 @@
 const label = try t.get(ctx, "label", []const u8);  // string key
 </code></pre>
 <p><code>Table.set</code> writes a field. It accepts any type that zua knows how to encode:</p>
-<pre><code class="language-zig">t.set(ctx, "result", 42);
-t.set(ctx, "status", "ok");
+<pre><code class="language-zig">try t.set(ctx, "result", 42);
+try t.set(ctx, "status", "ok");
 </code></pre>
 <h2 id="zuafunction-as-a-parameter"><a class="header" href="#zuafunction-as-a-parameter">zua.Function as a parameter</a></h2>
 <p>Declare <code>zua.Function</code> as a parameter to receive a Lua function and call it from Zig:</p>

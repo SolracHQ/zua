@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -193,8 +193,8 @@ defer ctx.deinit();
 const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add",   add);
-globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
+try globals.set(&amp;ctx, "add",   add);
+try globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
 
 try zua.Repl.run(z, .{});
 </code></pre>
@@ -298,8 +298,8 @@ pub fn main(init: std.process.Init) !void {
 
     const globals = z.globals();
     defer globals.release();
-    globals.set(&amp;ctx, "example",      example);
-    globals.set(&amp;ctx, "custom_magic", example);
+    try globals.set(&amp;ctx, "example",      example);
+    try globals.set(&amp;ctx, "custom_magic", example);
 
     try zua.Repl.run(z, .{
         .welcome_message     = "Welcome to the zua REPL!\n",

@@ -10,63 +10,21 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Lua dependency
+    const lua_dep = b.dependency("lua", .{ .target = target, .optimize = optimize });
+    const lua_lib = lua_dep.artifact("lua");
+    module.link_libc = true;
+    module.linkLibrary(lua_lib);
+
     const translate_c = b.addTranslateC(.{
         .root_source_file = b.path("src/c.h"),
         .target = target,
         .optimize = optimize,
     });
-    translate_c.addIncludePath(b.path("vendor/lua"));
+    translate_c.addIncludePath(lua_lib.getEmittedIncludeTree());
     translate_c.addIncludePath(b.path("vendor/linenoise"));
     const c_mod = translate_c.createModule();
     module.addImport("c", c_mod);
-
-    // Lua configuration
-
-    module.link_libc = true;
-    module.addIncludePath(b.path("vendor/lua"));
-    module.addIncludePath(b.path("vendor/linenoise"));
-
-    const lua_source_files = [_][]const u8{
-        "vendor/lua/lapi.c",
-        "vendor/lua/lauxlib.c",
-        "vendor/lua/lbaselib.c",
-        "vendor/lua/lcode.c",
-        "vendor/lua/lcorolib.c",
-        "vendor/lua/lctype.c",
-        "vendor/lua/ldblib.c",
-        "vendor/lua/ldebug.c",
-        "vendor/lua/ldo.c",
-        "vendor/lua/ldump.c",
-        "vendor/lua/lfunc.c",
-        "vendor/lua/lgc.c",
-        "vendor/lua/llex.c",
-        "vendor/lua/lmathlib.c",
-        "vendor/lua/lmem.c",
-        "vendor/lua/loadlib.c",
-        "vendor/lua/liolib.c",
-        "vendor/lua/lobject.c",
-        "vendor/lua/lopcodes.c",
-        "vendor/lua/loslib.c",
-        "vendor/lua/lparser.c",
-        "vendor/lua/lstate.c",
-        "vendor/lua/lstring.c",
-        "vendor/lua/lstrlib.c",
-        "vendor/lua/ltable.c",
-        "vendor/lua/ltablib.c",
-        "vendor/lua/ltm.c",
-        "vendor/lua/lundump.c",
-        "vendor/lua/lutf8lib.c",
-        "vendor/lua/lvm.c",
-        "vendor/lua/lzio.c",
-        "vendor/lua/linit.c",
-    };
-
-    for (lua_source_files) |source_file| {
-        module.addCSourceFile(.{
-            .file = b.path(source_file),
-            .flags = &.{"-fno-sanitize=alignment"}, // lua uses u16 alignment, and zig dont like that, so I disable it for all the files, anyways is Lua, made for a lot of people smarter than me, so I trust they know what they are doing, it works, but if I committing an error please advice in an issue or a PR, thanks.
-        });
-    }
 
     // Linenoise configuration
     module.addCSourceFile(.{ .file = b.path("vendor/linenoise/linenoise.c"), .flags = &.{} });

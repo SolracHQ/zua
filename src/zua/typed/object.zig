@@ -39,7 +39,7 @@ pub fn Object(comptime T: type) type {
         ///
         /// This is used by the metadata pipeline when an `Object(T)` value is
         /// returned to or stored in Lua.
-        pub fn encode(_: *Context, self: @This()) UserData {
+        pub fn encode(_: *Context, self: @This()) !?UserData {
             return self.handle;
         }
 
