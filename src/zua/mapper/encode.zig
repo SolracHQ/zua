@@ -189,17 +189,17 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
 ///
 /// This function is used by the encoder when a Zig value is represented as a `Primitive`
 /// for custom encode hooks or when the value is already a `Primitive`.
-pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) void {
+pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
     switch (value) {
         .nil => lua.pushNil(ctx.state.luaState),
         .boolean => |b| lua.pushBoolean(ctx.state.luaState, b),
         .integer => |i| lua.pushInteger(ctx.state.luaState, i),
         .float => |f| lua.pushNumber(ctx.state.luaState, f),
         .string => |s| lua.pushString(ctx.state.luaState, s),
-        .table => |t| pushValue(ctx, t),
-        .function => |f| pushValue(ctx, f),
+        .table => |t| try pushValue(ctx, t),
+        .function => |f| try pushValue(ctx, f),
         .light_userdata => |p| lua.pushLightUserdata(ctx.state.luaState, p),
-        .userdata => |u| pushValue(ctx, u),
+        .userdata => |u| try pushValue(ctx, u),
     }
 }
 

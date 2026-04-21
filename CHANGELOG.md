@@ -13,6 +13,7 @@ I will use this version to add more comptime checks and improve message in curre
 ### Added
 - Debug-mode metadata validation now catches misspelled `ZUA_META` constants during `getMetaType` evaluation.
 - Improved comptime and runtime error reporting for decode and encode paths.
+- Lua 5.4 is no longer vendored under `vendor/lua`. It is now pulled as a Zig package dependency from [SolracHQ/lua](https://github.com/SolracHQ/lua), a fork of upstream Lua with a `build.zig` added. I will try to keep the fork updated when new Lua versions come out.
 
 ## 0.8.0
 

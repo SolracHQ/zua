@@ -118,14 +118,14 @@ fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
     const custom_trampoline = comptime selectTrampoline(@field(methods, "__index")).?;
 
     return struct {
-        fn index(L: [*c]lua.State) callconv(.c) c_int {
-            if (lua.valueType(L, 2) == .string) {
-                const key = lua.toString(L, 2) orelse return 0;
+        fn index(L: ?*lua.State) callconv(.c) c_int {
+            if (lua.valueType(L.?, 2) == .string) {
+                const key = lua.toString(L.?, 2) orelse return 0;
                 inline for (@typeInfo(methods_type).@"struct".fields) |field| {
                     if (comptime !std.mem.startsWith(u8, field.name, "__")) {
                         if (std.mem.eql(u8, key, field.name)) {
                             const method_fn = comptime @field(methods, field.name);
-                            lua.pushFunction(L, comptime selectTrampoline(method_fn));
+                            lua.pushFunction(L.?, comptime selectTrampoline(method_fn));
                             return 1;
                         }
                     }

@@ -327,9 +327,9 @@ fn assertContainerType(comptime T: type) void {
     }
 }
 
-fn strEnumEncode(comptime T: type) fn (*Context, T) []const u8 {
+fn strEnumEncode(comptime T: type) EncodeHook(T, []const u8) {
     return struct {
-        fn encode(_: *Context, value: T) []const u8 {
+        fn encode(_: *Context, value: T) !?[]const u8 {
             return @tagName(value);
         }
     }.encode;

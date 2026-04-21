@@ -2,8 +2,4 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include <llex.h>
-#include <lzio.h>
-#include <lstring.h>
-#include <lcode.h>
 #include <linenoise.h>
