@@ -44,8 +44,8 @@ const label = try t.get(ctx, "label", []const u8);  // string key
 `Table.set` writes a field. It accepts any type that zua knows how to encode:
 
 ```zig
-t.set(ctx, "result", 42);
-t.set(ctx, "status", "ok");
+try t.set(ctx, "result", 42);
+try t.set(ctx, "status", "ok");
 ```
 
 ## zua.Function as a parameter

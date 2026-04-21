@@ -58,7 +58,7 @@ const Counter = struct {
 
     pub fn increment(ctx: *zua.Context, self: zua.Table, delta: i32) !void {
         const current = try self.get(ctx, "count", i32);
-        self.set(ctx, "count", current + delta);
+        try self.set(ctx, "count", current + delta);
     }
 };
 ```

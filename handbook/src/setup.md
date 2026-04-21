@@ -69,7 +69,7 @@ To expose functions and values to Lua, get the globals table and call `set`:
 const globals = z.globals();
 defer globals.release();
 
-globals.set(&ctx, "add", add);
+try globals.set(&ctx, "add", add);
 ```
 
 `globals()` returns a **stack-owned handle**. Call `.release()` when you are done registering, or use `defer` immediately as shown above. The registered functions remain available to Lua after the handle is released because zua stores them in the Lua VM, not in the handle itself.
@@ -97,7 +97,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&ctx, "add", add);
+    try globals.set(&ctx, "add", add);
 
     try executor.execute(&ctx, .{ .code = .{ .string = "print(add(1, 2))" } });
 }

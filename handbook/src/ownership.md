@@ -51,17 +51,17 @@ Stack-owned handles must be released before the enclosing scope returns. The sta
 const globals = z.globals();
 defer globals.release();
 
-globals.set(&ctx, "add", add);
+try globals.set(&ctx, "add", add);
 // release() happens here, at end of scope
 ```
 
 If you return a stack-owned handle from a callback, the trampoline takes ownership and you do not call `.release()` yourself:
 
 ```zig
-fn makeTable(ctx: *zua.Context) zua.Table {
+fn makeTable(ctx: *zua.Context) !zua.Table {
     const t = Table.create(z, 0, 2);
-    t.set(ctx, "x", 1);
-    t.set(ctx, "y", 2);
+    try t.set(ctx, "x", 1);
+    try t.set(ctx, "y", 2);
     return t;  // trampoline takes ownership, do not release
 }
 ```
