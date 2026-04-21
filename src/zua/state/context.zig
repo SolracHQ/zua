@@ -177,3 +177,7 @@ pub fn failWithFmtTyped(self: *Context, comptime T: type, comptime fmt: []const 
     self.err = msg;
     return error.Failed;
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

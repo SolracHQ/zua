@@ -338,3 +338,7 @@ fn coerceIntegerKey(key: anytype) lua.Integer {
         else => @compileError("Unsupported table key type: " ++ @typeName(T)),
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

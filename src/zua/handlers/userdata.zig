@@ -90,3 +90,9 @@ pub fn get(self: Userdata) ?*anyopaque {
         },
     };
 }
+
+const std = @import("std");
+
+test {
+    std.testing.refAllDecls(@This());
+}

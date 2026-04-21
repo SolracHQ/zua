@@ -174,3 +174,7 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
             ", got " ++ @typeName(actual));
     }
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

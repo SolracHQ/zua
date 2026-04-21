@@ -142,3 +142,7 @@ fn toTrampolineConfig(comptime cfg: ErrorConfig) trampoline.ErrorConfig {
         .zig_err_hook = cfg.zig_err_hook,
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

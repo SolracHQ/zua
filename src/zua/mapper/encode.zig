@@ -308,3 +308,7 @@ pub fn inferRecordCapacity(value: anytype) i32 {
         else => @compileError(std.fmt.comptimePrint("Type {s} is not supported for record capacity inference. Only structs, unions, arrays, and slices are supported.", .{@typeName(T)})),
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

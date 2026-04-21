@@ -191,3 +191,7 @@ pub fn takeOwnership(self: Function) Function {
 pub fn release(self: Function) void {
     self.handle.release(self.state);
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

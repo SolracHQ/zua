@@ -89,3 +89,7 @@ pub fn Object(comptime T: type) type {
         }
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

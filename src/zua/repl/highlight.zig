@@ -140,3 +140,7 @@ fn highlightStyle(kind: lexer.TokenKind, text: []const u8, config: ColorConfig) 
         .eos => .{},
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

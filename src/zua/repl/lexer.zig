@@ -423,3 +423,7 @@ test "lex basic lua source" {
         try std.testing.expect(tok.len == exp.len);
     }
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -489,3 +489,7 @@ fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @Type
         .iter = generatedListMethods(L, getElements).iter,
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

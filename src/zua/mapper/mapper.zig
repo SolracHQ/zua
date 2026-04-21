@@ -63,3 +63,7 @@ pub fn isStringValueType(comptime T: type) bool {
         else => false,
     };
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

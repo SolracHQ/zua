@@ -333,3 +333,7 @@ fn highlightCallbackC(buffer: [*c]const u8, len: usize, out_len: [*c]usize) call
     out_len.* = out.len;
     return out.ptr;
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

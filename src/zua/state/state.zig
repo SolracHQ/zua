@@ -97,3 +97,7 @@ pub fn fromState(state: *lua.State) ?*State {
     const ptr = lua.toLightUserdata(state, -1);
     return @ptrCast(@alignCast(ptr));
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

@@ -153,3 +153,7 @@ fn takeErrorOwnership(self: *Executor, ctx: *Context) !void {
         self.err = owned;
     }
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

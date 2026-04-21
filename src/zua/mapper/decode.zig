@@ -509,3 +509,7 @@ fn decodeSlice(comptime T: type, ctx: *Context, table: Table) !T {
 
     return slice;
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

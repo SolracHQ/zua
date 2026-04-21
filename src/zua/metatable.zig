@@ -153,3 +153,7 @@ fn regularMethodCount(comptime T: type) i32 {
     }
     return count;
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}

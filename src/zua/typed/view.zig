@@ -93,3 +93,9 @@ pub fn TableView(comptime T: type) type {
         }
     };
 }
+
+const std = @import("std");
+
+test {
+    std.testing.refAllDecls(@This());
+}
