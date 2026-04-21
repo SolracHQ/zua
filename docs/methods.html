@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -224,7 +224,7 @@ print(p:distance())  -- 5
 
     pub fn increment(ctx: *zua.Context, self: zua.Table, delta: i32) !void {
         const current = try self.get(ctx, "count", i32);
-        self.set(ctx, "count", current + delta);
+        try self.set(ctx, "count", current + delta);
     }
 };
 </code></pre>

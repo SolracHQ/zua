@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -214,7 +214,7 @@ defer ctx.deinit();
 <pre><code class="language-zig">const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add", add);
+try globals.set(&amp;ctx, "add", add);
 </code></pre>
 <p><code>globals()</code> returns a <strong>stack-owned handle</strong>. Call <code>.release()</code> when you are done registering, or use <code>defer</code> immediately as shown above. The registered functions remain available to Lua after the handle is released because zua stores them in the Lua VM, not in the handle itself.</p>
 <h2 id="putting-it-together"><a class="header" href="#putting-it-together">Putting it together</a></h2>
@@ -237,7 +237,7 @@ pub fn main(init: std.process.Init) !void {
     const globals = z.globals();
     defer globals.release();
 
-    globals.set(&amp;ctx, "add", add);
+    try globals.set(&amp;ctx, "add", add);
 
     try executor.execute(&amp;ctx, .{ .code = .{ .string = "print(add(1, 2))" } });
 }

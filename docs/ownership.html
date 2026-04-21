@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -216,14 +216,14 @@ fn clearCallback() void {
 <pre><code class="language-zig">const globals = z.globals();
 defer globals.release();
 
-globals.set(&amp;ctx, "add", add);
+try globals.set(&amp;ctx, "add", add);
 // release() happens here, at end of scope
 </code></pre>
 <p>If you return a stack-owned handle from a callback, the trampoline takes ownership and you do not call <code>.release()</code> yourself:</p>
-<pre><code class="language-zig">fn makeTable(ctx: *zua.Context) zua.Table {
+<pre><code class="language-zig">fn makeTable(ctx: *zua.Context) !zua.Table {
     const t = Table.create(z, 0, 2);
-    t.set(ctx, "x", 1);
-    t.set(ctx, "y", 2);
+    try t.set(ctx, "x", 1);
+    try t.set(ctx, "y", 2);
     return t;  // trampoline takes ownership, do not release
 }
 </code></pre>

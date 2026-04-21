@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -175,20 +175,11 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
-<p>zua is a Zig library for embedding Lua without the usual boilerplate. Stack management, type conversion, memory allocation inside C callbacks, using <code>defer</code> without getting burned by <code>longjmp</code>, all of that is handled automatically. You write Zig functions, register them, and they work from Lua.</p>
-<pre><code class="language-zig">fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-globals.set(&amp;ctx, "add", add);
-</code></pre>
-<pre><code class="language-lua">print(add(1, 2))    -- 3
-print(add("oops"))  -- error: add expects (i32, i32): string
-</code></pre>
-<p>Argument decoding, return value encoding, and error dispatch all happen automatically. Type mapping, struct decoding, and metatable generation all happen at compile time through Zig’s comptime system, so there is no runtime overhead from the binding layer.</p>
-<p>zua is designed to be flexible. This handbook goes from a simple <code>add</code> function all the way to opaque objects with methods, complex state with <code>__gc</code> cleanup, closures with captured Lua callbacks, and a built-in interactive REPL, without touching the raw Lua C API once.</p>
+<p>zua is a Zig library for embedding Lua. The boundary between the two languages is meant to mostly disappear: you write ordinary Zig functions, register them, and they work from Lua. Structs decode from tables, errors propagate as Lua messages, and <code>defer</code> stays safe inside callbacks. None of that requires touching the Lua C API.</p>
+<p>When something goes wrong, you know why. Type mismatches name the expected type and what arrived instead. Custom encode and decode hooks give you full control over how any type crosses the boundary, in both directions, without abandoning the automatic path for everything else.</p>
+<p>The handbook builds from the ground up. Setup, then a first function, then richer types, then the parts you reach for when simple isn’t enough: object lifecycle, closures, holding Lua callbacks from Zig, the built-in REPL. Each chapter adds one thing and shows it working.</p>
 <h2 id="what-this-handbook-covers"><a class="header" href="#what-this-handbook-covers">What this handbook covers</a></h2>
-<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need.</p>
+<p>Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need. Most chapters are self-contained: concepts are repeated where necessary so you can go straight to what you need without reading everything before it.</p>
 <ul>
 <li><strong>Setup</strong> - <code>State</code>, <code>Context</code>, <code>Executor</code>, running Lua code from Zig.</li>
 <li><strong>First function</strong> - arguments, return values, error messages.</li>

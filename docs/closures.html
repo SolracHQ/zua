@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0bd2a90.js";
+            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-79e67a69.js"></script>
@@ -190,7 +190,7 @@ fn counterTick(s: *CounterState) i32 {
 }
 </code></pre>
 <p>Then register the closure with an initial value:</p>
-<pre><code class="language-zig">globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
+<pre><code class="language-zig">try globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
     counterTick,
     CounterState{ .count = 0, .step = 1 },
     .{},
@@ -201,8 +201,8 @@ print(counter())  -- 2
 print(counter())  -- 3
 </code></pre>
 <p>Each call to <code>newClosure</code> allocates a <strong>fresh, independent</strong> capture. Registering the same function twice with different initial values gives two closures that never share state:</p>
-<pre><code class="language-zig">globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
-globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+<pre><code class="language-zig">try globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
+try globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
 </code></pre>
 <pre><code class="language-lua">print(by_one())  -- 1
 print(by_one())  -- 2
