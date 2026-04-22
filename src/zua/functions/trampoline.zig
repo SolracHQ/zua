@@ -57,15 +57,43 @@ pub const ErrorConfig = struct {
     zig_err_hook: ?fn (*Context, anyerror) void = null,
 };
 
+/// Documentation metadata for one exposed function parameter.
+pub const ArgInfo = struct {
+    name: []const u8,
+    description: ?[]const u8 = null,
+};
+
 /// Creates a concrete wrapper type for a Zig callback and error handling config.
 ///
 /// The returned type exposes `trampoline()` for use as a Lua C function and
 /// handles argument decoding, function invocation, return value encoding, and
 /// Lua error raising.
+///
+/// Arguments:
+/// - `function`: the Zig callback to wrap. Must have an explicit return type.
+/// - `kind`: describes whether the callback receives `*Context` and/or a capture pointer.
+/// - `error_config`: format strings and optional hooks for parse and Zig error reporting.
+/// - `args_descriptions`: a comptime struct of `ArgInfo` values, used purely for
+///   documentation. Pass `.{}` to omit. Use `withDescriptions` on the returned
+///   type to attach descriptions after the fact without repeating the other args.
+///
+/// Returns:
+/// - `type`: a struct type with `trampoline()`, `withDescriptions()`, and metadata fields
+///   (`name`, `description`, `args`). For closures, also carries an `initial` capture field.
+///
+/// Example:
+/// ```zig
+/// const T = trampoline.make(myFn, .{ .hasContext = true }, .{}, .{
+///     .address = "Memory address to read",
+///     .size    = "Number of bytes",
+/// });
+/// globals.set(&ctx, "read", T{});
+/// ```
 pub fn make(
     comptime function: anytype,
     comptime kind: ArgsConfig,
     comptime error_config: ErrorConfig,
+    comptime args_descriptions: anytype,
 ) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
@@ -87,8 +115,46 @@ pub fn make(
         pub const __ZuaFnTypeInfo = function_info;
         pub const __ZuaFnReturnType = ActualReturnType;
 
+        name: []const u8 = @typeName(FunctionType),
+        description: []const u8 = "",
+        args: @TypeOf(args_descriptions) = args_descriptions,
+
         initial: CaptureType = undefined,
 
+        /// Returns a new wrapper type identical to this one but with the given
+        /// parameter documentation attached for documentation generation.
+        ///
+        /// Each field value in `new_args` should be an `ArgInfo`. Since Zig
+        /// function type info does not carry parameter names, `ArgInfo.name`
+        /// is the canonical source of the displayed parameter name.
+        ///
+        /// Example:
+        /// ```zig
+        /// const get_fn = zua.Native.NativeFn(get, .{})
+        ///     .withDescriptions(.{
+        ///         .address = .{ .name = "address", .description = "Memory address to read from" },
+        ///         .type = .{ .name = "type", .description = "Data type string, e.g. 'u32'" },
+        ///     });
+        /// ```
+        pub fn withDescriptions(_: @This(), comptime new_args: anytype) make(function, kind, error_config, new_args) {
+            return .{};
+        }
+
+        /// Returns the raw Lua C function pointer for this wrapper.
+        ///
+        /// The returned function pointer is suitable for passing directly to
+        /// `lua_pushcfunction` or any zua registration helper. Each call returns
+        /// the same stateless function pointer; the wrapper type carries no
+        /// runtime state (capture state lives in upvalue 1 for closures).
+        ///
+        /// Use this when you need the raw `CFunction` rather than pushing the
+        /// wrapper value through the encoder.
+        ///
+        /// Example:
+        /// ```zig
+        /// const fn_ptr = zua.Native.NativeFn(add, .{}).trampoline();
+        /// lua.pushCFunction(state, fn_ptr);
+        /// ```
         pub fn trampoline() lua.CFunction {
             return struct {
                 fn luaCFunction(state_: ?*lua.State) callconv(.c) c_int {

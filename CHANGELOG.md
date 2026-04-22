@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+### Added
+- `zua.Docs`, a Lua stub generator for editor and language-server support when exposing Zig APIs to script authors.
+- metadata documentation helpers: `withName`, `withDescription`, and `withAttribDescriptions`.
+- `Native.ArgInfo` and wrapper-level `withDescriptions(...)` so exported functions and methods can carry parameter names and descriptions into generated stubs.
+
 ## 0.9.0
 
 I will use this version to add more comptime checks and improve message in current ones for better UX.

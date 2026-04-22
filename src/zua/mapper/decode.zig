@@ -278,9 +278,8 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
     }
 
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
-        if (comptime Meta.getMeta(T).decode_hook) |hook| {
-            if (try hook(ctx, prim)) |decoded| return decoded;
-        }
+        const meta = comptime Meta.getMeta(T);
+        if (try meta.decode_hook(ctx, prim)) |decoded| return decoded;
     }
 
     return switch (comptime @typeInfo(T)) {

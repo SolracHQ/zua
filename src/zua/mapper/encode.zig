@@ -76,11 +76,8 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Meta.getMeta(T);
-        if (comptime meta.encode_hook) |encode_hook| {
-            if (try encode_hook(ctx, value)) |encoded| {
-                return pushValue(ctx, encoded);
-            }
-            // If the hook returns null, fall back to default encoding
+        if (try meta.encode_hook(ctx, value)) |encoded| {
+            return pushValue(ctx, encoded);
         }
     }
 
@@ -180,6 +177,9 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
             lua.createTable(ctx.state.luaState, inferArrayCapacity(value), 0);
             const nested = Table.fromStack(ctx.state, -1);
             try fillTable(ctx, nested, value);
+        },
+        .void => {
+            lua.pushNil(ctx.state.luaState);
         },
         else => @compileError(std.fmt.comptimePrint("Type {s} is not yet supported for encoding. If you need this supported, please open an issue with your use case.", .{@typeName(T)})),
     }

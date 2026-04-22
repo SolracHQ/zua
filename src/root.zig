@@ -37,6 +37,9 @@ pub const Meta = @import("zua/meta.zig");
 pub const Executor = @import("zua/exec/executor.zig");
 pub const Repl = @import("zua/repl/repl.zig");
 
+// Lua Doc generation utilities
+pub const Docs = @import("zua/docs/docs.zig");
+
 test {
     std.testing.refAllDecls(@This());
 }

@@ -15,6 +15,7 @@ all:
 
 list-examples:
     @printf '%s\n' \
+        docs \
         guided-tour \
         introduction \
         functions \

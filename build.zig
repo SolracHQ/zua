@@ -39,6 +39,7 @@ pub fn build(b: *std.Build) void {
         name: []const u8,
         path: []const u8,
     }{
+        .{ .name = "example-docs", .path = "example/docs.zig" },
         .{ .name = "example-introduction", .path = "example/introduction.zig" },
         .{ .name = "example-functions", .path = "example/functions.zig" },
         .{ .name = "example-data-structures", .path = "example/data-structures.zig" },

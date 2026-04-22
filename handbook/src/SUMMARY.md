@@ -15,4 +15,5 @@
 - [Object handles](./object-handles.md)
 - [Closures](./closures.md)
 - [VarArgs and Primitive](./varargs.md)
+- [Stub generation](./stubs.md)
 - [REPL](./repl.md)
