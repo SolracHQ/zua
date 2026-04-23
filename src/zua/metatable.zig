@@ -18,11 +18,11 @@ const Context = @import("state/context.zig");
 /// currently at the top of the Lua stack.
 ///
 /// Arguments:
-/// - z: The global Zua state owning the Lua VM and metatable cache.
+/// - state: The global Zua state owning the Lua VM and metatable cache.
 /// - T: The type whose metatable should be attached.
-pub fn attachMetatable(z: *State, comptime T: type) void {
-    z.getOrCreateMetatable(T);
-    _ = lua.setMetatable(z.luaState, -2);
+pub fn attachMetatable(state: *State, comptime T: type) void {
+    state.getOrCreateMetatable(T);
+    _ = lua.setMetatable(state.luaState, -2);
 }
 
 /// Builds a metatable for `T` and leaves it on the Lua stack.
@@ -32,17 +32,17 @@ pub fn attachMetatable(z: *State, comptime T: type) void {
 /// `__name` field for diagnostic purposes.
 ///
 /// Arguments:
-/// - z: The global Zua state owning the Lua VM.
+/// - state: The global Zua state owning the Lua VM.
 /// - T: The type whose metatable is being constructed.
-pub fn buildMetatable(z: *State, comptime T: type) void {
+pub fn buildMetatable(state: *State, comptime T: type) void {
     const strategy = Meta.strategyOf(T);
 
-    lua.createTable(z.luaState, 0, 4);
-    const mt_index = lua.absIndex(z.luaState, -1);
+    lua.createTable(state.luaState, 0, 4);
+    const mt_index = lua.absIndex(state.luaState, -1);
 
     if (strategy == .object) {
-        lua.pushString(z.luaState, @typeName(T));
-        lua.setField(z.luaState, mt_index, "__name");
+        lua.pushString(state.luaState, @typeName(T));
+        lua.setField(state.luaState, mt_index, "__name");
     }
 
     const methods = comptime Meta.methodsOf(T);
@@ -57,8 +57,8 @@ pub fn buildMetatable(z: *State, comptime T: type) void {
     // trampoline.
     var methods_index: i32 = 0;
     if (regular_count > 0) {
-        lua.createTable(z.luaState, 0, regular_count);
-        methods_index = lua.absIndex(z.luaState, -1);
+        lua.createTable(state.luaState, 0, regular_count);
+        methods_index = lua.absIndex(state.luaState, -1);
     }
 
     inline for (@typeInfo(methods_type).@"struct".fields) |field| {
@@ -66,28 +66,28 @@ pub fn buildMetatable(z: *State, comptime T: type) void {
         if (comptime std.mem.eql(u8, field.name, "__index")) continue;
 
         const method_fn = @field(methods, field.name);
-        lua.pushFunction(z.luaState, selectTrampoline(method_fn));
+        lua.pushFunction(state.luaState, selectTrampoline(method_fn));
 
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
-            lua.setField(z.luaState, mt_index, field.name);
+            lua.setField(state.luaState, mt_index, field.name);
         } else {
-            lua.setField(z.luaState, methods_index, field.name);
+            lua.setField(state.luaState, methods_index, field.name);
         }
     }
 
     if (regular_count > 0 and has_custom_index) {
         // when needs both __index (for methods and custom __index) use a combined trampoline that tries with named methods first, then falls back to the custom __index.
-        lua.pushFunction(z.luaState, combinedIndexTrampoline(T));
-        lua.setField(z.luaState, mt_index, "__index");
+        lua.pushFunction(state.luaState, combinedIndexTrampoline(T));
+        lua.setField(state.luaState, mt_index, "__index");
         // The methods table is no longer needed as __index so lets pop it.
-        lua.pop(z.luaState, 1);
+        lua.pop(state.luaState, 1);
     } else if (regular_count > 0) {
         // No custom __index: the methods table itself is __index.
-        lua.setField(z.luaState, mt_index, "__index");
+        lua.setField(state.luaState, mt_index, "__index");
     } else if (has_custom_index) {
         // Only a custom __index, no named methods.
-        lua.pushFunction(z.luaState, selectTrampoline(@field(methods, "__index")));
-        lua.setField(z.luaState, mt_index, "__index");
+        lua.pushFunction(state.luaState, selectTrampoline(@field(methods, "__index")));
+        lua.setField(state.luaState, mt_index, "__index");
     }
 }
 

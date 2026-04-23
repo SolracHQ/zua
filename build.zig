@@ -35,6 +35,24 @@ pub fn build(b: *std.Build) void {
     });
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
+    const vecmath_module = b.createModule(.{
+        .root_source_file = b.path("example/dylib/vecmath.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zua", .module = module },
+        },
+    });
+
+    const lib = b.addLibrary(.{ .name = "vecmath", .linkage = .dynamic, .root_module = vecmath_module });
+    lib.root_module.link_libc = true;
+
+    const install_lib = b.addInstallArtifact(lib, .{});
+    b.getInstallStep().dependOn(&install_lib.step);
+
+    const vecmath_step = b.step("vecmath", "Build vecmath dynamic library");
+    vecmath_step.dependOn(&install_lib.step);
+
     const examples = [_]struct {
         name: []const u8,
         path: []const u8,

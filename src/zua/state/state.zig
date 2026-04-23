@@ -5,12 +5,14 @@ const Mapper = @import("../mapper/mapper.zig");
 const Context = @import("context.zig");
 const metatable = @import("../metatable.zig");
 
-const zua_registry_key: [:0]const u8 = "zua_zua";
+const registry_key_prefix: [:0]const u8 = "zua_zua_";
+var zua_registry_key: [:0]const u8 = "zua_zua";
 
 /// A Fat Wrapper over Lua State that owns the Lua state, allocator, I/O interface, and cached metatables.
-/// Is the main component of State API, the only canonical way to access to Lua state and registry, and the main entry point for all operations.
+/// Is the main component of State API, the only canonical way to access Lua state and registry, and the main entry point for all operations.
 ///
-/// Create one with `State.init(allocator, io)` and keep it heap-allocated so its pointer remains stable inside callbacks. Call `deinit` to close the state and free memory.
+/// Create one with `State.init(allocator, io)` for a fresh Lua state, or `State.libState(L, allocator, io, suffix)`
+/// for an existing state received by a shared library loader. Call `deinit` to close the Lua state.
 ///
 /// Use `globals()` and `registry()` to attach tables or functions.
 pub const State = @This();
@@ -22,15 +24,33 @@ metatable_cache: std.StringHashMap(c_int),
 /// Io interface for basically anything since zif 0.16.0
 io: std.Io,
 
-/// Creates a heap-allocated ZuaState instance, opens Lua standard libraries, and stores the pointer in the registry.
-/// The returned pointer is stable and safe to capture in callbacks.
-pub fn init(allocator: std.mem.Allocator, io: std.Io) !*State {
-    const self = try allocator.create(State);
-    errdefer allocator.destroy(self);
+fn stateGc(L: ?*lua.State) callconv(.c) c_int {
+    const state = L orelse unreachable;
+    const ptr = lua.toUserdata(state, 1) orelse return 0;
+    const self: *State = @ptrCast(@alignCast(ptr));
+    self.cleanup();
+    return 0;
+}
 
+fn cleanup(self: *State) void {
+    var it = self.metatable_cache.valueIterator();
+    while (it.next()) |ref| {
+        lua.unref(self.luaState, lua.REGISTRY_INDEX, ref.*);
+    }
+    self.metatable_cache.deinit();
+}
+
+fn makeRegistryKey(comptime suffix: []const u8) [:0]const u8 {
+    return std.fmt.comptimePrint("{s}{s}", .{ registry_key_prefix, suffix });
+}
+
+/// Creates a Lua-managed ZuaState userdata, opens Lua standard libraries, and stores the pointer in the registry.
+/// The returned pointer is stable and safe to capture in callbacks as long as the Lua state remains alive.
+pub fn init(allocator: std.mem.Allocator, io: std.Io) !*State {
     const state = try lua.init();
     errdefer lua.deinit(state);
 
+    const self: *State = @ptrCast(@alignCast(lua.newUserdata(state, @sizeOf(State))));
     self.* = .{
         .allocator = allocator,
         .luaState = state,
@@ -39,25 +59,60 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !*State {
     };
 
     lua.openLibs(state);
-    lua.pushLightUserdata(state, self);
+
+    lua.createTable(state, 0, 1);
+    lua.pushCFunction(state, stateGc);
+    lua.setField(state, -2, "__gc");
+    _ = lua.setMetatable(state, -2);
+
     lua.setField(state, lua.REGISTRY_INDEX, zua_registry_key);
 
     return self;
 }
 
-/// Closes the Lua state and frees the ZuaState allocation.
-pub fn deinit(self: *State) void {
-    var it = self.metatable_cache.valueIterator();
-    while (it.next()) |ref| {
-        lua.unref(self.luaState, lua.REGISTRY_INDEX, ref.*);
-    }
-    self.metatable_cache.deinit();
+/// Creates or reuses a ZuaState userdata inside an existing Lua state.
+/// This is intended for shared libraries and module loaders that receive an
+/// existing `lua_State` pointer from `luaopen_*`.
+///
+/// The returned pointer is stored in the Lua registry under a suffix-specific
+/// key derived from `zua_zua_`.
+pub fn libState(
+    L: *lua.State,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    comptime suffix: []const u8,
+) !*State {
+    zua_registry_key = makeRegistryKey(suffix);
 
-    lua.pushNil(self.luaState);
-    // this is comment out because I really don't know what to do, self is needed on lua.deinit becaus __gc metamethods might need to access the registry to find the ZuaState pointer, but that also means we can't nil out the registry entry until after lua.deinit runs, and if we wait until after lua.deinit then we can't pop the registry entry at all because the state is already closed. Anyways, I'm freeing the pointer so is in the wors case just a dangling pointer that will never be accessed. In case of weird errors I will revisit this desition.
-    // lua.setField(self.state, lua.REGISTRY_INDEX, zua_registry_key);
+    const existing = lua.getField(L, lua.REGISTRY_INDEX, zua_registry_key);
+    if (existing != .nil) {
+        defer lua.pop(L, 1);
+        const ptr = lua.toUserdata(L, -1) orelse @panic("registry value for Zua state is not userdata");
+        return @ptrCast(@alignCast(ptr));
+    }
+    lua.pop(L, 1);
+
+    const self: *State = @ptrCast(@alignCast(lua.newUserdata(L, @sizeOf(State))));
+    self.* = .{
+        .allocator = allocator,
+        .luaState = L,
+        .metatable_cache = std.StringHashMap(c_int).init(allocator),
+        .io = io,
+    };
+
+    lua.createTable(L, 0, 1);
+    lua.pushCFunction(L, stateGc);
+    lua.setField(L, -2, "__gc");
+    _ = lua.setMetatable(L, -2);
+
+    lua.setField(L, lua.REGISTRY_INDEX, zua_registry_key);
+    return self;
+}
+
+/// Closes the Lua state. Cleanup of Zua-owned runtime state is handled by the
+/// `__gc` metamethod on the state userdata when the Lua state is closed.
+pub fn deinit(self: *State) void {
     lua.deinit(self.luaState);
-    self.allocator.destroy(self);
 }
 
 /// Pushes the cached metatable for T onto the stack, creating it on first call.
@@ -94,7 +149,7 @@ pub fn fromState(state: *lua.State) ?*State {
     _ = lua.getField(state, lua.REGISTRY_INDEX, zua_registry_key);
     defer lua.pop(state, 1);
 
-    const ptr = lua.toLightUserdata(state, -1);
+    const ptr = lua.toUserdata(state, -1);
     return @ptrCast(@alignCast(ptr));
 }
 
