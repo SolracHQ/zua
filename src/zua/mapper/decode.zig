@@ -43,6 +43,24 @@ pub const VarArgs = struct {
     args: []Primitive,
 };
 
+pub fn TypedVarArgs(comptime T: type) type {
+    return struct {
+        pub const ZUA_META = Meta.Table(@This(), .{}).withDecode(decodeTypedVarArgs);
+
+        fn decodeTypedVarArgs(ctx: *Context, prim: Primitive) !?@This() {
+            if (prim == .nil) return null;
+            const varArgs = try Decoder.buildVarArgs(ctx, 1, lua.getTop(ctx.state.luaState));
+            var typedArgs = try ctx.arena().alloc(T, varArgs.args.len);
+            for (varArgs.args, 0..) |arg, i| {
+                typedArgs[i] = try Decoder.decodeValue(ctx, arg, T);
+            }
+            return .{ .args = typedArgs };
+        }
+
+        args: []T,
+    };
+}
+
 /// Tuple type used to hold decoded arguments.
 ///
 /// Accepts either a single type or a tuple of types; for a single type it
@@ -196,7 +214,7 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .pointer => |p| p.child,
         else => T,
     };
-    const strategy = comptime Meta.getMeta(Pointee).strategy;
+    const strategy = comptime Meta.strategyOf(Pointee);
 
     switch (strategy) {
         .object => {
@@ -279,7 +297,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
 
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Meta.getMeta(T);
-        if (try meta.decode_hook(ctx, prim)) |decoded| return decoded;
+        if (try meta.DecodeHook(ctx, prim)) |decoded| return decoded;
     }
 
     return switch (comptime @typeInfo(T)) {
@@ -373,7 +391,7 @@ fn decodePointer(
 /// For `.object` or `.ptr` strategies the value is decoded as a host pointer.
 /// Otherwise, regular structs are decoded from Lua tables.
 fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
-    const strategy = comptime Meta.getMeta(T).strategy;
+    const strategy = comptime Meta.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
@@ -405,7 +423,7 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
 /// Objects and pointers are decoded via host pointer strategy. Other unions are
 /// decoded from Lua tables by matching the active variant key.
 fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
-    const strategy = comptime Meta.getMeta(T).strategy;
+    const strategy = comptime Meta.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;

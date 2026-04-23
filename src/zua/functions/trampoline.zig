@@ -110,15 +110,28 @@ pub fn make(
         void;
 
     return struct {
+        /// Marker used by zua internals to identify wrapper types.
         pub const __IsZuaFn = true;
+
+        /// Indicates whether this wrapper carries a capture value.
         pub const __IsZuaClosure: bool = kind.hasCapture;
+
+        /// Raw Zig function type info for the wrapped callback.
         pub const __ZuaFnTypeInfo = function_info;
+
+        /// The normalized return type of the wrapped callback, with error unions unwrapped.
         pub const __ZuaFnReturnType = ActualReturnType;
 
+        /// The display name of the wrapped function, used for docs and debugging.
         name: []const u8 = @typeName(FunctionType),
+
+        /// Optional documentation string for the wrapped function.
         description: []const u8 = "",
+
+        /// Comptime parameter metadata used only for documentation generation.
         args: @TypeOf(args_descriptions) = args_descriptions,
 
+        /// For closures, the initial capture value to bundle with the callback.
         initial: CaptureType = undefined,
 
         /// Returns a new wrapper type identical to this one but with the given
@@ -136,8 +149,20 @@ pub fn make(
         ///         .type = .{ .name = "type", .description = "Data type string, e.g. 'u32'" },
         ///     });
         /// ```
-        pub fn withDescriptions(_: @This(), comptime new_args: anytype) make(function, kind, error_config, new_args) {
-            return .{};
+        pub fn withDescriptions(prev: @This(), comptime new_args: anytype) make(function, kind, error_config, new_args) {
+            return .{ .name = prev.name, .description = prev.description, .args = new_args, .initial = prev.initial };
+        }
+
+        pub fn withName(prev: @This(), comptime new_name: []const u8) make(function, kind, error_config, args_descriptions) {
+            var copy = prev;
+            copy.name = new_name;
+            return copy;
+        }
+
+        pub fn withDescription(prev: @This(), comptime new_desc: []const u8) make(function, kind, error_config, args_descriptions) {
+            var copy = prev;
+            copy.description = new_desc;
+            return copy;
         }
 
         /// Returns the raw Lua C function pointer for this wrapper.
@@ -300,6 +325,11 @@ pub fn make(
             const base: usize = function_info.params.len - kind.stackOffset();
             return if (comptime hasVarArgs(function_info)) base - 1 else base;
         }
+
+        // I really don't know if this works but as soon as I can see errors better, right?
+        test {
+            std.testing.refAllDecls(@This());
+        }
     };
 }
 
@@ -351,9 +381,7 @@ fn isCapturePointer(comptime T: type) bool {
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    if (!(@typeInfo(Child) == .@"struct" or @typeInfo(Child) == .@"union" or @typeInfo(Child) == .@"enum")) return false;
-    if (!@hasDecl(Child, "ZUA_META")) return false;
-    return Child.ZUA_META.strategy == .capture;
+    return Meta.strategyOf(Child) == .capture;
 }
 
 /// Ensures a closure callback has its capture parameter in the expected slot.

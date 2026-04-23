@@ -9,9 +9,9 @@ When something goes wrong, you know why. Type mismatches produce typed error mes
 Run Lua from Zig and decode the result:
 
 ```zig
-const z = try zua.State.init(gpa, io);
-defer z.deinit();
-var ctx = zua.Context.init(z);
+const state = try zua.State.init(gpa, io);
+defer state.deinit();
+var ctx = zua.Context.init(state);
 defer ctx.deinit();
 var executor = zua.Executor{};
 

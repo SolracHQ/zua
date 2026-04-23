@@ -22,8 +22,8 @@ pub fn Object(comptime T: type) type {
         if (@typeInfo(T) == .@"fn") {
             @compileError("Object(T) cannot wrap function types");
         }
-        const m = Meta.getMeta(T);
-        if (m.strategy != .object) {
+        const strategy = Meta.strategyOf(T);
+        if (strategy != .object) {
             @compileError(@typeName(T) ++ " must use object strategy to be wrapped by Object(T)");
         }
     }

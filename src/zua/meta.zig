@@ -2,7 +2,8 @@
 //!
 //! This module centralizes translation strategy, custom encode/decode hooks,
 //! and method metadata so translation code does not need to replicate fallbacks.
-//! `getMeta(T)` is the single entry point for retrieving metadata for a type.
+//! `getMeta(T)` is the single entry point for retrieving the metadata type for
+//! a translated Zig type.
 
 const std = @import("std");
 const Mapper = @import("mapper/mapper.zig");
@@ -39,7 +40,7 @@ pub const MappingStrategy = enum {
 ///
 /// the optional return also allow use the hook to transform the value returning the same type but with different content,
 /// for example to implement a custom string encoding for a struct while still pushing it as a table.
-pub fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
+pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
     return fn (*Context, T) anyerror!?ProxyType;
 }
 
@@ -50,7 +51,7 @@ pub fn EncodeHook(comptime T: type, comptime ProxyType: type) type {
 ///
 /// In the case the developer wants to only decode certain primitives but
 /// continue with the default path for others can just return null to indicate the default decoding should be used.
-pub fn DecodeHook(comptime T: type) type {
+pub fn DecodeHookType(comptime T: type) type {
     return fn (*Context, Primitive) anyerror!?T;
 }
 
@@ -61,10 +62,14 @@ pub fn DecodeHook(comptime T: type) type {
 /// `Object()`, `Table()`, `Ptr()`, and `strEnum()`.
 fn MetaData(
     comptime Type: type,
-    comptime mappingStrategy: MappingStrategy,
-    comptime methods: anytype,
     comptime ProxyType: type,
+    comptime strategy: MappingStrategy,
+    comptime encode_hook: ?EncodeHookType(Type, ProxyType),
+    comptime decode_hook: ?DecodeHookType(Type),
+    comptime methods: anytype,
     comptime attribute_descriptors: anytype,
+    comptime name: ?[]const u8,
+    comptime description: ?[]const u8,
 ) type {
     // Fires only when someone calls Table(..), Object(..), etc. with a type
     // that has no visible ZUA_META. Lazy evaluation means this only runs when
@@ -78,16 +83,16 @@ fn MetaData(
     const T = if (@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__DEFAULT_GUARD_ORIGINAL_TYPE else Type;
 
     return struct {
-        strategy: MappingStrategy = mappingStrategy,
-        methods: @TypeOf(methods) = methods,
-        encode_hook: EncodeHook(T, ProxyType) = default_encode,
-        decode_hook: DecodeHook(T) = default_decode,
-        description: []const u8 = "",
-        name: []const u8 = @typeName(T),
-        attributeDescriptions: @TypeOf(attribute_descriptors) = attribute_descriptors,
+        pub const Strategy = strategy;
+        pub const Proxy = ProxyType;
+        pub const Methods = if (@typeInfo(@TypeOf(methods)) != .@"struct") .{} else methods;
+        pub const EncodeHook: EncodeHookType(T, ProxyType) = encode_hook orelse default_encode;
+        pub const DecodeHook: DecodeHookType(T) = decode_hook orelse default_decode;
+        pub const Description: []const u8 = description orelse "";
+        pub const Name: []const u8 = name orelse @typeName(T);
+        pub const AttributeDescriptions = if (@typeInfo(@TypeOf(attribute_descriptors)) != .@"struct") .{} else attribute_descriptors;
 
-        fn default_encode(_: *Context, value: T) !?ProxyType {
-            _ = value;
+        fn default_encode(_: *Context, _: T) anyerror!?ProxyType {
             return null;
         }
 
@@ -109,82 +114,52 @@ fn MetaData(
         ///         .y = "Vertical coordinate",
         ///     });
         /// ```
-        pub fn withAttribDescriptions(
-            self: @This(),
+        pub inline fn withAttribDescriptions(
             comptime custom_attributes: anytype,
-        ) MetaData(T, mappingStrategy, methods, ProxyType, custom_attributes) {
-            if (comptime mappingStrategy != .table)
-                @compileError("withAttribDescriptions is only valid for .table strategy types, got ." ++ @tagName(mappingStrategy));
-            return .{
-                .encode_hook = self.encode_hook,
-                .decode_hook = self.decode_hook,
-                .description = self.description,
-                .name = self.name,
-            };
+        ) type {
+            if (comptime strategy != .table)
+                @compileError("withAttribDescriptions is only valid for .table strategy types, got ." ++ @tagName(strategy));
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, decode_hook, methods, custom_attributes, name, description);
         }
 
         /// Attach a custom encode hook.
         ///
         /// The hook converts `T` into `ProxyType` before the value is pushed to Lua.
-        pub fn withEncode(
-            self: @This(),
+        pub inline fn withEncode(
             comptime NewProxyType: type,
-            comptime handler: EncodeHook(T, NewProxyType),
-        ) MetaData(T, mappingStrategy, methods, NewProxyType, attribute_descriptors) {
-            if (comptime mappingStrategy == .capture)
+            comptime handler: EncodeHookType(T, NewProxyType),
+        ) type {
+            if (comptime strategy == .capture)
                 @compileError("capture strategy type " ++ @typeName(T) ++ " do not support encode hook");
-            return .{
-                .encode_hook = handler,
-                .decode_hook = self.decode_hook,
-                .description = self.description,
-                .name = self.name,
-            };
+            return comptime MetaData(T, NewProxyType, strategy, handler, decode_hook, methods, attribute_descriptors, name, description);
         }
 
         /// Attach a custom decode hook.
         ///
         /// The hook converts a Lua primitive into `T`.
-        pub fn withDecode(
-            self: @This(),
-            comptime handler: DecodeHook(T),
-        ) MetaData(T, mappingStrategy, methods, ProxyType, attribute_descriptors) {
-            if (comptime mappingStrategy == .capture)
+        pub inline fn withDecode(
+            comptime handler: DecodeHookType(T),
+        ) type {
+            if (comptime strategy == .capture)
                 @compileError("capture strategy type " ++ @typeName(T) ++ " do not support decode hook");
 
-            return .{
-                .encode_hook = self.encode_hook,
-                .decode_hook = handler,
-                .description = self.description,
-                .name = self.name,
-            };
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, handler, methods, attribute_descriptors, name, description);
         }
 
         /// Attach a description for documentation generation.
         /// This is ignored by translation code but used by `Docs` to generate Lua API docs.
-        pub fn withDescription(
-            self: @This(),
-            comptime description: []const u8,
-        ) MetaData(T, mappingStrategy, methods, ProxyType, attribute_descriptors) {
-            return .{
-                .encode_hook = self.encode_hook,
-                .decode_hook = self.decode_hook,
-                .description = description,
-                .name = self.name,
-            };
+        pub inline fn withDescription(
+            comptime new_description: []const u8,
+        ) type {
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, decode_hook, methods, attribute_descriptors, name, new_description);
         }
 
         /// Attach a custom name for documentation generation.
         /// This is ignored by translation code but used by `Docs` to generate Lua API docs.
-        pub fn withName(
-            self: @This(),
-            comptime name: []const u8,
-        ) MetaData(T, mappingStrategy, methods, ProxyType, attribute_descriptors) {
-            return .{
-                .encode_hook = self.encode_hook,
-                .decode_hook = self.decode_hook,
-                .description = self.description,
-                .name = name,
-            };
+        pub inline fn withName(
+            comptime new_name: []const u8,
+        ) type {
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, decode_hook, methods, attribute_descriptors, new_name, description);
         }
     };
 }
@@ -208,9 +183,9 @@ fn MetaData(
 ///     name: []const u8,
 /// };
 /// ```
-pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, methods, void, .{}) {
-    assertContainerType(T);
-    return .{ .methods = methods };
+pub inline fn Object(comptime T: type, comptime methods: anytype) type {
+    comptime assertContainerType(T);
+    return comptime MetaData(T, void, .object, null, null, methods, null, null, null);
 }
 
 /// Declare `T` as a `.table` translation strategy.
@@ -226,10 +201,10 @@ pub fn Object(comptime T: type, comptime methods: anytype) MetaData(T, .object, 
 ///     y: i32,
 /// };
 /// ```
-pub fn Table(comptime T: type, comptime methods: anytype) MetaData(T, .table, methods, void, .{}) {
-    assertContainerType(T);
-    assertTaggedIfUnion(T);
-    return .{ .methods = methods };
+pub inline fn Table(comptime T: type, comptime methods: anytype) type {
+    comptime assertContainerType(T);
+    comptime assertTaggedIfUnion(T);
+    return comptime MetaData(T, void, .table, null, null, methods, null, null, null);
 }
 
 /// Declare `T` as a `.ptr` translation strategy.
@@ -237,9 +212,9 @@ pub fn Table(comptime T: type, comptime methods: anytype) MetaData(T, .table, me
 /// Pointer strategy types are represented as Lua light userdata, with no
 /// metatable or field access. Use this for opaque handles that Lua should
 /// not inspect or mutate.
-pub fn Ptr(comptime T: type) MetaData(T, .ptr, .{}, void, .{}) {
-    assertContainerType(T);
-    return .{};
+pub inline fn Ptr(comptime T: type) type {
+    comptime assertContainerType(T);
+    return comptime MetaData(T, void, .ptr, null, null, null, null, null, null);
 }
 
 /// Declare `T` as a `.capture` translation strategy.
@@ -258,7 +233,7 @@ pub fn Ptr(comptime T: type) MetaData(T, .ptr, .{}, void, .{}) {
 /// - methods: A comptime struct of method name–function pairs.
 ///
 /// Returns:
-/// - MetaData: The metadata value to assign to `pub const ZUA_META`.
+/// - `type`: The metadata type to assign to `pub const ZUA_META`.
 ///
 /// Example:
 /// ```zig
@@ -274,24 +249,19 @@ pub fn Ptr(comptime T: type) MetaData(T, .ptr, .{}, void, .{}) {
 ///     }
 /// };
 /// ```
-pub fn Capture(comptime T: type, comptime methods: anytype) MetaData(T, .capture, methods, void, .{}) {
-    assertContainerType(T);
-    return .{ .methods = methods };
+pub inline fn Capture(comptime T: type, comptime methods: anytype) type {
+    comptime assertContainerType(T);
+    return comptime MetaData(T, void, .capture, null, null, methods, null, null, null);
 }
 
 /// Declare `T` as a string-backed enum with automatic string conversion.
 ///
 /// This sets up `T` as a `.table` type and derives encode/decode hooks so the
 /// enum is pushed as a string and parsed from string values.
-pub fn strEnum(comptime T: type, comptime methods: anytype) MetaData(T, .table, methods, []const u8, .{}) {
-    if (@typeInfo(T) != .@"enum")
+pub inline fn strEnum(comptime T: type, comptime methods: anytype) type {
+    if (comptime @typeInfo(T) != .@"enum")
         @compileError("strEnum requires an enum type, got " ++ @typeName(T));
-    return .{
-        .strategy = .table,
-        .methods = methods,
-        .encode_hook = strEnumEncode(T),
-        .decode_hook = strEnumDecode(T),
-    };
+    return comptime MetaData(T, []const u8, .table, strEnumEncode(T), strEnumDecode(T), methods, null, null, null);
 }
 
 /// Declare `T` as a list-type `.object` translation strategy.
@@ -323,21 +293,21 @@ pub fn strEnum(comptime T: type, comptime methods: anytype) MetaData(T, .table, 
 ///     return self.processes.items;
 /// }
 /// ```
-pub fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype) MetaData(T, .object, mergeMethodSets(generateListMethodsSet(T, getElements), methods), void, .{}) {
-    assertContainerType(T);
-    assertNoListCollisions(methods);
-    return .{};
+pub inline fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype) type {
+    comptime assertContainerType(T);
+    comptime assertNoListCollisions(methods);
+    return comptime MetaData(T, void, .object, null, null, mergeMethodSets(generateListMethodsSet(T, getElements), methods), null, null, null);
 }
 
 /// Returns the compile-time metadata type for `T`.
 ///
 /// This helper is used internally to determine the metadata layout for a
-/// type before constructing a metadata instance. It applies the same default
-/// rules as `getMeta(T)` but returns a type rather than a value.
+/// type. It applies the same default rules used by translation and
+/// documentation code and returns the metadata type directly.
 ///
 /// Internally this is used by code that needs to compute metadata shape at
-/// compile time without depending on a concrete metadata value.
-pub fn getMetaType(comptime T: type) type {
+/// compile time without materializing a separate metadata value.
+pub inline fn getMeta(comptime T: type) type {
     assertContainerType(T);
     // Force evaluation of all public declarations in debug builds so
     // misspelled ZUA_META constants are caught at compile time.
@@ -348,35 +318,62 @@ pub fn getMetaType(comptime T: type) type {
         }
     }
     const info = @typeInfo(T);
-    if (comptime @hasDecl(T, "ZUA_META")) return @TypeOf(T.ZUA_META);
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void, .{});
-    return MetaData(DefaultGuard(T), .table, .{}, void, .{});
-}
-
-/// Returns the metadata value for `T`, applying default strategy rules.
-///
-/// This is the primary metadata lookup entry point used by translation and
-/// type dispatch code. It returns `T.ZUA_META` when present, falls back to
-/// `T.ZUA_TRANSLATION_STRATEGY` when declared, and otherwise constructs a
-/// default metadata value based on `T`'s shape.
-///
-/// For plain structs and enums this defaults to `.table`. Untagged unions
-/// default to `.object` because they cannot be represented as table variants.
-///
-/// Example:
-/// ```zig
-/// const meta = getMeta(MyType);
-/// const strategy = meta.strategy;
-/// ```
-pub fn getMeta(comptime T: type) getMetaType(T) {
-    assertContainerType(T);
-    const info = @typeInfo(T);
     if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), .object, .{}, void, .{}){};
-    return MetaData(DefaultGuard(T), .table, .{}, void, .{}){};
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), void, .object, null, null, null, null, null, null);
+    return MetaData(DefaultGuard(T), void, .table, null, null, null, null, null, null);
 }
 
-pub fn DefaultGuard(comptime T: type) type {
+/// Returns the translation strategy declared for `T`.
+///
+/// This is the main branch point used by translation and docs code to decide
+/// whether `T` behaves as a table, userdata object, light userdata pointer,
+/// or closure capture.
+pub inline fn strategyOf(comptime T: type) MappingStrategy {
+    return comptime getMeta(T).Strategy;
+}
+
+/// Returns the method set exposed by `T`.
+///
+/// The returned comptime struct is the method table declared on `ZUA_META`,
+/// or an empty struct when `T` exposes no methods.
+pub inline fn methodsOf(comptime T: type) @TypeOf(getMeta(T).Methods) {
+    return comptime getMeta(T).Methods;
+}
+
+/// Returns the documentation name associated with `T`.
+///
+/// This is the explicit name attached with `withName(...)` when present,
+/// otherwise the Zig type name.
+pub inline fn nameOf(comptime T: type) []const u8 {
+    return comptime getMeta(T).Name;
+}
+
+/// Returns the documentation description associated with `T`.
+///
+/// This is empty unless the metadata type was extended with
+/// `withDescription(...)`.
+pub inline fn descriptionOf(comptime T: type) []const u8 {
+    return comptime getMeta(T).Description;
+}
+
+/// Returns the proxy type used by `T`'s encode hook.
+///
+/// For most strategies this is `void`, but helpers such as `strEnum()` use a
+/// concrete proxy type like `[]const u8` to describe the value pushed into Lua
+/// when a custom encode hook is active.
+pub inline fn proxyTypeOf(comptime T: type) type {
+    return comptime getMeta(T).Proxy;
+}
+
+/// Returns the attribute descriptions attached to `T`.
+///
+/// This is the comptime struct provided through `withAttribDescriptions(...)`,
+/// or an empty struct when no field-level documentation was declared.
+pub inline fn attributeDescriptionsOf(comptime T: type) @TypeOf(getMeta(T).AttributeDescriptions) {
+    return comptime getMeta(T).AttributeDescriptions;
+}
+
+fn DefaultGuard(comptime T: type) type {
     return struct {
         pub const __DEFAULT_GUARD_ORIGINAL_TYPE = T;
     };
@@ -397,7 +394,7 @@ fn assertContainerType(comptime T: type) void {
     }
 }
 
-fn strEnumEncode(comptime T: type) EncodeHook(T, []const u8) {
+fn strEnumEncode(comptime T: type) EncodeHookType(T, []const u8) {
     return struct {
         fn encode(_: *Context, value: T) !?[]const u8 {
             return @tagName(value);
@@ -405,7 +402,7 @@ fn strEnumEncode(comptime T: type) EncodeHook(T, []const u8) {
     }.encode;
 }
 
-fn strEnumDecode(comptime T: type) DecodeHook(T) {
+fn strEnumDecode(comptime T: type) DecodeHookType(T) {
     return struct {
         fn decode(ctx: *Context, primitive: Primitive) anyerror!?T {
             const str = switch (primitive) {

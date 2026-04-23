@@ -35,7 +35,7 @@ pub fn attachMetatable(z: *State, comptime T: type) void {
 /// - z: The global Zua state owning the Lua VM.
 /// - T: The type whose metatable is being constructed.
 pub fn buildMetatable(z: *State, comptime T: type) void {
-    const strategy = Meta.getMeta(T).strategy;
+    const strategy = Meta.strategyOf(T);
 
     lua.createTable(z.luaState, 0, 4);
     const mt_index = lua.absIndex(z.luaState, -1);
@@ -45,7 +45,7 @@ pub fn buildMetatable(z: *State, comptime T: type) void {
         lua.setField(z.luaState, mt_index, "__name");
     }
 
-    const methods = comptime Meta.getMeta(T).methods;
+    const methods = comptime Meta.methodsOf(T);
     if (methodCount(T) == 0) return;
 
     const has_custom_index = comptime @hasField(@TypeOf(methods), "__index");
@@ -113,7 +113,7 @@ fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
 /// This trampoline first checks if the key matches any regular method names, and if so dispatches to the corresponding method. If not, it falls back to the custom
 /// __index handler
 fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
-    const methods = comptime Meta.getMeta(T).methods;
+    const methods = comptime Meta.methodsOf(T);
     const methods_type = comptime @TypeOf(methods);
     const custom_trampoline = comptime selectTrampoline(@field(methods, "__index")).?;
 
@@ -138,7 +138,7 @@ fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
 
 /// Returns the total number of methods declared on `T`.
 fn methodCount(comptime T: type) i32 {
-    const methods = comptime Meta.getMeta(T).methods;
+    const methods = comptime Meta.methodsOf(T);
     return @intCast(@typeInfo(@TypeOf(methods)).@"struct".fields.len);
 }
 
@@ -146,7 +146,7 @@ fn methodCount(comptime T: type) i32 {
 ///
 /// This determines whether a separate `__index` table needs to be built.
 fn regularMethodCount(comptime T: type) i32 {
-    const methods = comptime Meta.getMeta(T).methods;
+    const methods = comptime Meta.methodsOf(T);
     comptime var count: i32 = 0;
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         if (!std.mem.startsWith(u8, field.name, "__")) count += 1;

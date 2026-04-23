@@ -104,7 +104,7 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
 /// const fn_val = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" });
 /// globals.set(&ctx, "add", fn_val);
 /// ```
-pub fn new(comptime function: anytype, comptime error_config: ErrorConfig) NativeFn(function, error_config) {
+pub inline fn new(comptime function: anytype, comptime error_config: ErrorConfig) NativeFn(function, error_config) {
     return .{};
 }
 
@@ -127,7 +127,7 @@ pub fn new(comptime function: anytype, comptime error_config: ErrorConfig) Nativ
 /// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{});
 /// globals.set(&ctx, "counter", counter);
 /// ```
-pub fn closure(
+pub inline fn closure(
     comptime function: anytype,
     initial: anytype,
     comptime error_config: ErrorConfig,

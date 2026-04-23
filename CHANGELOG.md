@@ -6,6 +6,7 @@
 - `zua.Docs`, a Lua stub generator for editor and language-server support when exposing Zig APIs to script authors.
 - metadata documentation helpers: `withName`, `withDescription`, and `withAttribDescriptions`.
 - `Native.ArgInfo` and wrapper-level `withDescriptions(...)` so exported functions and methods can carry parameter names and descriptions into generated stubs.
+- generated files emit `---@meta _`, preserve optional types as `TYPE?`, document `VarArgs` as `---@param ...`, and emit `---@alias` for tagged unions and string-backed enums.
 
 ## 0.9.0
 

@@ -71,9 +71,9 @@ The generator uses the wrapper's `name` field for top-level functions. That matt
 This is common with constructors. In Zig you might write a function called `newCounter`, but expose it to Lua as `new_counter` or `Counter`. The type name and the function name are different concepts, so set them explicitly on the wrapper you pass to `Docs.add`.
 
 ```zig
-var new_counter = zua.Native.new(newCounter, .{});
-new_counter.description = "Construct a new Counter object.";
-new_counter.name = "new_counter";
+const new_counter = zua.Native.new(newCounter, .{})
+    .withName("new_counter")
+    .withDescription("Construct a new Counter object.");
 
 try generator.add(new_counter);
 try generator.add(Counter);
@@ -86,12 +86,10 @@ For functions, parameter names and descriptions come from `withDescriptions`.
 ```zig
 const ArgInfo = zua.Native.ArgInfo;
 
-var make_vector = zua.Native.new(makeVector, .{}).withDescriptions(.{
-    .x = ArgInfo{ .name = "x", .description = "Initial horizontal coordinate." },
-    .y = ArgInfo{ .name = "y", .description = "Initial vertical coordinate." },
-});
-make_vector.description = "Construct a new Vector2 value.";
-make_vector.name = "make_vector";
+const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(.{
+    ArgInfo{ .name = "x", .description = "Initial horizontal coordinate." },
+    ArgInfo{ .name = "y", .description = "Initial vertical coordinate." },
+}).withName("make_vector").withDescription("Construct a new Vector2 value.");
 ```
 
 `ArgInfo.name` is the displayed parameter name in the stub. `ArgInfo.description` is optional and appears as the trailing comment in the generated `---@param` line.
@@ -106,10 +104,7 @@ For `.table` types, field descriptions come from `withAttribDescriptions` on `ZU
 const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
         .scale = zua.Native.new(scale, .{}).withDescriptions(.{
-            .factor = zua.Native.ArgInfo{
-                .name = "factor",
-                .description = "Scalar multiplier applied to both coordinates.",
-            },
+            ArgInfo{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
         }),
     })
         .withDescription("Simple table-backed 2D vector.")

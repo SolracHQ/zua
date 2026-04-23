@@ -76,7 +76,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Meta.getMeta(T);
-        if (try meta.encode_hook(ctx, value)) |encoded| {
+        if (try meta.EncodeHook(ctx, value)) |encoded| {
             return pushValue(ctx, encoded);
         }
     }
@@ -105,7 +105,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
         },
         .@"enum", .@"struct", .@"union" => {
-            const strategy = comptime Meta.getMeta(T).strategy;
+            const strategy = comptime Meta.strategyOf(T);
 
             // Handle .object strategy: allocate as userdata with metatable
             if (comptime strategy == .object) {
@@ -145,7 +145,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
                 }
 
                 if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum") {
-                    const strategy = comptime Meta.getMeta(Pointee).strategy;
+                    const strategy = comptime Meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         @compileError(std.fmt.comptimePrint("Cannot push *{s} where {s} uses .object strategy: the metatable and identity would be lost. Return {s} by value instead to preserve metatable behavior and enable proper method dispatch.", .{ @typeName(Pointee), @typeName(Pointee), @typeName(Pointee) }));

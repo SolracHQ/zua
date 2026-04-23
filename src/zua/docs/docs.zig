@@ -21,6 +21,7 @@ const DocKind = enum {
     Table,
     Function,
     Object,
+    Alias,
     PlaceHolder,
 };
 
@@ -56,6 +57,17 @@ const Function = struct {
     returns: std.ArrayList([]const u8),
 };
 
+const AliasValue = struct {
+    type: []const u8,
+    description: []const u8,
+};
+
+const Alias = struct {
+    name: []const u8,
+    description: []const u8,
+    values: std.ArrayList(AliasValue),
+};
+
 /// Type with opaque userdata or pointer strategy documentation.
 const Object = struct {
     name: []const u8,
@@ -67,6 +79,7 @@ pub const Doc = union(DocKind) {
     Table: Table,
     Function: Function,
     Object: Object,
+    Alias: Alias,
     PlaceHolder: struct {
         name: []const u8,
         description: []const u8,
@@ -134,6 +147,8 @@ pub fn generate(self: *Docs) ![]const u8 {
     var it = self.cache.iterator();
     var first = true;
 
+    try out.appendSlice(self.arena.allocator(), "---@meta _\n\n");
+
     while (it.next()) |entry| {
         switch (entry.value_ptr.*) {
             .PlaceHolder => continue,
@@ -151,6 +166,11 @@ pub fn generate(self: *Docs) ![]const u8 {
                 if (!first) try out.appendSlice(self.arena.allocator(), "\n");
                 first = false;
                 try emitObjectStub(self.arena.allocator(), &out, doc);
+            },
+            .Alias => |doc| {
+                if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+                first = false;
+                try emitAliasStub(self.arena.allocator(), &out, doc);
             },
         }
     }
@@ -172,31 +192,41 @@ fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) anyerro
         else => return,
     }
 
-    const meta = comptime Meta.getMeta(Normalized);
     const cache_key = @typeName(Normalized);
-    if (!try self.insertPlaceholderIfNeeded(cache_key, meta.name, meta.description)) return;
+    if (!try self.insertPlaceholderIfNeeded(cache_key, Meta.nameOf(Normalized), Meta.descriptionOf(Normalized))) return;
 
-    switch (meta.strategy) {
+    if (comptime shouldEmitAlias(Normalized)) {
+        var doc = Alias{
+            .name = try self.persist(Meta.nameOf(Normalized)),
+            .description = try self.persist(Meta.descriptionOf(Normalized)),
+            .values = .empty,
+        };
+        try self.collectAliasValues(&doc, Normalized, recurse_nested);
+        try self.cache.put(cache_key, .{ .Alias = doc });
+        return;
+    }
+
+    switch (Meta.strategyOf(Normalized)) {
         .table => {
             var doc = Table{
-                .name = try self.persist(meta.name),
-                .description = try self.persist(meta.description),
+                .name = try self.persist(Meta.nameOf(Normalized)),
+                .description = try self.persist(Meta.descriptionOf(Normalized)),
                 .fields = .empty,
                 .methods = .empty,
             };
 
-            try self.collectTableFields(&doc, Normalized, meta.attributeDescriptions, recurse_nested);
-            try self.collectMethods(&doc.methods, meta.methods, Normalized, recurse_nested);
+            try self.collectTableFields(&doc, Normalized, Meta.attributeDescriptionsOf(Normalized), recurse_nested);
+            try self.collectMethods(&doc.methods, Meta.methodsOf(Normalized), Normalized, recurse_nested);
             try self.cache.put(cache_key, .{ .Table = doc });
         },
         .object, .ptr, .capture => {
             var doc = Object{
-                .name = try self.persist(meta.name),
-                .description = try self.persist(meta.description),
+                .name = try self.persist(Meta.nameOf(Normalized)),
+                .description = try self.persist(Meta.descriptionOf(Normalized)),
                 .methods = .empty,
             };
 
-            try self.collectMethods(&doc.methods, meta.methods, Normalized, recurse_nested);
+            try self.collectMethods(&doc.methods, Meta.methodsOf(Normalized), Normalized, recurse_nested);
             try self.cache.put(cache_key, .{ .Object = doc });
         },
     }
@@ -315,6 +345,15 @@ fn collectFunctionParameters(
         const arg_info = argDocInfo(wrapper.args, arg_index);
         arg_index += 1;
 
+        if (comptime param_type == Mapper.Decoder.VarArgs) {
+            try doc.parameters.append(self.arena.allocator(), .{
+                .name = try self.persist("..."),
+                .description = try self.persist(arg_info.description),
+                .type = try self.persist("any"),
+            });
+            continue;
+        }
+
         try doc.parameters.append(self.arena.allocator(), .{
             .name = try self.persist(arg_info.name),
             .description = try self.persist(arg_info.description),
@@ -327,6 +366,30 @@ fn collectFunctionReturns(self: *Docs, doc: *Function, comptime ReturnType: type
     const count = comptime typeListCount(ReturnType);
     inline for (0..count) |index| {
         try doc.returns.append(self.arena.allocator(), try self.displayTypeName(typeListAt(ReturnType, index), .return_value));
+    }
+}
+
+fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
+    switch (@typeInfo(T)) {
+        .@"enum" => {
+            inline for (std.meta.fields(T)) |field| {
+                try doc.values.append(self.arena.allocator(), .{
+                    .type = try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{field.name}),
+                    .description = try self.persist(""),
+                });
+            }
+        },
+        .@"union" => |info| {
+            inline for (info.fields) |field| {
+                const field_type_name = try self.displayTypeName(field.type, .field);
+                try doc.values.append(self.arena.allocator(), .{
+                    .type = try std.fmt.allocPrint(self.arena.allocator(), "{{ {s}: {s} }}", .{ field.name, field_type_name }),
+                    .description = try self.persist(""),
+                });
+                try self.maybeRecurseReferencedType(field.type, recurse_nested);
+            }
+        },
+        else => {},
     }
 }
 
@@ -361,7 +424,7 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
 
     switch (@typeInfo(Normalized)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {
-            const strategy = Meta.getMeta(Normalized).strategy;
+            const strategy = comptime Meta.strategyOf(Normalized);
             if (comptime strategy == .table) {
                 try self.addType(Normalized, true);
             }
@@ -379,6 +442,11 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
 }
 
 fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
+    if (comptime Mapper.isOptional(T)) {
+        const child_name = try self.displayTypeName(Mapper.optionalChild(T), ctx);
+        return std.fmt.allocPrint(self.arena.allocator(), "{s}?", .{child_name});
+    }
+
     const Normalized = normalizeReferencedType(T);
 
     if (comptime isTransparentTypedWrapper(Normalized)) {
@@ -392,7 +460,7 @@ fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) 
     if (Normalized == RawTable) return self.persist("table");
     if (Normalized == RawFunction) return self.persist("function");
     if (Normalized == RawUserdata) return self.persist("userdata");
-    if (Normalized == Mapper.Decoder.VarArgs) return self.persist("...");
+    if (Normalized == Mapper.Decoder.VarArgs) return self.persist("any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return self.persist("function");
     if (comptime isNativeWrapperType(Normalized)) return self.persist("function");
@@ -417,13 +485,13 @@ fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) 
             if (ptr.size == .one) {
                 const child = ptr.child;
                 if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
-                    break :blk try self.persist(Meta.getMeta(child).name);
+                    break :blk try self.persist(Meta.nameOf(child));
                 }
             }
 
             break :blk try self.persist(@typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => self.persist(Meta.getMeta(Normalized).name),
+        .@"struct", .@"union", .@"enum", .@"opaque" => self.persist(Meta.nameOf(Normalized)),
         else => self.persist(@typeName(Normalized)),
     };
 }
@@ -483,6 +551,18 @@ fn emitObjectStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Ob
     }
 }
 
+fn emitAliasStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Alias) !void {
+    if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+    try appendFmt(allocator, out, "---@alias {s}\n", .{doc.name});
+    for (doc.values.items) |value| {
+        if (value.description.len > 0) {
+            try appendFmt(allocator, out, "---| {s} # {s}\n", .{ value.type, value.description });
+        } else {
+            try appendFmt(allocator, out, "---| {s}\n", .{value.type});
+        }
+    }
+}
+
 fn emitFunctionStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Function, owner_name: ?[]const u8) !void {
     if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
     for (doc.parameters.items) |param| {
@@ -538,6 +618,15 @@ fn wrapMethod(comptime method_value: anytype) @TypeOf(if (@typeInfo(@TypeOf(meth
 fn normalizeRootType(comptime T: type) type {
     if (comptime isTransparentTypedWrapper(T)) return unwrapTransparentTypedWrapper(T);
     return T;
+}
+
+fn shouldEmitAlias(comptime T: type) bool {
+    if (Meta.strategyOf(T) != .table) return false;
+    return switch (@typeInfo(T)) {
+        .@"union" => |info| info.tag_type != null,
+        .@"enum" => Meta.proxyTypeOf(T) == []const u8,
+        else => false,
+    };
 }
 
 fn normalizeReferencedType(comptime T: type) type {
@@ -622,9 +711,7 @@ fn isCaptureParam(comptime T: type) bool {
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    if (!(@typeInfo(Child) == .@"struct" or @typeInfo(Child) == .@"union" or @typeInfo(Child) == .@"enum")) return false;
-    if (!@hasDecl(Child, "ZUA_META")) return false;
-    return Child.ZUA_META.strategy == .capture;
+    return Meta.strategyOf(Child) == .capture;
 }
 
 fn isSelfParam(comptime ParamType: type, comptime OwnerType: type) bool {
