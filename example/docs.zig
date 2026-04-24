@@ -122,15 +122,8 @@ pub fn main(init: std.process.Init) !void {
         ArgInfo{ .name = "...", .description = "Additional integer values." },
     }).withName("sum_all").withDescription("Sum all integer varargs.");
 
-    try generator.add(make_vector);
-    try generator.add(new_counter);
-    try generator.add(maybe_increment);
-    try generator.add(sum_all);
-    try generator.add(Vector2);
-    try generator.add(Counter);
-    try generator.add(Condition);
-    try generator.add(Priority);
+    const module = .{ .make_vector = make_vector, .new_counter = new_counter, .maybe_increment = maybe_increment, .sum_all = sum_all };
 
-    const stubs = try generator.generate();
+    const stubs = try zua.Docs.generateModule(init.gpa, module, "zua");
     std.debug.print("{s}", .{stubs});
 }

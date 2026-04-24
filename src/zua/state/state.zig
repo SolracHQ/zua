@@ -3,7 +3,7 @@ const lua = @import("../../lua/lua.zig");
 const Table = @import("../handlers/table.zig").Table;
 const Mapper = @import("../mapper/mapper.zig");
 const Context = @import("context.zig");
-const metatable = @import("../metatable.zig");
+const MetaTable = @import("../metatable.zig");
 
 const registry_key_prefix: [:0]const u8 = "zua_zua_";
 var zua_registry_key: [:0]const u8 = "zua_zua";
@@ -124,7 +124,7 @@ pub fn getOrCreateMetatable(self: *State, comptime T: type) void {
         return;
     }
 
-    metatable.buildMetatable(self, T);
+    MetaTable.buildMetatable(self, T);
 
     lua.pushValue(self.luaState, -1);
     const ref = lua.ref(self.luaState, lua.REGISTRY_INDEX);
@@ -134,6 +134,14 @@ pub fn getOrCreateMetatable(self: *State, comptime T: type) void {
 pub fn globals(self: *State) Table {
     _ = lua.getIndex(self.luaState, lua.REGISTRY_INDEX, lua.RIDX_GLOBALS);
     return Table.fromStack(self, -1);
+}
+/// Writes the fields from `value` into the existing globals table.
+///
+/// This is equivalent to `Mapper.Encoder.fillTable` on `state.globals()` and
+/// can be called multiple times to register independent subsystems.
+pub fn addGlobals(self: *State, ctx: *Context, value: anytype) !void {
+    const _globals = self.globals();
+    try Mapper.Encoder.fillTable(ctx, _globals, value);
 }
 
 /// Pushes the Lua registry onto the stack and returns an absolute-indexed handle.

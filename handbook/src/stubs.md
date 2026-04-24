@@ -126,6 +126,8 @@ Only `.table` strategy types support attribute descriptions, because only tables
 For the example above, `generate()` emits Lua annotations like these:
 
 ```lua
+---@meta _
+
 ---@class Counter
 local Counter = {}
 
@@ -143,12 +145,48 @@ function make_vector(x, y) end
 local Vector2 = {}
 ```
 
-That is enough for Lua language servers to understand the API surface and improve completion and hover information.
+The `---@meta _` header at the top marks the file as a declaration-only stub that should not be loaded as a regular module.
+
+Optional types appear as `TYPE?` in the generated output. A function parameter of type `?i32` becomes `integer?` in the stub. A function that returns `?Vector2` is annotated `---@return Vector2?`.
+
+`VarArgs` parameters are emitted as `---@param ... any`. If you supply an `ArgInfo` entry with the name `"..."`, the description is included on that line as well.
+
+Tagged unions and string-backed enums generate `---@alias` declarations instead of class stubs. For a tagged union `Condition` with variants `eq` and `in_range`, the generator emits an alias listing each variant shape. For a `strEnum` type, the alias lists the string literals directly:
+
+```lua
+---@alias Priority "low" | "normal" | "high"
+```
+
+## Module shorthand
+
+When your API is already grouped into a module-like struct literal, you can skip the `Docs` builder entirely and call `generateModule` directly:
+
+```zig
+const stubs = try zua.Docs.generateModule(allocator, module, "mymod");
+```
+
+The first argument is a plain allocator, not the call arena. The second is the module struct. The third is the module name, which appears in the `---@meta` header:
+
+```lua
+---@meta mymod
+```
+
+Pass `null` for the name to emit `---@meta _` instead.
+
+Inside a Lua callback, use `ctx.arena()` as the allocator if the stub string only needs to live for the duration of that call:
+
+```zig
+fn docs(ctx: *zua.Context) ![]const u8 {
+    return zua.Docs.generateModule(ctx.arena(), module, "mymod");
+}
+```
+
+This is the pattern used in the `vecmath` shared library example: a `docs` function exposed to Lua generates and returns the stub text on demand.
 
 ## Writing the stub file
 
-`generate()` returns the full Lua source as a string. Write it to a file that your editor indexes, for example `types/zua-api.lua` or `.luarc-generated/zua.lua`.
+`generate()` and `generateModule` both return the full Lua source as a string. Write it to a file that your editor indexes, for example `types/zua-api.lua` or `.luarc-generated/zua.lua`.
 
 The explicit `flush()` in the full example above matters because the writer is buffered.
 
-How you hook that into the build is up to you. Some projects generate the file during `zig build`. Others keep a small tool or example program and regenerate it when the scripting API changes.
+How you hook that into the build is up to you. Some projects generate the file during `zig build`. Others keep a small tool or example program and regenerate it when the scripting API changes. Shared libraries can expose a `docs()` function that script authors call once to write the stub themselves.

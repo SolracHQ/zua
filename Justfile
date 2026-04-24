@@ -32,7 +32,7 @@ run-example name:
     zig build "run-example-{{name}}"
 
 dylib:
-    @zig build vecmath
+    @zig build vecmath --release=small
     @mkdir -p example/dylib
     @cp zig-out/lib/*vecmath* example/dylib/vecmath.so
     @cd example/dylib && lua use_it.lua
@@ -45,9 +45,7 @@ example:
     selection="$(just list-examples | fzf "${fzf_args[@]}")"; \
     [[ -n "${selection:-}" ]]; \
     if [[ "$selection" == "dylib" ]]; then \
-        zig build vecmath; \
-        mkdir -p dylib; \
-        cp zig-out/lib/*vecmath* dylib/; \
+        just dylib; \
     else \
         just run-example "${selection}"; \
     fi

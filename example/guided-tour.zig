@@ -112,17 +112,15 @@ pub fn main(init: std.process.Init) !void {
     var ctx = zua.Context.init(z);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    // Register functions
-    try globals.set(&ctx, "add", add);
-    try globals.set(&ctx, "multiply", multiply);
-    try globals.set(&ctx, "Counter", makeCounter);
-    try globals.set(&ctx, "Vector", zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }));
-    try globals.set(&ctx, "map_with_callback", zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }));
-    try globals.set(&ctx, "filter_and_sum", zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }));
-    try globals.set(&ctx, "multi_return_example", multiReturnExample);
+    try z.addGlobals(&ctx, .{
+        .add = add,
+        .multiply = multiply,
+        .Counter = makeCounter,
+        .Vector = zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }),
+        .map_with_callback = zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }),
+        .filter_and_sum = zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }),
+        .multi_return_example = multiReturnExample,
+    });
 
     const code =
         \\-- Basic function calls

@@ -1,11 +1,14 @@
 const std = @import("std");
 const zua = @import("zua");
 const lua = zua.lua;
+const ArgInfo = zua.Native.ArgInfo;
 
 const Vec2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vec2, .{
         .add = add,
+        .__add = add,
         .sub = sub,
+        .__sub = sub,
         .scale = scale,
         .dot = dot,
         .length = length,
@@ -50,9 +53,32 @@ fn lerp(a: Vec2, b: Vec2, t: f64) Vec2 {
     return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
 }
 
-const Module = struct {
-    pub const ZUA_META = zua.Meta.Table(@This(), .{ .vec2 = zua.Native.new(vec2, .{}), .lerp = zua.Native.new(lerp, .{}) });
-};
+fn docs(ctx: *zua.Context) ![]const u8 {
+    return zua.Docs.generateModule(ctx.arena(), module, "vecmath");
+}
+
+const vec2_fn = zua.Native.new(vec2, .{})
+    .withName("vec2")
+    .withDescription("Construct a new Vec2 value.")
+    .withDescriptions(.{
+    ArgInfo{ .name = "x", .description = "Horizontal component." },
+    ArgInfo{ .name = "y", .description = "Vertical component." },
+});
+
+const lerp_fn = zua.Native.new(lerp, .{})
+    .withName("lerp")
+    .withDescription("Linearly interpolate between two Vec2 values.")
+    .withDescriptions(.{
+    ArgInfo{ .name = "a", .description = "Starting vector." },
+    ArgInfo{ .name = "b", .description = "Ending vector." },
+    ArgInfo{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+});
+
+const docs_fn = zua.Native.new(docs, .{})
+    .withName("docs")
+    .withDescription("Generate editor stubs for the vecmath module.");
+
+const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn, .docs = docs_fn };
 
 export fn luaopen_vecmath(L: *lua.State) c_int {
     var threaded: std.Io.Threaded = .init(std.heap.c_allocator, .{});
@@ -61,6 +87,6 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
     const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
-    zua.Mapper.Encoder.pushValue(&ctx, Module{}) catch return 0;
+    zua.Mapper.Encoder.pushValue(&ctx, module) catch return 0;
     return 1;
 }

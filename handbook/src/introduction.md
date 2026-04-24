@@ -24,6 +24,8 @@ Each chapter adds capability on top of the previous one. You can read straight t
 - **Object handles** - `zua.Object(T)`, `zua.Userdata`, `Handlers.takeOwnership`.
 - **Closures** - `Meta.Capture`, `ZuaFn.newClosure`, partial application with captured Lua callbacks.
 - **VarArgs and Primitive** - variadic functions, inspecting raw Lua values, `decodeValue`.
+- **Stub generation** - `zua.Docs`, `generateModule`, editor stubs for script authors.
+- **Shared libraries** - `State.libState`, writing `luaopen_*` exports, loading with `require`.
 - **REPL** - the built-in interactive shell, history, completion, syntax highlighting.
 
 > [!NOTE]

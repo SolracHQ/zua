@@ -143,11 +143,44 @@ pub fn add(self: *Docs, item: anytype) !void {
 ///
 /// The returned slice is arena-backed and remains valid until `deinit`.
 pub fn generate(self: *Docs) ![]const u8 {
+    return self.generateImpl(null);
+}
+
+/// Generates Lua stub text directly from a module-like struct literal.
+///
+/// The output is prefixed with `---@meta {module_name}`.
+/// If `module_name` is null, the prefix is `---@meta _`.
+pub fn generateModule(
+    allocator: std.mem.Allocator,
+    module: anytype,
+    module_name: ?[]const u8,
+) ![]const u8 {
+    var generator = Docs.init(allocator);
+    defer generator.deinit();
+    try generator.addModuleValues(module);
+    return generator.generateImpl(module_name);
+}
+
+fn addModuleValues(self: *Docs, module: anytype) anyerror!void {
+    const ModuleType = @TypeOf(module);
+    if (comptime @typeInfo(ModuleType) != .@"struct" and !@typeInfo(ModuleType).@"struct".is_tuple) {
+        @compileError("Docs.generate and Docs.generateModule expect a struct-like module literal");
+    }
+    inline for (@typeInfo(ModuleType).@"struct".fields) |field| {
+        try self.add(@field(module, field.name));
+    }
+}
+
+fn generateImpl(self: *Docs, module: ?[]const u8) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     var it = self.cache.iterator();
     var first = true;
 
-    try out.appendSlice(self.arena.allocator(), "---@meta _\n\n");
+    const module_name = if (module) |name|
+        try std.fmt.allocPrint(self.arena.allocator(), "---@meta {s}\n\n", .{name})
+    else
+        "---@meta _\n\n";
+    try out.appendSlice(self.arena.allocator(), module_name);
 
     while (it.next()) |entry| {
         switch (entry.value_ptr.*) {

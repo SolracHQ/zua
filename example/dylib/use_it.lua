@@ -1,12 +1,14 @@
 local vecmath = require("vecmath")
 
+print(vecmath.docs())
+
 local a = vecmath.vec2(3, 4)
 local b = vecmath.vec2(1, 2)
 
 print(a:length())        -- 5.0
 print(a:dot(b))          -- 11.0
 
-local c = a:add(b)
+local c = a + b
 print(c.x, c.y)          -- 4.0  6.0
 
 local n = a:normalize()
