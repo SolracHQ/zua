@@ -75,7 +75,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !Entry {
 You create one `Context` and pass it to every call. The arena inside it is reset at the start of each `execute` or `eval`, not when you construct the context. This means the same `ctx` variable works for the whole program lifetime without any manual reset.
 
 ```zig
-var ctx = zua.Context.init(z);
+var ctx = zua.Context.init(state);
 defer ctx.deinit();
 
 // Both calls share the same ctx; each resets the arena internally.

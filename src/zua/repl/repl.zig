@@ -5,7 +5,6 @@
 //! so temporary allocations are cleared after every command.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const lexer = @import("lexer.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
@@ -39,11 +38,8 @@ pub const Config = struct {
     /// Optional welcome message printed when the REPL starts.
     welcome_message: ?[]const u8 = null,
 
-    /// Optional custom lexer hook for user-defined identifier classification.
-    identifier_hook: lexer.IdentifierHook = null,
-
-    /// Optional ANSI color configuration for syntax highlighting.
-    color_config: ?highlight.ColorConfig = null,
+    /// Optional token-to-style hook for syntax highlighting.
+    color_hook: highlight.ColorHook = null,
 };
 
 /// The registered tab completion callback.
@@ -53,8 +49,7 @@ var completion_callback: CompletionCallback = null;
 
 /// Active syntax highlighting colors used by the current REPL session.
 /// This global exists to bridge the lexer/highlighter to the linenoise callback.
-var active_color_config: highlight.ColorConfig = .{};
-var active_identifier_hook: lexer.IdentifierHook = null;
+var active_color_hook: highlight.ColorHook = null;
 
 var running: bool = false;
 
@@ -85,13 +80,15 @@ pub fn run(state: *State, config: Config) !void {
 
     try printWelcome(state, &stdout_buffer, config.welcome_message);
 
-    active_color_config = if (config.color_config) |cfg| cfg else .{};
-    active_identifier_hook = config.identifier_hook;
+    active_color_hook = config.color_hook;
+
     linenoise.setMultiLine(true);
     linenoise.setHighlightCallback(highlightCallbackC);
 
-    if (config.completion_callback) |callback| {
-        completion_callback = callback;
+    completion_callback = config.completion_callback;
+    defer completion_callback = null;
+
+    if (completion_callback != null) {
         linenoise.setCompletionCallback(completionCallbackC);
     }
 
@@ -314,10 +311,11 @@ fn printMessage(state: *State, stdout_buffer: *[4096]u8, prefix: []const u8, mes
 
 /// C callback wrapper for linenoise tab completion.
 fn completionCallbackC(buffer: [*c]const u8, completions: ?*linenoise.Completions) callconv(.c) void {
+    const list = completions orelse return;
+    const source = std.mem.span(buffer);
+
     if (completion_callback) |callback| {
-        if (completions) |list| {
-            callback(std.mem.span(buffer), list);
-        }
+        callback(source, list);
     }
 }
 
@@ -327,9 +325,7 @@ fn completionCallbackC(buffer: [*c]const u8, completions: ?*linenoise.Completion
 /// output for the current source line.
 fn highlightCallbackC(buffer: [*c]const u8, len: usize, out_len: [*c]usize) callconv(.c) [*c]const u8 {
     const source = buffer[0..len];
-    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-    defer arena.deinit();
-    const out = highlight.process(arena.allocator(), source, active_color_config, active_identifier_hook) orelse return null;
+    const out = highlight.process(std.heap.c_allocator, source, active_color_hook) orelse return null;
     out_len.* = out.len;
     return out.ptr;
 }

@@ -125,5 +125,6 @@ pub fn main(init: std.process.Init) !void {
     const module = .{ .make_vector = make_vector, .new_counter = new_counter, .maybe_increment = maybe_increment, .sum_all = sum_all };
 
     const stubs = try zua.Docs.generateModule(init.gpa, module, "zua");
+    defer init.gpa.free(stubs);
     std.debug.print("{s}", .{stubs});
 }

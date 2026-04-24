@@ -16,7 +16,6 @@ pub const TokenKind = enum {
     keyword, // control keywords such as if, then, while, do, end, function, local, return
     keyword_value, // literal keywords such as true, false, nil
     builtin, // standard globals and library names such as print, ipairs, math, string
-    custom, // user-defined identifiers detected by a custom lexer hook
     name,
     string,
     integer,
@@ -25,12 +24,6 @@ pub const TokenKind = enum {
     comment,
     eos,
 };
-
-/// Optional hook to classify identifiers that are not builtins or keywords.
-///
-/// The lexer invokes this hook with the identifier text and returns `true`
-/// for identifiers that should be classified as `.custom`.
-pub const IdentifierHook = ?*const fn ([]const u8) bool;
 
 /// A single token produced by the Lua lexer.
 ///
@@ -53,10 +46,6 @@ pub const Token = struct {
 /// Returns:
 /// - Error!std.ArrayList(Token): A token list ending with `.eos` on success.
 pub fn lex(allocator: std.mem.Allocator, source: []const u8) Error!std.ArrayList(Token) {
-    return lexWithHook(allocator, source, null);
-}
-
-pub fn lexWithHook(allocator: std.mem.Allocator, source: []const u8, custom_identifier_hook: IdentifierHook) Error!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).empty;
     var ok = false;
     defer if (!ok) tokens.deinit(allocator);
@@ -65,7 +54,6 @@ pub fn lexWithHook(allocator: std.mem.Allocator, source: []const u8, custom_iden
         .allocator = allocator,
         .source = source,
         .pos = 0,
-        .custom_identifier_hook = custom_identifier_hook,
     };
 
     try lexer.lexAll(&tokens);
@@ -78,7 +66,6 @@ const Lexer = struct {
     allocator: std.mem.Allocator,
     source: []const u8,
     pos: usize,
-    custom_identifier_hook: IdentifierHook,
 
     /// Reads all tokens from the source and appends them to `tokens`.
     ///
@@ -234,7 +221,7 @@ const Lexer = struct {
             self.pos += 1;
         }
         const slice = self.source[start..self.pos];
-        const kind = if (isKeywordValue(slice)) TokenKind.keyword_value else if (isKeyword(slice)) TokenKind.keyword else if (isBuiltin(slice)) TokenKind.builtin else if (self.custom_identifier_hook) |hook| (if (hook(slice)) TokenKind.custom else TokenKind.name) else TokenKind.name;
+        const kind = if (isKeywordValue(slice)) TokenKind.keyword_value else if (isKeyword(slice)) TokenKind.keyword else if (isBuiltin(slice)) TokenKind.builtin else TokenKind.name;
         try tokens.append(self.allocator, Token{ .kind = kind, .offset = start, .len = self.pos - start });
     }
 

@@ -2,10 +2,10 @@ const std = @import("std");
 const zua = @import("zua");
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
     try executor.execute(&ctx, .{ .code = .{ .string = "print('Hello from Lua in Zig!')" } });

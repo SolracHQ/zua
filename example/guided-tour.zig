@@ -106,13 +106,13 @@ fn multiReturnExample() struct { i32, f64 } {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    try z.addGlobals(&ctx, .{
+    try state.addGlobals(&ctx, .{
         .add = add,
         .multiply = multiply,
         .Counter = makeCounter,

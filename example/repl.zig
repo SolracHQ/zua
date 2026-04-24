@@ -11,13 +11,6 @@ fn example() []const u8 {
     return "this is just an example";
 }
 
-/// Identify application-specific names for custom syntax highlighting.
-///
-/// Names starting with `custom_` are marked as special identifiers.
-fn customIdentifier(text: []const u8) bool {
-    return std.mem.startsWith(u8, text, "custom_");
-}
-
 /// Assign a custom color to identifiers recognized by `customIdentifier`.
 /// Can dynamically match several patterns, but for the example, all `custom_` identifiers share the same color.
 fn customColor(text: []const u8) highlight.Color {
@@ -39,41 +32,47 @@ fn completionCallback(buffer: []const u8, completions: *linenoise.Completions) v
 
 pub fn main(init: std.process.Init) !void {
     // Initialize the Zua state, which manages the Lua environment and resources.
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
     // Each REPL line executes with a fresh Context for scratch allocation.
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
+    const example_fn = zua.Native.new(example, .{})
+        .withName("example")
+        .withDescription("Return a sample string from the host environment.");
+    const custom_magic_fn = zua.Native.new(example, .{})
+        .withName("custom_magic")
+        .withDescription("Alias for example() exposed for custom syntax highlighting.");
 
     // Register host functions into the Lua REPL environment.
-    try globals.set(&ctx, "example", example);
-    try globals.set(&ctx, "custom_magic", example);
+    try state.addGlobals(&ctx, .{
+        .example = example_fn,
+        .custom_magic = custom_magic_fn,
+    });
 
-    try zua.Repl.run(z, .{
+    try zua.Repl.run(state, .{
         // First line shown when the REPL starts.
         .welcome_message = "Welcome to Zua REPL with custom lexer support!\n",
         // Path to save REPL command history across sessions.
         .history_path = "zua_repl_history.txt",
         // Custom syntax highlighting rules for the REPL input.
         .completion_callback = completionCallback,
-        // Selector function to identify special tokens for custom highlighting.
-        .identifier_hook = customIdentifier,
         // you can customize all the token kinds.
-        .color_config = highlight.ColorConfig{
-            .keyword = .{ .color = .{ .ansi = 93 }, .bold = true },
-            .keyword_value = .{ .color = .{ .ansi = 96 } },
-            .builtin = .{ .color = .{ .ansi = 32 } },
-            .custom = customColor,
-            .name = .{ .color = .{ .ansi = 37 } },
-            .string = .{ .color = .{ .ansi = 34 } },
-            .integer = .{ .color = .{ .ansi = 95 } },
-            .number = .{ .color = .{ .ansi = 95 } },
-            .symbol = .{ .color = .{ .ansi = 33 } },
-            .comment = .{ .color = .{ .ansi = 90 }, .dim = true },
-        },
+        .color_hook = colorize,
     });
+}
+
+fn colorize(kind: highlight.TokenKind, text: []const u8) ?highlight.Style {
+    return switch (kind) {
+        .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
+        .keyword_value => .{ .fg = .{ .ansi = 96 } },
+        .builtin => .{ .fg = .{ .ansi = 32 } },
+        .name => if (std.mem.startsWith(u8, text, "custom_")) .{ .fg = .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } } } else .{ .fg = .{ .ansi = 37 } },
+        .string => .{ .fg = .{ .ansi = 34 } },
+        .integer, .number => .{ .fg = .{ .ansi = 95 } },
+        .symbol => .{ .fg = .{ .ansi = 33 } },
+        .comment => .{ .fg = .{ .ansi = 90 }, .dim = true },
+    };
 }

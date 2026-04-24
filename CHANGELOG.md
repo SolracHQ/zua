@@ -2,6 +2,9 @@
 
 ## 0.10.0
 
+### Breaking
+- REPL syntax highlighting now uses a single `color_hook(kind, text)` callback instead of the old `color_config` and `identifier_hook` split. You can now branch directly on token kind and token text in one place.
+
 ### Added
 - `zua.Docs`, a Lua stub generator for editor and language-server support when exposing Zig APIs to script authors.
 - metadata documentation helpers: `withName`, `withDescription`, and `withAttribDescriptions`.

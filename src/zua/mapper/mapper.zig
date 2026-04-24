@@ -27,6 +27,10 @@ pub const Primitive =
         function: Handlers.Function,
         light_userdata: *anyopaque,
         userdata: Handlers.Userdata,
+
+        pub fn decode(self: Primitive, ctx: *Context, comptime T: type) !T {
+            return Decoder.decodeValue(ctx, self, T);
+        }
     };
 
 pub fn isOptional(comptime T: type) bool {

@@ -31,18 +31,17 @@ fn listProcesses(ctx: *zua.Context) ![]const Process {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&ctx, "list_processes", zua.Native.new(listProcesses, .{
-        .parse_err_fmt = "list_processes expects no arguments: {s}",
-    }));
+    try state.addGlobals(&ctx, .{
+        .list_processes = zua.Native.new(listProcesses, .{
+            .parse_err_fmt = "list_processes expects no arguments: {s}",
+        }),
+    });
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\local processes = list_processes()

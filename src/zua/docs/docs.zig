@@ -158,7 +158,8 @@ pub fn generateModule(
     var generator = Docs.init(allocator);
     defer generator.deinit();
     try generator.addModuleValues(module);
-    return generator.generateImpl(module_name);
+    const generated = try generator.generateImpl(module_name);
+    return allocator.dupe(u8, generated);
 }
 
 fn addModuleValues(self: *Docs, module: anytype) anyerror!void {

@@ -77,7 +77,7 @@ const Address = struct {
 };
 
 // The decode hook fires when Address is decoded as a value (T).
-// readAddress has `addr: Address` so the hook fires — Lua can pass an integer,
+// readAddress has `addr: Address` so the hook fires, Lua can pass an integer,
 // hex string, or existing handle. getValue above has `self: *Address` so it
 // extracts the raw userdata pointer and the hook is not involved.
 
@@ -104,19 +104,18 @@ fn readAddress(addr: Address) u64 {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&ctx, "makeAddress", makeAddress);
-    try globals.set(&ctx, "defaultPriority", defaultPriority);
-    try globals.set(&ctx, "describePriority", describePriority);
-    try globals.set(&ctx, "readAddress", readAddress);
+    try state.addGlobals(&ctx, .{
+        .makeAddress = makeAddress,
+        .defaultPriority = defaultPriority,
+        .describePriority = describePriority,
+        .readAddress = readAddress,
+    });
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\-- Priority encodes as string, decodes from string or integer

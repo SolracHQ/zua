@@ -22,11 +22,13 @@ fn counterTick(s: *CounterState) i32 {
 Then register the closure with an initial value:
 
 ```zig
-try globals.set(&ctx, "counter", zua.ZuaFn.newClosure(
-    counterTick,
-    CounterState{ .count = 0, .step = 1 },
-    .{},
-));
+try state.addGlobals(&ctx, .{
+    .counter = zua.ZuaFn.newClosure(
+        counterTick,
+        CounterState{ .count = 0, .step = 1 },
+        .{},
+    ),
+});
 ```
 
 ```lua
@@ -38,8 +40,10 @@ print(counter())  -- 3
 Each call to `newClosure` allocates a **fresh, independent** capture. Registering the same function twice with different initial values gives two closures that never share state:
 
 ```zig
-try globals.set(&ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
-try globals.set(&ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+try state.addGlobals(&ctx, .{
+    .by_one = zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}),
+    .by_ten = zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}),
+});
 ```
 
 ```lua

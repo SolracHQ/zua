@@ -83,28 +83,28 @@ zua decodes whichever field is present. If zero or more than one key is set, it 
 Use `Table.from` to convert a Zig struct or array literal to a Lua table in one call:
 
 ```zig
-const guide = Table.from(z, .{
+const guide = Table.from(state, .{
     .name    = "guided-tour",
     .version = 1,
     .tags    = [_][]const u8{ "zig", "lua" },
 });
 defer guide.release();
-try globals.set(&ctx, "guide", guide);
+try state.addGlobals(&ctx, .{ .guide = guide });
 ```
 
 Struct fields become string keys. Arrays and slices become array-style tables with integer keys starting at 1. Nesting is recursive. For incremental construction, use `Table.create` and `set`:
 
 ```zig
-const entry = Table.create(z, 0, 3);
+const entry = Table.create(state, 0, 3);
 defer entry.release();
 try entry.set(&ctx, "address", "0x7fff1234");
 try entry.set(&ctx, "type",    "f32");
 try entry.set(&ctx, "value",   8.3);
-try globals.set(&ctx, "entry", entry);
+try state.addGlobals(&ctx, .{ .entry = entry });
 ```
 
 > [!NOTE]
-> `Table.create(z, narray, nrec)` is a hint to Lua about how many array-style and record-style entries the table will hold. Lua uses this to pre-allocate the right internal structures. Getting it wrong does not break anything, but getting it right avoids rehashing.
+> `Table.create(state, narray, nrec)` is a hint to Lua about how many array-style and record-style entries the table will hold. Lua uses this to pre-allocate the right internal structures. Getting it wrong does not break anything, but getting it right avoids rehashing.
 
 Tables returned from `Table.create` are **stack-owned handles** and must be `.release()`d before the enclosing scope returns. The `defer` pattern above is the standard idiom.
 
@@ -136,7 +136,7 @@ Return `zua.Table` directly from a function. The trampoline takes ownership and 
 
 ```zig
 fn makeEntry(ctx: *zua.Context, address: []const u8) zua.Table {
-    const t = Table.create(z, 0, 2);
+    const t = Table.create(state, 0, 2);
     t.set(ctx, "address", address);
     t.set(ctx, "type",    "f32");
     return t;

@@ -32,7 +32,7 @@ run-example name:
     zig build "run-example-{{name}}"
 
 dylib:
-    @zig build vecmath --release=small
+    @zig build vecmath --release=safe
     @mkdir -p example/dylib
     @cp zig-out/lib/*vecmath* example/dylib/vecmath.so
     @cd example/dylib && lua use_it.lua

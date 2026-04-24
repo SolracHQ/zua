@@ -5,6 +5,19 @@
 const std = @import("std");
 const lexer = @import("lexer.zig");
 
+/// Token kinds exposed to the REPL color hook.
+pub const TokenKind = enum {
+    keyword,
+    keyword_value,
+    builtin,
+    name,
+    string,
+    integer,
+    number,
+    symbol,
+    comment,
+};
+
 /// ANSI color variants used by the REPL syntax highlighter.
 ///
 /// This type is returned by custom identifier hooks and is used by the
@@ -26,19 +39,34 @@ pub const Color = union(enum) {
     }
 };
 
+fn renderBackground(color: Color, buf: []u8) []const u8 {
+    return switch (color) {
+        .none => buf[0..0],
+        .ansi => |n| std.fmt.bufPrint(buf, "\x1b[{d}m", .{n}) catch buf[0..0],
+        .ansi256 => |n| std.fmt.bufPrint(buf, "\x1b[48;5;{d}m", .{n}) catch buf[0..0],
+        .rgb => |c| std.fmt.bufPrint(buf, "\x1b[48;2;{d};{d};{d}m", .{ c.r, c.g, c.b }) catch buf[0..0],
+    };
+}
+
 /// A rendered ANSI style used to highlight a single token kind.
 ///
 /// `Style` combines a base `Color` with optional bold and dim attributes.
 /// The resulting escape sequence is emitted before the token text.
 pub const Style = struct {
-    color: Color = .none,
+    fg: Color = .none,
+    bg: Color = .none,
     bold: bool = false,
     dim: bool = false,
+    italic: bool = false,
 
     pub fn render(self: Style, buf: []u8) []const u8 {
         var out: []const u8 = buf[0..0];
-        if (self.color != .none) {
-            out = self.color.render(buf);
+        if (self.fg != .none) {
+            out = self.fg.render(buf);
+        }
+        if (self.bg != .none) {
+            const seq = renderBackground(self.bg, buf[out.len..]);
+            out = buf[0 .. out.len + seq.len];
         }
         if (self.bold) {
             const seq = std.fmt.bufPrint(buf[out.len..], "\x1b[1m", .{}) catch buf[0..0];
@@ -48,27 +76,18 @@ pub const Style = struct {
             const seq = std.fmt.bufPrint(buf[out.len..], "\x1b[2m", .{}) catch buf[0..0];
             out = buf[0 .. out.len + seq.len];
         }
+        if (self.italic) {
+            const seq = std.fmt.bufPrint(buf[out.len..], "\x1b[3m", .{}) catch buf[0..0];
+            out = buf[0 .. out.len + seq.len];
+        }
         return out;
     }
 };
 
-/// Syntax highlight configuration used by the REPL.
+/// Optional token-to-style hook used by the REPL syntax highlighter.
 ///
-/// Each field controls the ANSI style emitted for a specific token kind.
-/// The `custom` hook may classify identifiers as `.custom` and return a
-/// `Color` to render those names specially.
-pub const ColorConfig = struct {
-    keyword: Style = .{ .color = .{ .ansi = 94 }, .bold = true },
-    keyword_value: Style = .{ .color = .{ .ansi = 96 } },
-    builtin: Style = .{ .color = .{ .ansi = 36 } },
-    custom: ?*const fn ([]const u8) Color = null,
-    name: Style = .{},
-    string: Style = .{ .color = .{ .ansi = 32 } },
-    integer: Style = .{ .color = .{ .ansi = 36 } },
-    number: Style = .{ .color = .{ .ansi = 36 } },
-    symbol: Style = .{ .color = .{ .ansi = 33 } },
-    comment: Style = .{ .color = .{ .ansi = 90 } },
-};
+/// Returning `null` falls back to the built-in default style for the token kind.
+pub const ColorHook = ?*const fn (kind: TokenKind, text: []const u8) ?Style;
 
 /// Highlights the provided Lua source using the configured REPL colors.
 ///
@@ -79,15 +98,13 @@ pub const ColorConfig = struct {
 /// Arguments:
 /// - allocator: Allocator used to build the highlighted output buffer.
 /// - source: The raw Lua source line to highlight.
-/// - config: Color configuration for each token kind.
-/// - custom_hook: Optional identifier hook used for `.custom` token classification.
+/// - color_hook: Optional hook used to override styles per token.
 pub fn process(
     allocator: std.mem.Allocator,
     source: []const u8,
-    config: ColorConfig,
-    custom_hook: lexer.IdentifierHook,
+    color_hook: ColorHook,
 ) ?[]const u8 {
-    var tokens = lexer.lexWithHook(allocator, source, custom_hook) catch return null;
+    var tokens = lexer.lex(allocator, source) catch return null;
     defer tokens.deinit(allocator);
 
     var out: std.ArrayList(u8) = .empty;
@@ -97,13 +114,13 @@ pub fn process(
     var color_buffer: [64]u8 = undefined;
     var pos: usize = 0;
     for (tokens.items) |token| {
-        if (token.kind == lexer.TokenKind.eos) continue;
+        const kind = tokenKindFromLexer(token.kind) orelse continue;
         if (token.offset > pos) {
             out.appendSlice(allocator, source[pos..token.offset]) catch return null;
         }
 
         const slice = source[token.offset .. token.offset + token.len];
-        const style = highlightStyle(token.kind, slice, config);
+        const style = highlightStyle(kind, slice, color_hook);
         const color = style.render(color_buffer[0..]);
 
         if (color.len != 0) {
@@ -125,19 +142,38 @@ pub fn process(
     return std.heap.c_allocator.dupeZ(u8, out.items) catch null;
 }
 
-fn highlightStyle(kind: lexer.TokenKind, text: []const u8, config: ColorConfig) Style {
+fn tokenKindFromLexer(kind: lexer.TokenKind) ?TokenKind {
     return switch (kind) {
-        .keyword => config.keyword,
-        .keyword_value => config.keyword_value,
-        .builtin => config.builtin,
-        .custom => if (config.custom) |hook| .{ .color = hook(text) } else config.name,
-        .string => config.string,
-        .comment => config.comment,
-        .integer => config.integer,
-        .number => config.number,
-        .symbol => config.symbol,
-        .name => config.name,
-        .eos => .{},
+        .keyword => .keyword,
+        .keyword_value => .keyword_value,
+        .builtin => .builtin,
+        .name => .name,
+        .string => .string,
+        .integer => .integer,
+        .number => .number,
+        .symbol => .symbol,
+        .comment => .comment,
+        .eos => null,
+    };
+}
+
+fn highlightStyle(kind: TokenKind, text: []const u8, color_hook: ColorHook) Style {
+    if (color_hook) |hook| {
+        if (hook(kind, text)) |style| {
+            return style;
+        }
+    }
+
+    return switch (kind) {
+        .keyword => .{ .fg = .{ .ansi = 94 }, .bold = true },
+        .keyword_value => .{ .fg = .{ .ansi = 96 } },
+        .builtin => .{ .fg = .{ .ansi = 36 } },
+        .name => .{},
+        .string => .{ .fg = .{ .ansi = 32 } },
+        .comment => .{ .fg = .{ .ansi = 90 } },
+        .integer => .{ .fg = .{ .ansi = 36 } },
+        .number => .{ .fg = .{ .ansi = 36 } },
+        .symbol => .{ .fg = .{ .ansi = 33 } },
     };
 }
 

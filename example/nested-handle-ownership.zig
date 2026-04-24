@@ -97,19 +97,18 @@ fn makeHolder(_: *zua.Context, root: Object(Root)) Holder {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&ctx, "make_leaf", zua.Native.new(makeLeaf, .{ .parse_err_fmt = "make_leaf expects (number, string): {s}" }));
-    try globals.set(&ctx, "make_root", zua.Native.new(makeRoot, .{ .parse_err_fmt = "make_root expects (leaf, leaf, leaf, leaf, leaf, leaf): {s}" }));
-    try globals.set(&ctx, "make_holder", zua.Native.new(makeHolder, .{ .parse_err_fmt = "make_holder expects (root): {s}" }));
+    try state.addGlobals(&ctx, .{
+        .make_leaf = zua.Native.new(makeLeaf, .{ .parse_err_fmt = "make_leaf expects (number, string): {s}" }),
+        .make_root = zua.Native.new(makeRoot, .{ .parse_err_fmt = "make_root expects (leaf, leaf, leaf, leaf, leaf, leaf): {s}" }),
+        .make_holder = zua.Native.new(makeHolder, .{ .parse_err_fmt = "make_holder expects (root): {s}" }),
+    });
 
     executor.execute(&ctx, .{ .code = .{ .string =
         \\local function build_and_drop()
