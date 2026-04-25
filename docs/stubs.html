@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Strategies - Zua HandBook</title>
+        <title>Stub generation - Zua HandBook</title>
 
 
         <!-- Custom HTML head -->
@@ -174,101 +174,153 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="strategies"><a class="header" href="#strategies">Strategies</a></h1>
-<p>Every Zig type that crosses the Lua boundary has a <strong>strategy</strong> that controls how it is represented in Lua. The strategy is declared on the type itself via <code>pub const ZUA_META</code>. If no declaration is present, zua defaults to <code>.table</code>.</p>
-<p>There are three strategies: <code>.table</code>, <code>.object</code>, and <code>.ptr</code>. Choosing the right one is about deciding what Lua should be able to see and do with a value.</p>
-<h2 id="table"><a class="header" href="#table">.table</a></h2>
-<p>The <code>.table</code> strategy represents a Zig struct as a Lua table. Fields become string keys, Lua code can read and write them directly, and the value is fully transparent.</p>
-<pre><code class="language-zig">const Point = struct {
+                        <h1 id="stub-generation"><a class="header" href="#stub-generation">Stub generation</a></h1>
+<p>When you expose a Zig API to Lua script writers, the runtime experience is good immediately, but the editor experience is not. The language server does not know what globals exist, what methods they have, or what parameter types they expect. The <code>zua.Docs</code> generator solves that by emitting Lua stub files you can point your Lua LSP at.</p>
+<p>The goal is simple: describe the API once in Zig, generate a <code>.lua</code> file, and let completion, hover, and signature help work for your script authors.</p>
+<h2 id="where-this-runs"><a class="header" href="#where-this-runs">Where this runs</a></h2>
+<p>The generator is a normal Zig utility. It does not need a Lua <code>State</code>, a <code>Context</code>, or a running VM. You use it from ordinary Zig code, usually in a small tool or an example program that writes the stub file as part of your build workflow.</p>
+<p>That keeps stub generation separate from the runtime API itself. You describe the Lua-facing surface in metadata and wrappers, then generate editor stubs from those declarations offline.</p>
+<h2 id="basic-flow"><a class="header" href="#basic-flow">Basic flow</a></h2>
+<p>Create a <code>Docs</code> generator, add the functions and types you want to expose, then call <code>generate()</code>:</p>
+<pre><code class="language-zig">var generator = zua.Docs.init(allocator);
+defer generator.deinit();
+
+try generator.add(make_vector);
+try generator.add(new_counter);
+try generator.add(Vector2);
+try generator.add(Counter);
+
+const stubs = try generator.generate();
+</code></pre>
+<p>In a real program the surrounding context usually looks like this:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+
+pub fn main(init: std.process.Init) !void {
+    var generator = zua.Docs.init(init.gpa);
+    defer generator.deinit();
+
+    try generator.add(make_vector);
+    try generator.add(new_counter);
+    try generator.add(Vector2);
+    try generator.add(Counter);
+
+    const stubs = try generator.generate();
+
+    const cwd = std.Io.Dir.cwd();
+    const file = try cwd.createFile(init.io, "types/zua-api.lua", .{});
+    defer file.close(init.io);
+
+    var write_buffer: [4096]u8 = undefined;
+    var file_writer = file.writer(&amp;write_buffer);
+    const writer = &amp;file_writer.interface;
+
+    try writer.writeAll(stubs);
+    try writer.flush();
+}
+</code></pre>
+<p><code>add</code> accepts three kinds of input:</p>
+<ul>
+<li>a plain Zig function, which is documented as if it were wrapped with <code>zua.Native.new(function, .{})</code></li>
+<li>a native wrapper value created with <code>zua.Native.new(...)</code></li>
+<li>a Zig type with <code>ZUA_META</code></li>
+</ul>
+<p>The generator walks the same kind of type information the encoder uses. Table strategy types expand into fields and methods. Object strategy types stay opaque and only expose methods. Typed wrappers such as <code>zua.Object(T)</code> and <code>zua.TableView(T)</code> are treated as transparent references to <code>T</code>.</p>
+<h2 id="naming-exported-functions"><a class="header" href="#naming-exported-functions">Naming exported functions</a></h2>
+<p>The generator uses the wrapper’s <code>name</code> field for top-level functions. That matters when the exported Lua global name is different from the Zig function name.</p>
+<p>This is common with constructors. In Zig you might write a function called <code>newCounter</code>, but expose it to Lua as <code>new_counter</code> or <code>Counter</code>. The type name and the function name are different concepts, so set them explicitly on the wrapper you pass to <code>Docs.add</code>.</p>
+<pre><code class="language-zig">const new_counter = zua.Native.new(newCounter, .{})
+    .withName("new_counter")
+    .withDescription("Construct a new Counter object.");
+
+try generator.add(new_counter);
+try generator.add(Counter);
+</code></pre>
+<h2 id="adding-parameter-descriptions"><a class="header" href="#adding-parameter-descriptions">Adding parameter descriptions</a></h2>
+<p>For functions, parameter names and descriptions come from <code>withDescriptions</code>.</p>
+<pre><code class="language-zig">const ArgInfo = zua.Native.ArgInfo;
+
+const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(.{
+    ArgInfo{ .name = "x", .description = "Initial horizontal coordinate." },
+    ArgInfo{ .name = "y", .description = "Initial vertical coordinate." },
+}).withName("make_vector").withDescription("Construct a new Vector2 value.");
+</code></pre>
+<p><code>ArgInfo.name</code> is the displayed parameter name in the stub. <code>ArgInfo.description</code> is optional and appears as the trailing comment in the generated <code>---@param</code> line.</p>
+<p>This is necessary because Zig’s function type info does not carry parameter names in a form the generator can read at comptime.</p>
+<h2 id="adding-field-descriptions"><a class="header" href="#adding-field-descriptions">Adding field descriptions</a></h2>
+<p>For <code>.table</code> types, field descriptions come from <code>withAttribDescriptions</code> on <code>ZUA_META</code>:</p>
+<pre><code class="language-zig">const Vector2 = struct {
+    pub const ZUA_META = zua.Meta.Table(Vector2, .{
+        .scale = zua.Native.new(scale, .{}).withDescriptions(.{
+            ArgInfo{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
+        }),
+    })
+        .withDescription("Simple table-backed 2D vector.")
+        .withAttribDescriptions(.{
+            .x = "Horizontal coordinate.",
+            .y = "Vertical coordinate.",
+        })
+        .withName("Vector2");
+
     x: f64,
     y: f64,
 };
 </code></pre>
-<p>No <code>ZUA_META</code> declaration means <code>.table</code> is used automatically. A function returning <code>Point</code> pushes a table with keys <code>x</code> and <code>y</code>. A function accepting <code>Point</code> decodes those keys from whatever table Lua passes.</p>
-<p>Use <code>.table</code> for data transfer objects: values that carry information back and forth but have no identity and no private internals.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>Table-strategy structs cannot contain raw <code>.object</code> values directly by value, and fields with <code>.ptr</code> strategy have no direct table representation. For nested object references, use <code>zua.Object(T)</code> handles instead of embedding <code>T</code> directly. This is covered in the <a href="./object-handles.html">Object handles</a> chapter.</p>
-</blockquote>
-<h2 id="object"><a class="header" href="#object">.object</a></h2>
-<p>The <code>.object</code> strategy stores the value as Lua userdata. Lua holds a pointer to it and can call methods on it, but cannot read or write individual fields. The value is opaque.</p>
-<pre><code class="language-zig">const Entry = struct {
-    pub const ZUA_META = zua.Meta.Object(Entry, .{
-        .get = get,
-        .set = set,
-    });
+<p>Only <code>.table</code> strategy types support attribute descriptions, because only tables expose public fields to Lua.</p>
+<h2 id="what-gets-generated"><a class="header" href="#what-gets-generated">What gets generated</a></h2>
+<p>For the example above, <code>generate()</code> emits Lua annotations like these:</p>
+<pre><code class="language-lua">---@meta _
 
-    address: u64,
-    value:   f64,
+---@class Counter
+local Counter = {}
 
-    pub fn get(self: *Entry) f64 { return self.value; }
-    pub fn set(self: *Entry, v: f64) void { self.value = v; }
-};
+---@param amount integer # Amount added to the counter.
+function Counter:increment(amount) end
+
+---@param x number # Initial horizontal coordinate.
+---@param y number # Initial vertical coordinate.
+---@return Vector2
+function make_vector(x, y) end
+
+---@class Vector2
+---@field x number # Horizontal coordinate.
+---@field y number # Vertical coordinate.
+local Vector2 = {}
 </code></pre>
-<pre><code class="language-lua">local e = makeEntry(0xDEADBEEF)
-e:set(8.3)
-print(e:get())    -- 8.3
-print(e.address)  -- nil  (fields are not accessible)
+<p>The <code>---@meta _</code> header at the top marks the file as a declaration-only stub that should not be loaded as a regular module.</p>
+<p>Optional types appear as <code>TYPE?</code> in the generated output. A function parameter of type <code>?i32</code> becomes <code>integer?</code> in the stub. A function that returns <code>?Vector2</code> is annotated <code>---@return Vector2?</code>.</p>
+<p><code>VarArgs</code> parameters are emitted as <code>---@param ... any</code>. If you supply an <code>ArgInfo</code> entry with the name <code>"..."</code>, the description is included on that line as well.</p>
+<p>Tagged unions and string-backed enums generate <code>---@alias</code> declarations instead of class stubs. For a tagged union <code>Condition</code> with variants <code>eq</code> and <code>in_range</code>, the generator emits an alias listing each variant shape. For a <code>strEnum</code> type, the alias lists the string literals directly:</p>
+<pre><code class="language-lua">---@alias Priority "low" | "normal" | "high"
 </code></pre>
-<p>Use <code>.object</code> when:</p>
-<ul>
-<li>the value has identity, a file handle, a connection, a scan context, something that should not be copied or decoded,</li>
-<li>the value contains types that cannot be represented in a Lua table, such as <code>u64</code> addresses whose high bits would be corrupted by Lua’s <code>i64</code> integers,</li>
-<li>or you want to enforce that Lua code goes through methods and cannot touch internals.</li>
-</ul>
-<p>The value is allocated as Lua userdata and its lifetime is managed by the Lua garbage collector. Methods are the only interface.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p><code>ZUA_META</code> must be declared as <code>pub const ZUA_META</code>. If it is not public, zua will not see the metadata and the strategy, methods, and hooks on the type will not be applied.</p>
-</blockquote>
-<h2 id="list-style-objects"><a class="header" href="#list-style-objects">List-style objects</a></h2>
-<p>For sequence-like userdata values, use <code>zua.Meta.List(T, getElements, methods)</code> as a convenience builder.</p>
-<p>This helper creates <code>.object</code> metadata for a container type and automatically generates the common Lua collection methods:</p>
-<ul>
-<li><code>get(self, index)</code> returns the element at 1-based index or <code>nil</code>.</li>
-<li><code>__index</code> makes <code>list[1]</code> syntax work.</li>
-<li><code>__len</code> makes <code>#list</code> return the element count.</li>
-<li><code>iter</code> supports <code>for x in list do</code> iteration.</li>
-</ul>
-<p><code>getElements</code> must be a comptime function returning a slice of the list’s elements:</p>
-<pre><code class="language-zig">fn getElements(self: *ProcList) []zua.Object(Process) {
-    return self.processes.items;
+<h2 id="module-shorthand"><a class="header" href="#module-shorthand">Module shorthand</a></h2>
+<p>When your API is already grouped into a module-like struct literal, you can skip the <code>Docs</code> builder entirely and call <code>generateModule</code> directly:</p>
+<pre><code class="language-zig">const stubs = try zua.Docs.generateModule(allocator, module, "mymod");
+</code></pre>
+<p>The first argument is a plain allocator, not the call arena. The second is the module struct. The third is the module name, which appears in the <code>---@meta</code> header:</p>
+<pre><code class="language-lua">---@meta mymod
+</code></pre>
+<p>Pass <code>null</code> for the name to emit <code>---@meta _</code> instead.</p>
+<p>Inside a Lua callback, use <code>ctx.arena()</code> as the allocator if the stub string only needs to live for the duration of that call:</p>
+<pre><code class="language-zig">fn docs(ctx: *zua.Context) ![]const u8 {
+    return zua.Docs.generateModule(ctx.arena(), module, "mymod");
 }
 </code></pre>
-<p>You can still add custom metadata like <code>__gc</code> and <code>__tostring</code>, but <code>Meta.List</code> reserves the generated method names and rejects collisions with user methods.</p>
-<h2 id="ptr"><a class="header" href="#ptr">.ptr</a></h2>
-<p>The <code>.ptr</code> strategy is the minimal opaque strategy: just a light userdata pointer. No metatable, no methods. Lua can hold the value and pass it back, but cannot do anything else with it.</p>
-<pre><code class="language-zig">const ScanContext = struct {
-    pub const ZUA_META = zua.Meta.Ptr(ScanContext);
-    multiplier: f64,
-};
-</code></pre>
-<pre><code class="language-lua">local ctx = getScanContext()
-print(scale(ctx, 10))  -- Zig receives the *ScanContext back
-</code></pre>
-<p>Use <code>.ptr</code> for handles that need to be completely opaque and require no Lua-callable interface. Note that <code>.ptr</code> values must be pushed as <code>*T</code> pointers; you cannot return <code>T</code> by value for <code>.ptr</code> types.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p>Light userdata is a raw pointer. The pointed-to value must outlive the Lua state. zua does not track or manage that lifetime. If there is any chance the Lua state can outlive the pointed-to value, use <code>.object</code> instead, which ties the allocation to Lua’s GC.</p>
-</blockquote>
-<h2 id="choosing-a-strategy"><a class="header" href="#choosing-a-strategy">Choosing a strategy</a></h2>
-<p>The decision usually comes down to one question: does Lua need to see the fields?</p>
-<ul>
-<li>Yes, it is data that Lua reads and writes: use <code>.table</code>.</li>
-<li>No, it is an opaque handle with a method interface: use <code>.object</code>.</li>
-<li>No, it is a raw pointer with no interface at all: use <code>.ptr</code>.</li>
-</ul>
-<p>Most types end up as <code>.table</code> or <code>.object</code>. <code>.ptr</code> is for the rare case where you need maximum opacity with zero overhead.</p>
+<p>This is the pattern used in the <code>vecmath</code> shared library example: a <code>docs</code> function exposed to Lua generates and returns the stub text on demand.</p>
+<h2 id="writing-the-stub-file"><a class="header" href="#writing-the-stub-file">Writing the stub file</a></h2>
+<p><code>generate()</code> and <code>generateModule</code> both return the full Lua source as a string. Write it to a file that your editor indexes, for example <code>types/zua-api.lua</code> or <code>.luarc-generated/zua.lua</code>.</p>
+<p>The explicit <code>flush()</code> in the full example above matters because the writer is buffered.</p>
+<p>How you hook that into the build is up to you. Some projects generate the file during <code>zig build</code>. Others keep a small tool or example program and regenerate it when the scripting API changes. Shared libraries can expose a <code>docs()</code> function that script authors call once to write the stub themselves.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="structured-data.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="varargs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="methods.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="shared-libraries.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -278,11 +330,11 @@ print(scale(ctx, 10))  -- Zig receives the *ScanContext back
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="structured-data.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="varargs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="methods.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="shared-libraries.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

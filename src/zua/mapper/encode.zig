@@ -55,7 +55,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return pushLuaPrimitive(ctx, value);
     }
 
-    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaFn")) {
+    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaNativeFunction")) {
         if (comptime T.__IsZuaClosure) {
             // Closure: push initial capture as userdata (upvalue 1), then pushcclosure.
             const CaptureType = @TypeOf(value.initial);

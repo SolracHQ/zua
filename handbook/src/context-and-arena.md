@@ -12,7 +12,7 @@ fn greet(ctx: *zua.Context, name: []const u8) []const u8 {
         catch unreachable;
 }
 
-globals.set(&ctx, "greet", zua.ZuaFn.new(greet, .{
+globals.set(&ctx, "greet", zua.Native.new(greet, .{
     .parse_err_fmt = "greet expects (string): {s}",
 }));
 ```

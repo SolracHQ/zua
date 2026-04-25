@@ -11,7 +11,7 @@ pub const State = @import("state.zig");
 
 /// Shared global Zua `State` pointer used by the current callback. This pointer is borrowed for the duration of the invocation and is not owned by `Context`.
 state: *State,
-/// Arena allocator for temporary allocations made during the current ZuaFn invocation.
+/// Arena allocator for temporary allocations made during the current wrapped callback invocation.
 /// It is freed by `deinit` and should only be used for transient values that do not
 /// need to survive after the callback returns.
 ///
@@ -22,7 +22,7 @@ __arena: std.heap.ArenaAllocator,
 /// This may point to a static string or an arena allocation; `Context` never frees the message directly.
 err: ?[]const u8 = null,
 
-/// Creates a call-local `Context` for a single ZuaFn invocation.
+/// Creates a call-local `Context` for a single wrapped callback invocation.
 ///
 /// This allocates an arena from `z.allocator`, captures the shared `State`, and clears the error state.
 /// The returned `Context` is intended for one callback frame and must be deinitialized when the call completes.

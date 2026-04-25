@@ -23,7 +23,7 @@ pub const MappingStrategy = enum {
     ptr,
 
     /// The value is stored as upvalue 1 of a Lua C closure.
-    /// Used only in conjunction with `ZuaFn.newClosure`. The struct is
+    /// Used only in conjunction with `Native.closure`. The struct is
     /// allocated as userdata inside the closure and injected as a `*T`
     /// parameter into the callback. Encode/decode hooks are not supported.
     capture,
@@ -220,7 +220,7 @@ pub inline fn Ptr(comptime T: type) type {
 /// Declare `T` as a `.capture` translation strategy.
 ///
 /// Capture strategy types are stored as userdata in upvalue 1 of a Lua
-/// C closure created by `ZuaFn.newClosure`. The struct is allocated once when
+/// C closure created by `Native.closure`. The struct is allocated once when
 /// the closure is pushed and a `*T` pointer is injected into every call through
 /// the capture parameter.
 ///

@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-2453bc00.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -244,7 +244,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
 };
 </code></pre>
 <h2 id="__gc-and-the-capture-strategy"><a class="header" href="#__gc-and-the-capture-strategy">__gc and the capture strategy</a></h2>
-<p>Closures created with <code>ZuaFn.newClosure</code> use the <code>.capture</code> strategy, which also supports <code>__gc</code>. If the captured struct owns heap memory or Lua handles, declare <code>__gc</code> in <code>Meta.Capture</code> the same way:</p>
+<p>Closures created with <code>Native.closure</code> use the <code>.capture</code> strategy, which also supports <code>__gc</code>. If the captured struct owns heap memory or Lua handles, declare <code>__gc</code> in <code>Meta.Capture</code> the same way:</p>
 <pre><code class="language-zig">const BufState = struct {
     pub const ZUA_META = zua.Meta.Capture(@This(), .{
         .__gc = cleanup,

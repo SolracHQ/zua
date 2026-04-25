@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-2453bc00.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,7 +178,7 @@
 <p>zua uses handles to represent Lua values on the Zig side. A handle is a thin wrapper around a Lua stack slot or registry reference. Every handle has an ownership mode, and getting the mode wrong leads to either dangling references or memory leaks.</p>
 <h2 id="the-three-ownership-modes"><a class="header" href="#the-three-ownership-modes">The three ownership modes</a></h2>
 <p><strong>Borrowed</strong> handles point to a Lua stack slot owned by the current call frame. They are valid only for the duration of the current callback. You cannot call <code>.release()</code> on a borrowed handle because you do not own it.</p>
-<p><strong>Stack-owned</strong> handles own a Lua value on the current stack. They remain valid until <code>.release()</code> removes the value. <code>Table.create()</code> and <code>z.globals()</code> return stack-owned handles.</p>
+<p><strong>Stack-owned</strong> handles own a Lua value on the current stack. They remain valid until <code>.release()</code> removes the value. <code>Table.create()</code> and <code>state.globals()</code> return stack-owned handles.</p>
 <p><strong>Registry-owned</strong> handles own a Lua registry reference. They survive after the current callback returns and across callback invocations. They must be released explicitly with <code>.release()</code>.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
@@ -213,7 +213,7 @@ fn clearCallback() void {
 </blockquote>
 <h2 id="stack-owned-handles"><a class="header" href="#stack-owned-handles">Stack-owned handles</a></h2>
 <p>Stack-owned handles must be released before the enclosing scope returns. The standard pattern is <code>defer</code>:</p>
-<pre><code class="language-zig">const globals = z.globals();
+<pre><code class="language-zig">const globals = state.globals();
 defer globals.release();
 
 try globals.set(&amp;ctx, "add", add);
@@ -221,7 +221,7 @@ try globals.set(&amp;ctx, "add", add);
 </code></pre>
 <p>If you return a stack-owned handle from a callback, the trampoline takes ownership and you do not call <code>.release()</code> yourself:</p>
 <pre><code class="language-zig">fn makeTable(ctx: *zua.Context) !zua.Table {
-    const t = Table.create(z, 0, 2);
+    const t = Table.create(state, 0, 2);
     try t.set(ctx, "x", 1);
     try t.set(ctx, "y", 2);
     return t;  // trampoline takes ownership, do not release

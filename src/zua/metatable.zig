@@ -2,7 +2,7 @@
 //!
 //! This module builds metatables from Zua metadata, attaches them to userdata
 //! values, and resolves method trampolines for both raw method functions and
-//! wrapped `ZuaFn` values.
+//! wrapped `NativeFn`/`Closure` values.
 
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
@@ -93,14 +93,14 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
 
 /// Selects the Lua C function trampoline for a method value.
 ///
-/// If the method is already a compiled `ZuaFn`, its trampoline is returned
-/// directly. Otherwise the method function is wrapped in a new `ZuaFn` so it can
+/// If the method is already a compiled callback wrapper, its trampoline is returned
+/// directly. Otherwise the method function is wrapped in a new `NativeFn` so it can
 /// be exposed to Lua with the standard decode/execute semantics.
 fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
-    // Check if method_fn is a ZuaFn (has __IsZuaFn marker)
-    if (comptime @typeInfo(method_fn_type) == .@"struct" and @hasDecl(method_fn_type, "__IsZuaFn")) {
+    // Check if method_fn is a precompiled callback wrapper (has __IsZuaNativeFunction marker)
+    if (comptime @typeInfo(method_fn_type) == .@"struct" and @hasDecl(method_fn_type, "__IsZuaNativeFunction")) {
         return method_fn_type.trampoline();
     }
 

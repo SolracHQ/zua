@@ -289,7 +289,7 @@ fn addWrappedFunction(
     };
 
     try self.collectFunctionParameters(&doc, wrapper, is_method, owner_type);
-    try self.collectFunctionReturns(&doc, WrapperType.__ZuaFnReturnType);
+    try self.collectFunctionReturns(&doc, WrapperType.__ZuaNativeReturnType);
 
     if (!is_method) {
         try self.cache.put(cache_key, .{ .Function = doc });
@@ -348,7 +348,7 @@ fn collectMethods(
         };
 
         try self.collectFunctionParameters(&doc, wrapped, true, owner_type);
-        try self.collectFunctionReturns(&doc, @TypeOf(wrapped).__ZuaFnReturnType);
+        try self.collectFunctionReturns(&doc, @TypeOf(wrapped).__ZuaNativeReturnType);
         try methods_out.append(self.arena.allocator(), doc);
 
         if (recurse_nested) {
@@ -439,9 +439,9 @@ fn recurseFunctionTypes(self: *Docs, wrapper: anytype, comptime is_method: bool,
         try self.maybeRecurseReferencedType(param_type, true);
     }
 
-    const count = comptime typeListCount(WrapperType.__ZuaFnReturnType);
+    const count = comptime typeListCount(WrapperType.__ZuaNativeReturnType);
     inline for (0..count) |index| {
-        try self.maybeRecurseReferencedType(typeListAt(WrapperType.__ZuaFnReturnType, index), true);
+        try self.maybeRecurseReferencedType(typeListAt(WrapperType.__ZuaNativeReturnType, index), true);
     }
 }
 
@@ -690,7 +690,7 @@ fn isTransparentTypedWrapper(comptime T: type) bool {
 }
 
 fn isNativeWrapperType(comptime T: type) bool {
-    return @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaFn");
+    return @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaNativeFunction");
 }
 
 fn isTypedFunctionHandle(comptime T: type) bool {

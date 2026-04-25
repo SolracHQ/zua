@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-2453bc00.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,19 +178,19 @@
 <p>Every zua program starts with three things: a <code>State</code>, a <code>Context</code>, and an <code>Executor</code>. This chapter sets up the full environment and runs a first piece of Lua code.</p>
 <h2 id="state"><a class="header" href="#state">State</a></h2>
 <p><code>State</code> is the Lua VM. It owns the allocator, the Lua state pointer, and all the global tables.</p>
-<pre><code class="language-zig">const z = try zua.State.init(allocator, io);
-defer z.deinit();
+<pre><code class="language-zig">const state = try zua.State.init(allocator, io);
+defer state.deinit();
 </code></pre>
 <p><code>State.init</code> takes a general-purpose allocator and a <code>std.Io</code> handle. The <code>io</code> handle is how zua participates in Zig’s I/O system, which controls where Lua’s <code>print</code> sends output and how file operations are routed. In a standard <code>main</code>, both are available directly from <code>init</code>:</p>
 <pre><code class="language-zig">pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 }
 </code></pre>
 <p><code>State</code> is heap-allocated internally and holds a stable pointer, so passing <code>*State</code> around through callbacks is safe.</p>
 <h2 id="context"><a class="header" href="#context">Context</a></h2>
 <p><code>Context</code> is the per-call environment. It owns the arena allocator used during a single Lua call, carries any error message the call produced, and is passed to most zua functions.</p>
-<pre><code class="language-zig">var ctx = zua.Context.init(z);
+<pre><code class="language-zig">var ctx = zua.Context.init(state);
 defer ctx.deinit();
 </code></pre>
 <p>You create one <code>Context</code> and reuse it across calls. The arena is reset internally on each <code>execute</code> or <code>eval</code>, so scratch memory from one call does not carry over to the next. The <a href="./context-and-arena.html">Context and arena</a> chapter covers this in detail.</p>
@@ -210,13 +210,12 @@ defer ctx.deinit();
 .{ .code = .{ .file = "script.lua" } }
 </code></pre>
 <h2 id="globals"><a class="header" href="#globals">Globals</a></h2>
-<p>To expose functions and values to Lua, get the globals table and call <code>set</code>:</p>
-<pre><code class="language-zig">const globals = z.globals();
-defer globals.release();
-
-try globals.set(&amp;ctx, "add", add);
+<p>To expose functions and values to Lua, prefer <code>state.addGlobals(&amp;ctx, .{ ... })</code>:</p>
+<pre><code class="language-zig">try state.addGlobals(&amp;ctx, .{
+    .add = add,
+});
 </code></pre>
-<p><code>globals()</code> returns a <strong>stack-owned handle</strong>. Call <code>.release()</code> when you are done registering, or use <code>defer</code> immediately as shown above. The registered functions remain available to Lua after the handle is released because zua stores them in the Lua VM, not in the handle itself.</p>
+<p>This is the short path for filling the globals table from a module-like struct literal. If you need the raw globals handle because you are doing something more manual, <code>state.globals()</code> is still there.</p>
 <h2 id="putting-it-together"><a class="header" href="#putting-it-together">Putting it together</a></h2>
 <p>Here is the minimal program that registers a function and calls it from Lua:</p>
 <pre><code class="language-zig">const std = @import("std");
@@ -227,17 +226,14 @@ fn add(a: i32, b: i32) i32 {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&amp;ctx, "add", add);
+    try state.addGlobals(&amp;ctx, .{ .add = add });
 
     try executor.execute(&amp;ctx, .{ .code = .{ .string = "print(add(1, 2))" } });
 }

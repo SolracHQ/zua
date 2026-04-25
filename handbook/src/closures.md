@@ -4,7 +4,7 @@ Sometimes a function needs private mutable state that persists across calls: a c
 
 ## Declaring a capture
 
-Declare a struct with `Meta.Capture` and register it with `ZuaFn.newClosure`:
+Declare a struct with `Meta.Capture` and register it with `Native.closure`:
 
 ```zig
 const CounterState = struct {
@@ -23,7 +23,7 @@ Then register the closure with an initial value:
 
 ```zig
 try state.addGlobals(&ctx, .{
-    .counter = zua.ZuaFn.newClosure(
+    .counter = zua.Native.closure(
         counterTick,
         CounterState{ .count = 0, .step = 1 },
         .{},
@@ -41,8 +41,8 @@ Each call to `newClosure` allocates a **fresh, independent** capture. Registerin
 
 ```zig
 try state.addGlobals(&ctx, .{
-    .by_one = zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}),
-    .by_ten = zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}),
+    .by_one = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}),
+    .by_ten = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}),
 });
 ```
 
@@ -111,13 +111,15 @@ fn partialCall(ctx: *zua.Context, s: *PartialState, n: i32) !i32 {
     return s.f.call(ctx, .{ s.first, n });
 }
 
+const PartialClosure = zua.Native.Closure(partialCall, .{});
+
 fn alwaysWith(
     ctx: *zua.Context,
     first: i32,
     f:    zua.Fn(.{i32, i32}, i32),
-) zua.ZuaFn.ZuaFnClosureType(partialCall, .{}) {
+) PartialClosure {
     _ = ctx;
-    return zua.ZuaFn.newClosure(partialCall, PartialState{
+    return zua.Native.closure(partialCall, PartialState{
         .f     = f.takeOwnership(),
         .first = first,
     }, .{});

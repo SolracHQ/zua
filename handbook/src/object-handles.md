@@ -95,7 +95,7 @@ Sometimes you want a Lua-facing table with public fields but a private Zig point
 const entry_table = Table.create(state, 0, 3);
 try entry_table.set(&ctx, "address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
-try entry_table.set(&ctx, "get", zua.ZuaFn.new(entryGet, .{}));
+try entry_table.set(&ctx, "get", zua.Native.new(entryGet, .{}));
 ```
 
 Inside the method, retrieve it:

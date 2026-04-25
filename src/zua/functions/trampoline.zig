@@ -111,7 +111,7 @@ pub fn make(
 
     return struct {
         /// Marker used by zua internals to identify wrapper types.
-        pub const __IsZuaFn = true;
+        pub const __IsZuaNativeFunction = true;
 
         /// Indicates whether this wrapper carries a capture value.
         pub const __IsZuaClosure: bool = kind.hasCapture;
@@ -120,7 +120,7 @@ pub fn make(
         pub const __ZuaFnTypeInfo = function_info;
 
         /// The normalized return type of the wrapped callback, with error unions unwrapped.
-        pub const __ZuaFnReturnType = ActualReturnType;
+        pub const __ZuaNativeReturnType = ActualReturnType;
 
         /// The display name of the wrapped function, used for docs and debugging.
         name: []const u8 = @typeName(FunctionType),
