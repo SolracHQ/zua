@@ -66,7 +66,7 @@ c:increment(5)
 print(c)  -- Counter(5)
 ```
 
-The [handbook](https://solrachq.github.io/zua/) covers all of it: structured data, object lifecycle, encode/decode hooks, closures, holding Lua callbacks from Zig, and the built-in REPL.
+The [handbook](https://solrachq.github.io/zua/) covers all of it: structured data, object lifecycle, encode/decode hooks, closures, holding Lua callbacks from Zig, and the built-in REPL. zua also supports being built as a Lua shared library (`luaopen_<name>`) via `State.libState`, so you can publish a native module without owning the VM.
 
 ## Abstraction levels
 
@@ -92,7 +92,7 @@ exe.root_module.addImport("zua", zua.module("zua"));
 ## Dependencies
 
 - [SolracHQ/lua](https://github.com/SolracHQ/lua): a fork of Lua 5.4 with a `build.zig` added. Pulled as a Zig package. I try to keep it updated when new Lua versions come out.
-- [linenoise](https://github.com/antirez/linenoise): vendored, with syntax highlight support added on top.
+- [isocline](https://github.com/daanx/isocline): line-editing backend used by the REPL, with multiline editing and syntax highlighting support.
 
 No system packages needed.
 

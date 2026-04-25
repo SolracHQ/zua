@@ -1,6 +1,12 @@
 # REPL
 
-zua ships a full interactive REPL that you can drop into any project with a single call. It handles multi-line input, persistent history, tab completion, and ANSI syntax highlighting. The prompt knows when an expression is incomplete, an unclosed `do` block or a function without `end`, and switches to a continuation prompt automatically.
+zua ships a full interactive REPL that you can drop into any project with a single call. It handles multi-line input, persistent history, tab completion, and ANSI syntax highlighting. The current backend gives you real multiline editing, so you can move around and edit anywhere in the block instead of only editing the last line.
+
+> [!NOTE]
+> The new line-editor backend is actually more capable than the old one. The old REPL only supported multiline input by guessing unfinished `do`/`end` blocks and that logic was complicated and half-broken. Now you can add new lines natively with Shift+Tab without evaluating them first, so the code is much simpler and more reliable.
+
+> [!TIP]
+> If someone really liked the old behavior, open an issue. I can add a completion hook or something to make it optional. I really love hooks :3
 
 ## The minimal REPL
 
@@ -25,7 +31,7 @@ defer ctx.deinit();
 
 try state.addGlobals(&ctx, .{
     .add = add,
-    .greet = zua.ZuaFn.new(greet, .{}),
+    .greet = zua.Native.new(greet, .{}),
 });
 
 try zua.Repl.run(state, .{});
@@ -37,33 +43,39 @@ try zua.Repl.run(state, .{});
 
 ```zig
 try zua.Repl.run(state, .{
-    .prompt              = "myapp> ",
-    .continuation_prompt = "   ... ",
-    .welcome_message     = "Welcome! Type 'help' for hints.\n",
-    .history_path        = "myapp_history.txt",
+    .prompt          = "myapp",
+    .welcome_message = "Welcome! Type 'help' for hints.\n",
+    .history_path    = "myapp_history.txt",
+    .stack_trace     = true,
 });
 ```
 
 `history_path` enables persistent history across sessions. The file is created if it does not exist, loaded on startup, and saved after each line.
 
+`stack_trace` enables Lua traceback capture for runtime errors, which is useful when you want more than just the final error message.
+
 ## Tab completion
 
-Pass a `completion_callback` to hook into the line editor. The callback receives the current buffer and a `*Completions` value you push candidates onto:
+Pass a `completion_hook` to add completions. The callback receives the current prefix and a stable `*zua.Repl.Completer` helper that does not expose the underlying line-editor internals:
 
 ```zig
-fn complete(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
-    const candidates = &[_][:0]const u8{ "add", "greet", "print", "tostring" };
-    for (candidates) |c| {
-        if (std.mem.startsWith(u8, c, buffer)) {
-            zua.Repl.linenoise.addCompletion(completions, c);
+fn complete(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+    const items = &[_][:0]const u8{ "add", "greet", "print", "tostring" };
+    for (items) |item| {
+        if (std.mem.startsWith(u8, item, prefix)) {
+            _ = completer.add(item);
         }
     }
 }
 
 try zua.Repl.run(state, .{
-    .completion_callback = complete,
+    .completion_hook = complete,
 });
 ```
+
+The `Completer` API is the stable public hook surface. If we swap the line editor library again in the future, your completion callback still works.
+
+Use `completer.addEx(candidate, display, help)` when you want a richer entry with alternate label or help text.
 
 ## Syntax highlighting
 
@@ -91,13 +103,25 @@ try zua.Repl.run(state, .{
 });
 ```
 
-Return `null` when you want the default style. Return a `Style` when you want to override it.
+Return `null` when you want the default style, or a `Style` when you want to override it.
 
-The hook gets both the token kind and the token text, so there is no separate identifier hook anymore. If you want to color your own globals, branch on `.name` and inspect the text there.
+The hook gets both the token kind and the token text, so there is no separate identifier hook anymore. If you want to color your own globals, branch on `.name` and inspect the text.
+
+## Stack traces
+
+If you want nicer runtime errors during interactive sessions, enable `stack_trace`:
+
+```zig
+try zua.Repl.run(state, .{
+    .stack_trace = true,
+});
+```
+
+When enabled, runtime failures include a Lua traceback instead of only the final error line.
 
 ## Evaluation context
 
-Each line typed at the REPL runs in a fresh `Context`, so arena-allocated scratch memory from one line does not carry over to the next. Global state in the Lua VM persists normally, so variables and functions defined at the prompt remain available for the rest of the session.
+Each line typed at the REPL runs in a fresh `Context`, so arena-allocated scratch memory from one line does not carry over to the next. Global state in the Lua VM still persists normally, so variables and functions defined at the prompt remain available for the rest of the session.
 
 ## Full example
 
@@ -109,11 +133,12 @@ fn example() []const u8 {
     return "this is just an example";
 }
 
-fn completionCallback(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
+fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+    _ = arg;
     const items = &[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
-        if (std.mem.startsWith(u8, item, buffer)) {
-            zua.Repl.linenoise.addCompletion(completions, item);
+        if (std.mem.startsWith(u8, item, prefix)) {
+            _ = completer.add(item);
         }
     }
 }
@@ -130,29 +155,28 @@ pub fn main(init: std.process.Init) !void {
         .custom_magic = example,
     });
 
-    const highlight = zua.Repl.highlight;
-
     try zua.Repl.run(state, .{
-        .welcome_message     = "Welcome to the zua REPL!\n",
-        .history_path        = "zua_repl_history.txt",
-        .completion_callback = completionCallback,
-        .color_hook = struct {
-            fn colorize(kind: highlight.TokenKind, text: []const u8) ?highlight.Style {
-                return switch (kind) {
-                    .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
-                    .keyword_value => .{ .fg = .{ .ansi = 96 } },
-                    .builtin => .{ .fg = .{ .ansi = 32 } },
-                    .name => if (std.mem.startsWith(u8, text, "custom_"))
-                        .{ .fg = .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } } }
-                    else
-                        .{ .fg = .{ .ansi = 37 } },
-                    .string => .{ .fg = .{ .ansi = 34 } },
-                    .integer, .number => .{ .fg = .{ .ansi = 95 } },
-                    .symbol => .{ .fg = .{ .ansi = 33 } },
-                    .comment => .{ .fg = .{ .ansi = 90 }, .dim = true },
-                };
-            }
-        }.colorize,
+        .welcome_message = "Welcome to the zua REPL!\n",
+        .history_path = "zua_repl_history.txt",
+        .completion_hook = completionCallback,
+        .color_hook = colorize,
+        .stack_trace = true,
     });
+}
+
+fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    return switch (kind) {
+        .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
+        .keyword_value => .{ .fg = .{ .ansi = 96 } },
+        .builtin => .{ .fg = .{ .ansi = 32 } },
+        .name => if (std.mem.startsWith(u8, text, "custom_"))
+            .{ .fg = .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } } }
+        else
+            .{ .fg = .{ .ansi = 37 } },
+        .string => .{ .fg = .{ .ansi = 34 } },
+        .integer, .number => .{ .fg = .{ .ansi = 95 } },
+        .symbol => .{ .fg = .{ .ansi = 33 } },
+        .comment => .{ .fg = .{ .ansi = 90 }, .dim = true },
+    };
 }
 ```

@@ -32,11 +32,17 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
 }
 ```
 
+> [!NOTE]
+> I really don't like how this `luaopen_<name>` signature looks. If Zig allows generating declarations at comptime, I will hide all that complexity away. The fact that an internal helper like `zua.Mapper.Encoder.pushValue` is needed means I failed a bit on zua's principle of keeping you away from the Lua stack, but it was the cleanest way I found to implement it. If you find another way, please open an issue.
+
 `State.libState` takes the `lua_State` pointer, an allocator, an `io` handle, and a compile-time suffix string. The suffix distinguishes this library's `State` from any other zua-based library loaded in the same Lua process. Use your module name.
 
 `State.libState` stores the `State` in the Lua registry. If the function is called again for the same suffix, it returns the existing `State` without allocating a new one. This means module reloading and multiple `require` calls for the same library are safe.
 
-The returned `*State` is owned by the Lua registry and cleaned up when Lua closes the state. Do not call `state.deinit()`.
+The returned `*State` is owned by the Lua registry and cleaned up when Lua closes the state.
+
+> [!WARNING]
+> Never call `state.deinit()`. You do not own the Lua VM here. Calling `deinit()` will shut down the Lua VM and break everything.
 
 ## Encoding the module
 
@@ -109,6 +115,9 @@ local vecmath = require("vecmath")
 -- Write vecmath.lua to disk, then point your editor at it.
 print(vecmath.docs())
 ```
+
+> [!WARNING]
+> If you want to generate docs, every reachable public API function and type must have a name set. It defaults to `typeName`, but function type names are illegible and illegal in Lua docs output. Functions stored as table fields are fine, and methods are fine because they use the method name. Top-level functions added with `add` will fail miserably otherwise. Types are not better here either, because names like `module.path.Name` can confuse `luaS`.
 
 The stub is generated at runtime from the same metadata the encoder uses, so it always reflects the current API. See [Stub generation](./stubs.md) for the full description of what gets emitted.
 

@@ -2,6 +2,9 @@
 
 By default, zua encodes and decodes types according to their strategy. An encode hook lets you change what Lua sees when a value is pushed. A decode hook lets you accept multiple Lua value types for a single Zig type. The two hooks are independent; you can have one without the other.
 
+> [!NOTE]
+> TBH I really love hooks. They make both your life and my life easier by letting you extend functionality without hardcoding behavior. Adding hooks to encoder and decoder was one of my happiest ideas.
+
 ## Encode hooks
 
 An encode hook transforms a value before it is pushed to Lua. The classic use is encoding an enum as a string:

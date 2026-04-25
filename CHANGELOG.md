@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 (current)
+## 0.10.0
 
 ### Breaking
 - REPL syntax highlighting now uses a single `color_hook(kind, text)` callback instead of the old `color_config` and `identifier_hook` split. You can now branch directly on token kind and token text in one place.

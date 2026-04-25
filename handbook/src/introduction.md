@@ -2,7 +2,7 @@
 
 zua is a Zig library for embedding Lua. The boundary between the two languages is meant to mostly disappear: you write ordinary Zig functions, register them, and they work from Lua. Structs decode from tables, errors propagate as Lua messages, and `defer` stays safe inside callbacks. None of that requires touching the Lua C API.
 
-When something goes wrong, you know why. Type mismatches name the expected type and what arrived instead. Custom encode and decode hooks give you full control over how any type crosses the boundary, in both directions, without abandoning the automatic path for everything else.
+When something goes wrong, you know why. Type mismatches name the expected type and what arrived instead. Custom encode and decode hooks give you full control over how any type crosses the boundary, in both directions, without abandoning the automatic path for everything else. I really love hooks because they let you customize behavior in a clean and powerful way.
 
 The handbook builds from the ground up. Setup, then a first function, then richer types, then the parts you reach for when simple isn't enough: object lifecycle, closures, holding Lua callbacks from Zig, the built-in REPL. Each chapter adds one thing and shows it working.
 
