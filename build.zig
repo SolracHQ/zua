@@ -16,19 +16,26 @@ pub fn build(b: *std.Build) void {
     module.link_libc = true;
     module.linkLibrary(lua_lib);
 
-    const translate_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/c.h"),
+    const lua = b.addTranslateC(.{
+        .root_source_file = b.path("src/lua/lua_import.h"),
         .target = target,
         .optimize = optimize,
     });
-    translate_c.addIncludePath(lua_lib.getEmittedIncludeTree());
-    translate_c.addIncludePath(b.path("vendor/linenoise"));
-    const c_mod = translate_c.createModule();
-    module.addImport("c", c_mod);
+    lua.addIncludePath(lua_lib.getEmittedIncludeTree());
+    const lua_mod = lua.createModule();
+    module.addImport("lua", lua_mod);
 
-    // Linenoise configuration
-    module.addCSourceFile(.{ .file = b.path("vendor/linenoise/linenoise.c"), .flags = &.{} });
-    module.addIncludePath(b.path("vendor/linenoise"));
+    // isocline configuration
+    const isocline_dep = b.dependency("isocline", .{});
+
+    const isocline = b.addTranslateC(.{
+        .root_source_file = isocline_dep.path("include/isocline.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const isocline_mod = isocline.createModule();
+    isocline_mod.addCSourceFile(.{ .file = isocline_dep.path("src/isocline.c") });
+    module.addImport("isocline", isocline_mod);
 
     const mod_tests = b.addTest(.{
         .root_module = module,

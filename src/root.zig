@@ -3,8 +3,8 @@ const std = @import("std");
 // Low-level Lua API
 pub const lua = @import("lua/lua.zig");
 
-// linenoise c bindings for REPL input
-pub const linenoise = @import("linenoise/linenoise.zig");
+// low level isocline bindings
+pub const isocline = @import("isocline/isocline.zig");
 
 // State holders
 pub const Context = @import("zua/state/context.zig");
