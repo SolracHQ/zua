@@ -66,7 +66,7 @@ pub fn strdup(s: []const u8) ?[]const u8 {
 /// The returned slice is borrowed from the NUL-terminated C string returned by
 /// isocline and is only valid until the returned value is freed using
 /// `freeMemory`.
-pub fn readline(prompt: ?[]const u8) ?[]const u8 {
+pub fn readline(prompt: ?[]const u8) ?[:0]const u8 {
     const result = isocline_c.ic_readline(if (prompt) |p| p.ptr else null);
     return if (result) |p| std.mem.span(p) else null;
 }

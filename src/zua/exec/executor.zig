@@ -38,6 +38,23 @@ err: ?[]const u8 = null,
 /// The Lua error status returned by the protected call.
 lua_error_status: ?lua.Error = null,
 
+fn reset(self: *Executor) void {
+    self.stack_trace = null;
+    self.err = null;
+    self.lua_error_status = null;
+}
+
+/// Internal executor implementation that loads and calls a Lua chunk,
+/// leaving `num_results` values on the stack.
+fn execute_impl(self: *Executor, ctx: *Context, config: Config, num_results: i32) !void {
+    self.reset();
+    const previous_top = lua.getTop(ctx.state.luaState);
+    errdefer lua.setTop(ctx.state.luaState, previous_top);
+
+    loadChunk(ctx, config) catch |err| return self.setLuaError(ctx, err, config);
+    try self.callLoadedChunk(ctx, num_results, config);
+}
+
 /// Loads and executes a Lua chunk without returning results.
 ///
 /// This uses the provided `Context` and preserves the Lua stack top across the
@@ -51,13 +68,15 @@ lua_error_status: ?lua.Error = null,
 /// Returns:
 /// - !void: `error.Failed` on load or runtime failure.
 pub fn execute(self: *Executor, ctx: *Context, config: Config) !void {
-    self.stack_trace = null;
-    self.err = null;
-    const previous_top = lua.getTop(ctx.state.luaState);
-    errdefer lua.setTop(ctx.state.luaState, previous_top);
+    try self.execute_impl(ctx, config, 0);
+}
 
-    loadChunk(ctx, config) catch |err| return self.setLuaError(ctx, err, config);
-    try self.callLoadedChunk(ctx, 0, config);
+/// Loads and executes a Lua chunk and leaves any results on the Lua stack.
+///
+/// This is useful when the caller wants to inspect or print returned values
+/// after execution.
+pub fn eval_untyped(self: *Executor, ctx: *Context, config: Config) !void {
+    try self.execute_impl(ctx, config, lua.MULT_RETURN);
 }
 
 /// Loads and executes a Lua chunk and decodes returned values into `types`.
@@ -75,8 +94,7 @@ pub fn execute(self: *Executor, ctx: *Context, config: Config) !void {
 /// - !Mapper.Decoder.ParseResult(types): The decoded values on success.
 /// - error.Failed: On Lua or parse failures.
 pub fn eval(self: *Executor, ctx: *Context, comptime types: anytype, config: Config) !Mapper.Decoder.ParseResult(types) {
-    self.stack_trace = null;
-    self.err = null;
+    self.reset();
     const previous_top = lua.getTop(ctx.state.luaState);
     errdefer lua.setTop(ctx.state.luaState, previous_top);
 
@@ -118,9 +136,11 @@ fn callLoadedChunk(self: *Executor, ctx: *Context, num_results: i32, config: Con
         errfunc = lua.absIndex(ctx.state.luaState, -2);
     }
 
-    lua.protectedCall(ctx.state.luaState, 0, num_results, errfunc) catch |err| {
-        return self.setLuaError(ctx, err, config);
-    };
+    const status = lua.pcall(ctx.state.luaState, 0, num_results, errfunc);
+    if (status == 0 and errfunc != 0) lua.remove(ctx.state.luaState, errfunc);
+    if (status != 0) {
+        return self.setLuaError(ctx, lua.statusToError(status).?, config);
+    }
 }
 
 fn setLuaError(self: *Executor, ctx: *Context, status: lua.Error, config: Config) !void {
@@ -128,16 +148,10 @@ fn setLuaError(self: *Executor, ctx: *Context, status: lua.Error, config: Config
     const message = try allocateErrorMessage(ctx, raw_message, config);
     ctx.err = message;
     self.lua_error_status = status;
-    if (config.take_error_ownership or config.stack_trace == .heap) {
-        self.err = message;
-        if (config.stack_trace != .no) self.stack_trace = message;
-    } else {
-        self.err = null;
-        self.stack_trace = null;
-    }
+    self.err = if (config.take_error_ownership) message else null;
+    self.stack_trace = if (config.stack_trace != .no) message else null;
     return error.Failed;
 }
-
 fn allocateErrorMessage(ctx: *Context, raw_message: []const u8, config: Config) ![]const u8 {
     const alloc = if (config.take_error_ownership or config.stack_trace == .heap)
         ctx.heap()

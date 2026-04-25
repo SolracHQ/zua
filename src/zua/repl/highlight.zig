@@ -4,6 +4,7 @@
 //! understood by isocline's ic_highlight_formatted. The output string
 //! must match the raw input character-for-character outside of the tags.
 const std = @import("std");
+const isocline = @import("../../isocline/isocline.zig");
 const lexer = @import("lexer.zig");
 
 // Token kinds
@@ -97,6 +98,29 @@ pub const Style = struct {
 /// Return null to fall back to the built-in default for the kind.
 pub const ColorHook = ?*const fn (kind: TokenKind, text: []const u8) ?Style;
 
+/// Highlight state forwarded through isocline opaque arg pointers.
+pub const HighlightState = struct {
+    allocator: std.mem.Allocator,
+    color_hook: ColorHook,
+};
+
+/// C callback wrapper for isocline syntax highlighting.
+///
+/// The callback delegates to `process` and forwards the formatted bbcode
+/// result back to isocline.
+pub fn highlightCallbackC(
+    henv: ?*isocline.HighlightEnv,
+    input: [*c]const u8,
+    arg: ?*anyopaque,
+) callconv(.c) void {
+    const state: *HighlightState = @ptrCast(@alignCast(arg orelse return));
+    const source = std.mem.span(input);
+    const formatted = process(state.allocator, source, state.color_hook) orelse return;
+    defer state.allocator.free(formatted);
+    // formatted is null-terminated; pass pointer as C string.
+    isocline.highlightFormatted(henv, input, formatted.ptr);
+}
+
 // Internal helpers
 
 fn tokenKindFromLexer(kind: lexer.TokenKind) ?TokenKind {
@@ -186,7 +210,7 @@ pub fn process(
     const raw = out.toOwnedSlice(allocator) catch return null;
     // Return the slice without the sentinel so callers get a plain []const u8,
     // but the underlying buffer is still null-terminated for C interop.
-    return raw[0 .. raw.len - 1];
+    return raw;
 }
 
 test {

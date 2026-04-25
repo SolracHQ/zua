@@ -81,6 +81,19 @@ pub const Status = enum(c_int) {
     err_err = lua_c.LUA_ERRERR,
 };
 
+/// Converts raw Lua status codes returned by the C API into a Zig error.
+pub fn statusToError(status: c_int) ?Error {
+    return switch (status) {
+        lua_c.LUA_OK => null,
+        lua_c.LUA_ERRRUN => Error.Runtime,
+        lua_c.LUA_ERRSYNTAX => Error.Syntax,
+        lua_c.LUA_ERRMEM => Error.OutOfMemory,
+        lua_c.LUA_ERRERR => Error.MessageHandler,
+        lua_c.LUA_ERRFILE => Error.File,
+        else => Error.Unknown,
+    };
+}
+
 /// Value kinds returned by `valueType` and related Lua API calls.
 pub const Type = enum(c_int) {
     none = lua_c.LUA_TNONE,
@@ -329,12 +342,16 @@ pub fn checkString(state: *State, arg_index: StackIndex) [:0]const u8 {
 
 /// Loads a script file and leaves the compiled chunk on the stack.
 pub fn loadFile(state: *State, script: Script) Error!void {
-    return statusToError(lua_c.luaL_loadfilex(state, script.path.ptr, null));
+    if (statusToError(lua_c.luaL_loadfilex(state, script.path.ptr, null))) |err| {
+        return err;
+    }
 }
 
 /// Loads a Lua chunk from a string and leaves the compiled chunk on the stack.
 pub fn loadString(state: *State, source: [:0]const u8) Error!void {
-    return statusToError(lua_c.luaL_loadstring(state, source.ptr));
+    if (statusToError(lua_c.luaL_loadstring(state, source.ptr))) |err| {
+        return err;
+    }
 }
 
 /// Calls the function currently on the stack without protection.
@@ -349,7 +366,9 @@ pub fn pcall(state: *State, nargs: StackCount, nresults: StackCount, errfunc: St
 
 /// Calls the function on the stack and maps Lua status codes into Zig errors.
 pub fn protectedCall(state: *State, nargs: StackCount, nresults: StackCount, errfunc: StackIndex) Error!void {
-    return statusToError(pcall(state, nargs, nresults, errfunc));
+    if (statusToError(lua_c.lua_pcallk(state, nargs, nresults, errfunc, 0, null))) |err| {
+        return err;
+    }
 }
 
 /// Pops `count` values from the top of the Lua stack.
@@ -460,16 +479,4 @@ pub fn valueType(state: *State, index: StackIndex) Type {
 /// Returns Lua's human-readable name for a value kind.
 pub fn typeName(state: *State, lua_type: Type) [:0]const u8 {
     return std.mem.span(lua_c.lua_typename(state, @intFromEnum(lua_type)));
-}
-
-fn statusToError(status: c_int) Error!void {
-    return switch (status) {
-        lua_c.LUA_OK => {},
-        lua_c.LUA_ERRRUN => Error.Runtime,
-        lua_c.LUA_ERRSYNTAX => Error.Syntax,
-        lua_c.LUA_ERRMEM => Error.OutOfMemory,
-        lua_c.LUA_ERRERR => Error.MessageHandler,
-        lua_c.LUA_ERRFILE => Error.File,
-        else => Error.Unknown,
-    };
 }

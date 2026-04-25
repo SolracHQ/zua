@@ -2,7 +2,7 @@ const std = @import("std");
 const zua = @import("zua");
 const REPL = zua.Repl;
 const highlight = REPL.highlight;
-const linenoise = REPL.linenoise;
+const isocline = REPL.isocline;
 
 /// A simple global function exported into the REPL.
 ///
@@ -21,12 +21,12 @@ fn customColor(text: []const u8) highlight.Color {
 /// Provide tab completion candidates from a custom list.
 ///
 /// Completion is offered for matching names as the user types.
-fn completionCallback(buffer: []const u8, completions: *linenoise.Completions) void {
+fn completionCallback(completer: *REPL.Completer, _: []const u8, arg: ?*anyopaque) void {
+    _ = arg;
+
     const items = &[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
-        if (std.mem.startsWith(u8, item, buffer)) {
-            linenoise.addCompletion(completions, item);
-        }
+        _ = completer.add(item);
     }
 }
 
@@ -54,13 +54,14 @@ pub fn main(init: std.process.Init) !void {
 
     try zua.Repl.run(state, .{
         // First line shown when the REPL starts.
-        .welcome_message = "Welcome to Zua REPL with custom lexer support!\n",
+        .welcome_message = "Welcome to Zua REPL with custom lexer and multi line support!\nshift+tab for multiline input, ctrl+d to exit.\n",
         // Path to save REPL command history across sessions.
         .history_path = "zua_repl_history.txt",
         // Custom syntax highlighting rules for the REPL input.
-        .completion_callback = completionCallback,
+        .completion_hook = completionCallback,
         // you can customize all the token kinds.
         .color_hook = colorize,
+        .stack_trace = true,
     });
 }
 

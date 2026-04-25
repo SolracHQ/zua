@@ -104,6 +104,10 @@ fn parseSingle(
     value_count: lua.StackCount,
     comptime T: type,
 ) !T {
+    if (comptime T == VarArgs) {
+        return buildVarArgs(ctx, start_index, @intCast(value_count));
+    }
+
     const is_opt = comptime Mapper.isOptional(T);
     const ChildT = if (comptime is_opt) Mapper.optionalChild(T) else T;
 
