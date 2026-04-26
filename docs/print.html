@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2453bc00.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7d4dbe5e.js"></script>
@@ -1783,6 +1783,15 @@ try zua.Repl.run(state, .{
 </code></pre>
 <p>The <code>Completer</code> API is the stable public hook surface. If we swap the line editor library again in the future, your completion callback still works.</p>
 <p>Use <code>completer.addEx(candidate, display, help)</code> when you want a richer entry with alternate label or help text.</p>
+<h3 id="runtime-lua-completion"><a class="header" href="#runtime-lua-completion">Runtime Lua completion</a></h3>
+<p>When <code>lua_completion</code> is enabled, the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as <code>foo.</code> and <code>foo:</code>.</p>
+<p>This works alongside <code>completion_hook</code>: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.</p>
+<pre><code class="language-zig">try zua.Repl.run(state, .{
+    .completion_hook = complete,
+    .lua_completion = true,
+});
+</code></pre>
+<p>If you only want custom candidates and not live runtime completion, omit <code>lua_completion</code> and keep only <code>completion_hook</code>.</p>
 <h2 id="syntax-highlighting"><a class="header" href="#syntax-highlighting">Syntax highlighting</a></h2>
 <p>Pass a <code>color_hook</code> to color Lua source as the user types:</p>
 <pre><code class="language-zig">fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
