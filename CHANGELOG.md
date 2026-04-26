@@ -16,6 +16,8 @@
 - shared library support for host modules via `State.libState(L, allocator, io, suffix)` and dynamic module loading from Lua.
 - REPL stack trace support so runtime errors can include Lua traceback information in interactive sessions.
 - A stable `Completer` abstraction for REPL completion hooks, decoupling the public API from the underlying line-editing library internals.
+- live Lua runtime completion in the REPL for globals, field names, methods, and chained expressions.
+  This is intentionally not a LuaS integration; LuaS did not fit the REPL session model cleanly, was hard to synchronize, and added too much configuration and latency. The new runtime completion system is simpler and more effective for interactive REPL use.
 
 ## 0.9.0
 

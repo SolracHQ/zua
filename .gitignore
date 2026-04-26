@@ -2,3 +2,4 @@
 zig-out/
 zig-pkg
 example/dylib/vecmath.so
+zua_repl_history.txt

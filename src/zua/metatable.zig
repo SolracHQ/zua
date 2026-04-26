@@ -121,6 +121,18 @@ fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
         fn index(L: ?*lua.State) callconv(.c) c_int {
             if (lua.valueType(L.?, 2) == .string) {
                 const key = lua.toString(L.?, 2) orelse return 0;
+                if (std.mem.eql(u8, key, "__introspection")) {
+                    lua.createTable(L.?, 0, 0);
+                    var idx: i32 = 1;
+                    inline for (@typeInfo(methods_type).@"struct".fields) |field| {
+                        if (!std.mem.startsWith(u8, field.name, "__")) {
+                            lua.pushString(L.?, field.name);
+                            lua.setIndex(L.?, -2, idx);
+                            idx += 1;
+                        }
+                    }
+                    return 1;
+                }
                 inline for (@typeInfo(methods_type).@"struct".fields) |field| {
                     if (comptime !std.mem.startsWith(u8, field.name, "__")) {
                         if (std.mem.eql(u8, key, field.name)) {

@@ -523,7 +523,7 @@ fn generatedListMethods(comptime L: type, comptime getElements: anytype) type {
         }
 
         fn iget(self: *L, index: usize) !struct { ?usize, ?T } {
-            const elem = get(self, index);
+            const elem = get(self, index + 1);
             const next = if (elem != null) index + 1 else null;
             return .{ next, elem };
         }
@@ -534,7 +534,7 @@ fn generatedListMethods(comptime L: type, comptime getElements: anytype) type {
             Handlers.Userdata,
             ?usize,
         } {
-            return .{ .{}, self, 1 };
+            return .{ .{}, self, 0 };
         }
     };
 }

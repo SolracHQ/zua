@@ -25,6 +25,10 @@ pub const Config = struct {
     prompt: [:0]const u8 = "zua",
 
     /// Optional completion callback for the embedded REPL.
+    ///
+    /// The callback receives the current completion prefix and a stable
+    /// `*zua.Repl.Completer` helper. Use it to add custom completion candidates
+    /// that are not derived from the live Lua runtime.
     completion_hook: CompletionHook = null,
 
     /// Opaque argument forwarded to the completion callback.
@@ -47,6 +51,13 @@ pub const Config = struct {
 
     /// Optional per-token style hook for syntax highlighting.
     color_hook: highlight.ColorHook = null,
+
+    /// When enabled, the REPL resolves chained Lua identifiers against the
+    /// live runtime and completes globals, fields, and methods.
+    ///
+    /// If configured, runtime completion is performed before the optional
+    /// `completion_hook`, so your custom hook can augment or override results.
+    lua_completion: bool = false,
 };
 
 const HighlightState = highlight.HighlightState;
@@ -58,9 +69,6 @@ const HighlightState = highlight.HighlightState;
 /// ensures temporary allocations are reclaimed between commands.
 pub fn run(state: *State, config: Config) !void {
     if (config.history_path) |path| {
-        // Touch the file so historyLoad does not fail on first run.
-        const file = std.Io.Dir.cwd().createFile(state.io, path, .{ .truncate = false }) catch |err| return err;
-        file.close(state.io);
         isocline.setHistory(path, config.history_max);
     }
 
@@ -78,11 +86,12 @@ pub fn run(state: *State, config: Config) !void {
     isocline.setDefaultHighlighter(highlight.highlightCallbackC, &hl_state);
     defer isocline.setDefaultHighlighter(null, null);
 
-    if (config.completion_hook != null) {
+    if (config.completion_hook != null or config.lua_completion) {
         var comp_state = completion.CompletionState{
-            .hook = config.completion_hook,
-            .arg = config.completion_arg,
-            .allocator = state.allocator,
+            .state = state,
+            .user_hook = config.completion_hook,
+            .user_arg = config.completion_arg,
+            .lua_enabled = config.lua_completion,
         };
         isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
     }

@@ -280,6 +280,16 @@ pub fn setIndex(state: *State, index: StackIndex, key: Integer) void {
     lua_c.lua_seti(state, index, key);
 }
 
+/// Returns whether the value at `index` has a metatable and pushes it.
+pub fn getMetatable(state: *State, index: StackIndex) bool {
+    return lua_c.lua_getmetatable(state, index) != 0;
+}
+
+/// Iterates over a table on the stack. Pushes key/value pairs until the table ends.
+pub fn next(state: *State, index: StackIndex) bool {
+    return lua_c.lua_next(state, index) != 0;
+}
+
 /// Pushes `table[key]` for an integer key onto the stack and returns its type.
 pub fn getIndex(state: *State, index: StackIndex, key: Integer) Type {
     return @enumFromInt(lua_c.lua_geti(state, index, key));

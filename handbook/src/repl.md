@@ -77,6 +77,21 @@ The `Completer` API is the stable public hook surface. If we swap the line edito
 
 Use `completer.addEx(candidate, display, help)` when you want a richer entry with alternate label or help text.
 
+### Runtime Lua completion
+
+When `lua_completion` is enabled, the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as `foo.` and `foo:`.
+
+This works alongside `completion_hook`: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.
+
+```zig
+try zua.Repl.run(state, .{
+    .completion_hook = complete,
+    .lua_completion = true,
+});
+```
+
+If you only want custom candidates and not live runtime completion, omit `lua_completion` and keep only `completion_hook`.
+
 ## Syntax highlighting
 
 Pass a `color_hook` to color Lua source as the user types:
