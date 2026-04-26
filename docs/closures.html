@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -177,7 +177,7 @@
                         <h1 id="closures"><a class="header" href="#closures">Closures</a></h1>
 <p>Sometimes a function needs private mutable state that persists across calls: a counter, an accumulator, a rate limiter. You could use an object for this, but closures let you express it more directly. The state travels inside the function itself.</p>
 <h2 id="declaring-a-capture"><a class="header" href="#declaring-a-capture">Declaring a capture</a></h2>
-<p>Declare a struct with <code>Meta.Capture</code> and register it with <code>ZuaFn.newClosure</code>:</p>
+<p>Declare a struct with <code>Meta.Capture</code> and register it with <code>Native.closure</code>:</p>
 <pre><code class="language-zig">const CounterState = struct {
     pub const ZUA_META = zua.Meta.Capture(@This(), .{});
     count: i32,
@@ -190,19 +190,23 @@ fn counterTick(s: *CounterState) i32 {
 }
 </code></pre>
 <p>Then register the closure with an initial value:</p>
-<pre><code class="language-zig">try globals.set(&amp;ctx, "counter", zua.ZuaFn.newClosure(
-    counterTick,
-    CounterState{ .count = 0, .step = 1 },
-    .{},
-));
+<pre><code class="language-zig">try state.addGlobals(&amp;ctx, .{
+    .counter = zua.Native.closure(
+        counterTick,
+        CounterState{ .count = 0, .step = 1 },
+        .{},
+    ),
+});
 </code></pre>
 <pre><code class="language-lua">print(counter())  -- 1
 print(counter())  -- 2
 print(counter())  -- 3
 </code></pre>
 <p>Each call to <code>newClosure</code> allocates a <strong>fresh, independent</strong> capture. Registering the same function twice with different initial values gives two closures that never share state:</p>
-<pre><code class="language-zig">try globals.set(&amp;ctx, "by_one", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}));
-try globals.set(&amp;ctx, "by_ten", zua.ZuaFn.newClosure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}));
+<pre><code class="language-zig">try state.addGlobals(&amp;ctx, .{
+    .by_one = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1  }, .{}),
+    .by_ten = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}),
+});
 </code></pre>
 <pre><code class="language-lua">print(by_one())  -- 1
 print(by_one())  -- 2
@@ -255,13 +259,15 @@ fn partialCall(ctx: *zua.Context, s: *PartialState, n: i32) !i32 {
     return s.f.call(ctx, .{ s.first, n });
 }
 
+const PartialClosure = zua.Native.Closure(partialCall, .{});
+
 fn alwaysWith(
     ctx: *zua.Context,
     first: i32,
     f:    zua.Fn(.{i32, i32}, i32),
-) zua.ZuaFn.ZuaFnClosureType(partialCall, .{}) {
+) PartialClosure {
     _ = ctx;
-    return zua.ZuaFn.newClosure(partialCall, PartialState{
+    return zua.Native.closure(partialCall, PartialState{
         .f     = f.takeOwnership(),
         .first = first,
     }, .{});

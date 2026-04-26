@@ -16,29 +16,55 @@ pub fn build(b: *std.Build) void {
     module.link_libc = true;
     module.linkLibrary(lua_lib);
 
-    const translate_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/c.h"),
+    const lua = b.addTranslateC(.{
+        .root_source_file = b.path("src/lua/lua_import.h"),
         .target = target,
         .optimize = optimize,
     });
-    translate_c.addIncludePath(lua_lib.getEmittedIncludeTree());
-    translate_c.addIncludePath(b.path("vendor/linenoise"));
-    const c_mod = translate_c.createModule();
-    module.addImport("c", c_mod);
+    lua.addIncludePath(lua_lib.getEmittedIncludeTree());
+    const lua_mod = lua.createModule();
+    module.addImport("lua", lua_mod);
 
-    // Linenoise configuration
-    module.addCSourceFile(.{ .file = b.path("vendor/linenoise/linenoise.c"), .flags = &.{} });
-    module.addIncludePath(b.path("vendor/linenoise"));
+    // isocline configuration
+    const isocline_dep = b.dependency("isocline", .{});
+
+    const isocline = b.addTranslateC(.{
+        .root_source_file = isocline_dep.path("include/isocline.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const isocline_mod = isocline.createModule();
+    isocline_mod.addCSourceFile(.{ .file = isocline_dep.path("src/isocline.c") });
+    module.addImport("isocline", isocline_mod);
 
     const mod_tests = b.addTest(.{
         .root_module = module,
     });
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
+    const vecmath_module = b.createModule(.{
+        .root_source_file = b.path("example/dylib/vecmath.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zua", .module = module },
+        },
+    });
+
+    const lib = b.addLibrary(.{ .name = "vecmath", .linkage = .dynamic, .root_module = vecmath_module });
+    lib.root_module.link_libc = true;
+
+    const install_lib = b.addInstallArtifact(lib, .{});
+    b.getInstallStep().dependOn(&install_lib.step);
+
+    const vecmath_step = b.step("vecmath", "Build vecmath dynamic library");
+    vecmath_step.dependOn(&install_lib.step);
+
     const examples = [_]struct {
         name: []const u8,
         path: []const u8,
     }{
+        .{ .name = "example-docs", .path = "example/docs.zig" },
         .{ .name = "example-introduction", .path = "example/introduction.zig" },
         .{ .name = "example-functions", .path = "example/functions.zig" },
         .{ .name = "example-data-structures", .path = "example/data-structures.zig" },

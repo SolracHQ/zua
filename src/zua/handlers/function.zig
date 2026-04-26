@@ -65,14 +65,14 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
 }
 
 /// Creates a new Lua function handle from a Zig callback or an existing
-/// `ZuaFn` wrapper.
+/// Native callback wrapper.
 ///
 /// This is a convenience helper for constructing raw function handles from
-/// native Zig callbacks or pre-wrapped ZuaFn values.
+/// native Zig callbacks or pre-wrapped `NativeFn`/`Closure` values.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
-/// - callback: A Zig function or a `ZuaFn`/`ZuaFn.newClosure` wrapper.
+/// - callback: A Zig function or a `NativeFn`/`Closure` wrapper.
 ///
 /// Returns:
 /// - Function: A stack-owned handle for the pushed Lua function.
@@ -80,13 +80,13 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
 /// Example:
 /// ```zig
 /// const fn_handle = Function.create(state, my_native_callback);
-/// const fn_handle = Function.create(state, zua.ZuaFn.new(my_callback, .{}));
+/// const fn_handle = Function.create(state, zua.Native.new(my_callback, .{}));
 /// ```
 pub fn create(state: *State, callback: anytype) Function {
     const CallbackType = @TypeOf(callback);
 
     if (comptime @typeInfo(CallbackType) == .@"fn" or
-        (@typeInfo(CallbackType) == .@"struct" and @hasDecl(CallbackType, "__IsZuaFn")))
+        (@typeInfo(CallbackType) == .@"struct" and @hasDecl(CallbackType, "__IsZuaNativeFunction")))
     {
         var ctx = Context.init(state);
         defer ctx.deinit();
@@ -190,4 +190,8 @@ pub fn takeOwnership(self: Function) Function {
 /// ```
 pub fn release(self: Function) void {
     self.handle.release(self.state);
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

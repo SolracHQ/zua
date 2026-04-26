@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,7 @@
         catch unreachable;
 }
 
-globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{
+globals.set(&amp;ctx, "greet", zua.Native.new(greet, .{
     .parse_err_fmt = "greet expects (string): {s}",
 }));
 </code></pre>
@@ -234,7 +234,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !Entry {
 <p><code>label</code> starts as a slice pointing into Lua-owned string memory. <code>dupe</code> copies it into persistent memory so the <code>Entry</code> object can hold it safely after the call returns.</p>
 <h2 id="context-reuse"><a class="header" href="#context-reuse">Context reuse</a></h2>
 <p>You create one <code>Context</code> and pass it to every call. The arena inside it is reset at the start of each <code>execute</code> or <code>eval</code>, not when you construct the context. This means the same <code>ctx</code> variable works for the whole program lifetime without any manual reset.</p>
-<pre><code class="language-zig">var ctx = zua.Context.init(z);
+<pre><code class="language-zig">var ctx = zua.Context.init(state);
 defer ctx.deinit();
 
 // Both calls share the same ctx; each resets the arena internally.

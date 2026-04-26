@@ -27,7 +27,7 @@ The tables below summarise every supported direction. "Borrowed" means the handl
 | `struct { … }` | `.table` (default) | table | table | Fields become string-keyed table entries |
 | `struct { … }` | `.object` | userdata + metatable | userdata | Identity-preserving; GC-managed by Lua |
 | `struct { … }` | `.ptr` | light userdata | light userdata | Raw pointer; Lua holds no ownership |
-| `struct { … }` | `.capture` | userdata in upvalue 1 | — | Used only by `ZuaFn.newClosure`; not a standalone parameter type |
+| `struct { … }` | `.capture` | userdata in upvalue 1 | — | Used only by `Native.closure`; not a standalone parameter type |
 | `[]T` | (element strategy) | array table | array table | Each element encoded/decoded by its own strategy |
 | `[N]T` | (element strategy) | array table | — | Encode only; decoded as `[]T` slices |
 
@@ -51,9 +51,9 @@ Bare (untagged) unions default to `.object` because they have no table represent
 
 | Zig type | Lua type (encoded) | Lua type (decoded from) | Notes |
 |---|---|---|---|
-| Zig `fn` | C function | — | Encode only; wrapped automatically via `ZuaFn.new` |
-| `ZuaFn.new(fn, cfg)` | C function | — | Statically generated trampoline |
-| `ZuaFn.newClosure(fn, initial, cfg)` | C closure (1 upvalue) | — | Capture stored as userdata in upvalue 1 |
+| Zig `fn` | C function | — | Encode only; wrapped automatically via `Native.new` |
+| `Native.new(fn, cfg)` | C function | — | Statically generated trampoline |
+| `Native.closure(fn, initial, cfg)` | C closure (1 upvalue) | — | Capture stored as userdata in upvalue 1 |
 | `zua.Function` | function (push) | function | Borrowed handle on decode; call `takeOwnership()` to keep alive |
 | `zua.Fn(ins, outs)` | function (push) | function | Typed wrapper; decoded via its `ZUA_META` decode hook |
 
@@ -165,7 +165,7 @@ If you need persistence, use a registry-owned handle or move the data into longe
 - You cannot receive a raw `*T` as a field in a table-strategy struct because the table owns the representation, not the raw pointer. If you need to mutate table-backed data, use a `Table` handler instead of `*T`.
 - You cannot embed `.object` strategy values directly in a table-strategy struct, either as `T` or `*T`. Use a `zua.Userdata` handle (raw) or expose the value through its own `.object` strategy type for nested object references.
 - A table-strategy struct cannot contain a field of `.ptr` strategy by value, because `.ptr` values have no direct table representation.
-- `ZuaFn` values can be encoded into Lua, but they are not generally decodable from table fields. They are only safe as return values or when the field is never decoded back into Zig.
+- `NativeFn`/`Closure` values can be encoded into Lua, but they are not generally decodable from table fields. They are only safe as return values or when the field is never decoded back into Zig.
 
 ## Composite values
 

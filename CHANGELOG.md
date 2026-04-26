@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0
+
+### Breaking
+- REPL syntax highlighting now uses a single `color_hook(kind, text)` callback instead of the old `color_config` and `identifier_hook` split. You can now branch directly on token kind and token text in one place.
+- The REPL line editor no longer uses vendored `linenoise`; it now uses the Zig-friendly `isocline` line editor wrapper instead. This gives much better multiline input support and passes an opaque callback pointer through completion/highlight hooks so the REPL can forward allocator/IO and other host state from Zig.
+
+### Added
+- `zua.Docs`, a Lua stub generator for editor and language-server support when exposing Zig APIs to script authors.
+- metadata documentation helpers: `withName`, `withDescription`, and `withAttribDescriptions`.
+- `Native.ArgInfo` and wrapper-level `withDescriptions(...)` so exported functions and methods can carry parameter names and descriptions into generated stubs.
+- generated files emit `---@meta _`, preserve optional types as `TYPE?`, document `VarArgs` as `---@param ...`, and emit `---@alias` for tagged unions and string-backed enums.
+- `State.setGlobals(ctx, .{ ... })` for filling the globals table from a module-like anonymous struct literal.
+- `Docs.generateModule(allocator, module, name)` for direct stub generation from module-like literal shape.
+- shared library support for host modules via `State.libState(L, allocator, io, suffix)` and dynamic module loading from Lua.
+- REPL stack trace support so runtime errors can include Lua traceback information in interactive sessions.
+- A stable `Completer` abstraction for REPL completion hooks, decoupling the public API from the underlying line-editing library internals.
+- live Lua runtime completion in the REPL for globals, field names, methods, and chained expressions.
+  This is intentionally not a LuaS integration; LuaS did not fit the REPL session model cleanly, was hard to synchronize, and added too much configuration and latency. The new runtime completion system is simpler and more effective for interactive REPL use.
+
 ## 0.9.0
 
 I will use this version to add more comptime checks and improve message in current ones for better UX.

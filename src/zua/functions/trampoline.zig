@@ -57,15 +57,43 @@ pub const ErrorConfig = struct {
     zig_err_hook: ?fn (*Context, anyerror) void = null,
 };
 
+/// Documentation metadata for one exposed function parameter.
+pub const ArgInfo = struct {
+    name: []const u8,
+    description: ?[]const u8 = null,
+};
+
 /// Creates a concrete wrapper type for a Zig callback and error handling config.
 ///
 /// The returned type exposes `trampoline()` for use as a Lua C function and
 /// handles argument decoding, function invocation, return value encoding, and
 /// Lua error raising.
+///
+/// Arguments:
+/// - `function`: the Zig callback to wrap. Must have an explicit return type.
+/// - `kind`: describes whether the callback receives `*Context` and/or a capture pointer.
+/// - `error_config`: format strings and optional hooks for parse and Zig error reporting.
+/// - `args_descriptions`: a comptime struct of `ArgInfo` values, used purely for
+///   documentation. Pass `.{}` to omit. Use `withDescriptions` on the returned
+///   type to attach descriptions after the fact without repeating the other args.
+///
+/// Returns:
+/// - `type`: a struct type with `trampoline()`, `withDescriptions()`, and metadata fields
+///   (`name`, `description`, `args`). For closures, also carries an `initial` capture field.
+///
+/// Example:
+/// ```zig
+/// const T = trampoline.make(myFn, .{ .hasContext = true }, .{}, .{
+///     .address = "Memory address to read",
+///     .size    = "Number of bytes",
+/// });
+/// globals.set(&ctx, "read", T{});
+/// ```
 pub fn make(
     comptime function: anytype,
     comptime kind: ArgsConfig,
     comptime error_config: ErrorConfig,
+    comptime args_descriptions: anytype,
 ) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
@@ -82,13 +110,76 @@ pub fn make(
         void;
 
     return struct {
-        pub const __IsZuaFn = true;
-        pub const __IsZuaClosure: bool = kind.hasCapture;
-        pub const __ZuaFnTypeInfo = function_info;
-        pub const __ZuaFnReturnType = ActualReturnType;
+        /// Marker used by zua internals to identify wrapper types.
+        pub const __IsZuaNativeFunction = true;
 
+        /// Indicates whether this wrapper carries a capture value.
+        pub const __IsZuaClosure: bool = kind.hasCapture;
+
+        /// Raw Zig function type info for the wrapped callback.
+        pub const __ZuaFnTypeInfo = function_info;
+
+        /// The normalized return type of the wrapped callback, with error unions unwrapped.
+        pub const __ZuaNativeReturnType = ActualReturnType;
+
+        /// The display name of the wrapped function, used for docs and debugging.
+        name: []const u8 = @typeName(FunctionType),
+
+        /// Optional documentation string for the wrapped function.
+        description: []const u8 = "",
+
+        /// Comptime parameter metadata used only for documentation generation.
+        args: @TypeOf(args_descriptions) = args_descriptions,
+
+        /// For closures, the initial capture value to bundle with the callback.
         initial: CaptureType = undefined,
 
+        /// Returns a new wrapper type identical to this one but with the given
+        /// parameter documentation attached for documentation generation.
+        ///
+        /// Each field value in `new_args` should be an `ArgInfo`. Since Zig
+        /// function type info does not carry parameter names, `ArgInfo.name`
+        /// is the canonical source of the displayed parameter name.
+        ///
+        /// Example:
+        /// ```zig
+        /// const get_fn = zua.Native.NativeFn(get, .{})
+        ///     .withDescriptions(.{
+        ///         .address = .{ .name = "address", .description = "Memory address to read from" },
+        ///         .type = .{ .name = "type", .description = "Data type string, e.g. 'u32'" },
+        ///     });
+        /// ```
+        pub fn withDescriptions(prev: @This(), comptime new_args: anytype) make(function, kind, error_config, new_args) {
+            return .{ .name = prev.name, .description = prev.description, .args = new_args, .initial = prev.initial };
+        }
+
+        pub fn withName(prev: @This(), comptime new_name: []const u8) make(function, kind, error_config, args_descriptions) {
+            var copy = prev;
+            copy.name = new_name;
+            return copy;
+        }
+
+        pub fn withDescription(prev: @This(), comptime new_desc: []const u8) make(function, kind, error_config, args_descriptions) {
+            var copy = prev;
+            copy.description = new_desc;
+            return copy;
+        }
+
+        /// Returns the raw Lua C function pointer for this wrapper.
+        ///
+        /// The returned function pointer is suitable for passing directly to
+        /// `lua_pushcfunction` or any zua registration helper. Each call returns
+        /// the same stateless function pointer; the wrapper type carries no
+        /// runtime state (capture state lives in upvalue 1 for closures).
+        ///
+        /// Use this when you need the raw `CFunction` rather than pushing the
+        /// wrapper value through the encoder.
+        ///
+        /// Example:
+        /// ```zig
+        /// const fn_ptr = zua.Native.NativeFn(add, .{}).trampoline();
+        /// lua.pushCFunction(state, fn_ptr);
+        /// ```
         pub fn trampoline() lua.CFunction {
             return struct {
                 fn luaCFunction(state_: ?*lua.State) callconv(.c) c_int {
@@ -234,6 +325,11 @@ pub fn make(
             const base: usize = function_info.params.len - kind.stackOffset();
             return if (comptime hasVarArgs(function_info)) base - 1 else base;
         }
+
+        // I really don't know if this works but as soon as I can see errors better, right?
+        test {
+            std.testing.refAllDecls(@This());
+        }
     };
 }
 
@@ -285,9 +381,7 @@ fn isCapturePointer(comptime T: type) bool {
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    if (!(@typeInfo(Child) == .@"struct" or @typeInfo(Child) == .@"union" or @typeInfo(Child) == .@"enum")) return false;
-    if (!@hasDecl(Child, "ZUA_META")) return false;
-    return Child.ZUA_META.strategy == .capture;
+    return Meta.strategyOf(Child) == .capture;
 }
 
 /// Ensures a closure callback has its capture parameter in the expected slot.
@@ -325,4 +419,8 @@ fn isTuple(comptime T: type) bool {
         .@"struct" => |info| info.is_tuple,
         else => false,
     };
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

@@ -55,7 +55,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return pushLuaPrimitive(ctx, value);
     }
 
-    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaFn")) {
+    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaNativeFunction")) {
         if (comptime T.__IsZuaClosure) {
             // Closure: push initial capture as userdata (upvalue 1), then pushcclosure.
             const CaptureType = @TypeOf(value.initial);
@@ -76,11 +76,8 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Meta.getMeta(T);
-        if (comptime meta.encode_hook) |encode_hook| {
-            if (try encode_hook(ctx, value)) |encoded| {
-                return pushValue(ctx, encoded);
-            }
-            // If the hook returns null, fall back to default encoding
+        if (try meta.EncodeHook(ctx, value)) |encoded| {
+            return pushValue(ctx, encoded);
         }
     }
 
@@ -108,7 +105,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
         },
         .@"enum", .@"struct", .@"union" => {
-            const strategy = comptime Meta.getMeta(T).strategy;
+            const strategy = comptime Meta.strategyOf(T);
 
             // Handle .object strategy: allocate as userdata with metatable
             if (comptime strategy == .object) {
@@ -148,7 +145,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
                 }
 
                 if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum") {
-                    const strategy = comptime Meta.getMeta(Pointee).strategy;
+                    const strategy = comptime Meta.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         @compileError(std.fmt.comptimePrint("Cannot push *{s} where {s} uses .object strategy: the metatable and identity would be lost. Return {s} by value instead to preserve metatable behavior and enable proper method dispatch.", .{ @typeName(Pointee), @typeName(Pointee), @typeName(Pointee) }));
@@ -180,6 +177,9 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
             lua.createTable(ctx.state.luaState, inferArrayCapacity(value), 0);
             const nested = Table.fromStack(ctx.state, -1);
             try fillTable(ctx, nested, value);
+        },
+        .void => {
+            lua.pushNil(ctx.state.luaState);
         },
         else => @compileError(std.fmt.comptimePrint("Type {s} is not yet supported for encoding. If you need this supported, please open an issue with your use case.", .{@typeName(T)})),
     }
@@ -307,4 +307,8 @@ pub fn inferRecordCapacity(value: anytype) i32 {
         .array, .pointer => 0,
         else => @compileError(std.fmt.comptimePrint("Type {s} is not supported for record capacity inference. Only structs, unions, arrays, and slices are supported.", .{@typeName(T)})),
     };
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

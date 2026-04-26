@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,7 +198,7 @@
 <pre><code class="language-lua">local p = makePoint(3, 4)
 print(p:distance())  -- 5
 </code></pre>
-<p>The keys in the method list become the Lua method names. The values are Zig function references, and the same <code>ZuaFn.new</code> wrapper that works for top-level functions works here too, covered below.</p>
+<p>The keys in the method list become the Lua method names. The values are Zig function references, and the same <code>Native.new</code> wrapper that works for top-level functions works here too, covered below.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p><code>zua.Meta.List</code> is a helper for sequence-like <code>.object</code> values. It generates common collection methods such as <code>get</code>, <code>__index</code>, <code>__len</code>, and <code>iter</code>, and merges them with your custom methods. Do not redeclare those generated names in the supplied <code>methods</code> struct.</p>
@@ -282,10 +282,10 @@ local c = a + b
 print(tostring(c))  -- (4, 6)
 </code></pre>
 <h2 id="customizing-method-error-messages"><a class="header" href="#customizing-method-error-messages">Customizing method error messages</a></h2>
-<p>Wrap a method in <code>ZuaFn.new</code> to control the error message when argument types do not match. The wrapper is optional and can be used on individual methods without affecting others:</p>
+<p>Wrap a method in <code>Native.new</code> to control the error message when argument types do not match. The wrapper is optional and can be used on individual methods without affecting others:</p>
 <pre><code class="language-zig">const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
-        .increment = zua.ZuaFn.new(increment, .{
+        .increment = zua.Native.new(increment, .{
             .parse_err_fmt = "Counter:increment expects (integer): {s}",
         }),
         .reset = reset,

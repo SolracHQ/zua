@@ -31,14 +31,14 @@ Both functions return an error value you propagate with `return`. They do not ra
 
 ## Zig errors reaching the trampoline
 
-If a Zig error escapes your function without being caught, the trampoline catches it and converts it to a Lua error. Use `zig_err_fmt` in `ZuaFn.new` to control the message:
+If a Zig error escapes your function without being caught, the trampoline catches it and converts it to a Lua error. Use `zig_err_fmt` in `Native.new` to control the message:
 
 ```zig
 fn readFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
     return std.fs.cwd().readFileAlloc(ctx.arena(), path, 1024 * 1024);
 }
 
-globals.set(&ctx, "read_file", zua.ZuaFn.new(readFile, .{
+globals.set(&ctx, "read_file", zua.Native.new(readFile, .{
     .parse_err_fmt = "read_file expects (string): {s}",
     .zig_err_fmt   = "read_file failed: {s}",
 }));
@@ -57,7 +57,7 @@ fn describeError(ctx: *zua.Context, err: anyerror) void {
     ) catch "file error";
 }
 
-globals.set(&ctx, "read_file", zua.ZuaFn.new(readFile, .{
+globals.set(&ctx, "read_file", zua.Native.new(readFile, .{
     .parse_err_fmt = "read_file expects (string): {s}",
     .zig_err_hook  = describeError,
 }));

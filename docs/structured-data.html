@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,25 +230,25 @@ process({ in_range = { min = 0, max = 255 } })
 <p>zua decodes whichever field is present. If zero or more than one key is set, it returns a type error.</p>
 <h2 id="building-tables-from-zig"><a class="header" href="#building-tables-from-zig">Building tables from Zig</a></h2>
 <p>Use <code>Table.from</code> to convert a Zig struct or array literal to a Lua table in one call:</p>
-<pre><code class="language-zig">const guide = Table.from(z, .{
+<pre><code class="language-zig">const guide = Table.from(state, .{
     .name    = "guided-tour",
     .version = 1,
     .tags    = [_][]const u8{ "zig", "lua" },
 });
 defer guide.release();
-try globals.set(&amp;ctx, "guide", guide);
+try state.addGlobals(&amp;ctx, .{ .guide = guide });
 </code></pre>
 <p>Struct fields become string keys. Arrays and slices become array-style tables with integer keys starting at 1. Nesting is recursive. For incremental construction, use <code>Table.create</code> and <code>set</code>:</p>
-<pre><code class="language-zig">const entry = Table.create(z, 0, 3);
+<pre><code class="language-zig">const entry = Table.create(state, 0, 3);
 defer entry.release();
 try entry.set(&amp;ctx, "address", "0x7fff1234");
 try entry.set(&amp;ctx, "type",    "f32");
 try entry.set(&amp;ctx, "value",   8.3);
-try globals.set(&amp;ctx, "entry", entry);
+try state.addGlobals(&amp;ctx, .{ .entry = entry });
 </code></pre>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p><code>Table.create(z, narray, nrec)</code> is a hint to Lua about how many array-style and record-style entries the table will hold. Lua uses this to pre-allocate the right internal structures. Getting it wrong does not break anything, but getting it right avoids rehashing.</p>
+<p><code>Table.create(state, narray, nrec)</code> is a hint to Lua about how many array-style and record-style entries the table will hold. Lua uses this to pre-allocate the right internal structures. Getting it wrong does not break anything, but getting it right avoids rehashing.</p>
 </blockquote>
 <p>Tables returned from <code>Table.create</code> are <strong>stack-owned handles</strong> and must be <code>.release()</code>d before the enclosing scope returns. The <code>defer</code> pattern above is the standard idiom.</p>
 <h2 id="reading-a-table-you-already-have"><a class="header" href="#reading-a-table-you-already-have">Reading a table you already have</a></h2>
@@ -269,7 +269,7 @@ if (guide_table.has("tags")) {
 <h2 id="returning-a-table-from-a-callback"><a class="header" href="#returning-a-table-from-a-callback">Returning a table from a callback</a></h2>
 <p>Return <code>zua.Table</code> directly from a function. The trampoline takes ownership and passes it to Lua; you do not call <code>.release()</code> yourself in this case:</p>
 <pre><code class="language-zig">fn makeEntry(ctx: *zua.Context, address: []const u8) zua.Table {
-    const t = Table.create(z, 0, 2);
+    const t = Table.create(state, 0, 2);
     t.set(ctx, "address", address);
     t.set(ctx, "type",    "f32");
     return t;

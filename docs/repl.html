@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,94 +175,106 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="repl"><a class="header" href="#repl">REPL</a></h1>
-<p>zua ships a full interactive REPL that you can drop into any project with a single call. It handles multi-line input, persistent history, tab completion, and ANSI syntax highlighting. The prompt knows when an expression is incomplete, an unclosed <code>do</code> block or a function without <code>end</code>, and switches to a continuation prompt automatically.</p>
+<p>zua ships a full interactive REPL that you can drop into any project with a single call. It handles multi-line input, persistent history, tab completion, and ANSI syntax highlighting. The current backend gives you real multiline editing, so you can move around and edit anywhere in the block instead of only editing the last line.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The new line-editor backend is actually more capable than the old one. The old REPL only supported multiline input by guessing unfinished <code>do</code>/<code>end</code> blocks and that logic was complicated and half-broken. Now you can add new lines natively with Shift+Tab without evaluating them first, so the code is much simpler and more reliable.</p>
+</blockquote>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>If someone really liked the old behavior, open an issue. I can add a completion hook or something to make it optional. I really love hooks :3</p>
+</blockquote>
 <h2 id="the-minimal-repl"><a class="header" href="#the-minimal-repl">The minimal REPL</a></h2>
 <pre><code class="language-zig">pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
-    try zua.Repl.run(z, .{});
+    try zua.Repl.run(state, .{});
 }
 </code></pre>
 <p>That gives you a working Lua shell. Type expressions, call functions, define variables, paste multi-line code, and hit Ctrl-D to exit.</p>
 <h2 id="registering-your-api"><a class="header" href="#registering-your-api">Registering your API</a></h2>
 <p>Register globals the same way you do everywhere else, before calling <code>run</code>:</p>
-<pre><code class="language-zig">var ctx = zua.Context.init(z);
+<pre><code class="language-zig">var ctx = zua.Context.init(state);
 defer ctx.deinit();
 
-const globals = z.globals();
-defer globals.release();
+try state.addGlobals(&amp;ctx, .{
+    .add = add,
+    .greet = zua.Native.new(greet, .{}),
+});
 
-try globals.set(&amp;ctx, "add",   add);
-try globals.set(&amp;ctx, "greet", zua.ZuaFn.new(greet, .{}));
-
-try zua.Repl.run(z, .{});
+try zua.Repl.run(state, .{});
 </code></pre>
 <h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
 <p><code>zua.Repl.run</code> takes a <code>Config</code> struct. Every field is optional; defaults give you a working shell out of the box.</p>
-<pre><code class="language-zig">try zua.Repl.run(z, .{
-    .prompt              = "myapp&gt; ",
-    .continuation_prompt = "   ... ",
-    .welcome_message     = "Welcome! Type 'help' for hints.\n",
-    .history_path        = "myapp_history.txt",
+<pre><code class="language-zig">try zua.Repl.run(state, .{
+    .prompt          = "myapp",
+    .welcome_message = "Welcome! Type 'help' for hints.\n",
+    .history_path    = "myapp_history.txt",
+    .stack_trace     = true,
 });
 </code></pre>
 <p><code>history_path</code> enables persistent history across sessions. The file is created if it does not exist, loaded on startup, and saved after each line.</p>
+<p><code>stack_trace</code> enables Lua traceback capture for runtime errors, which is useful when you want more than just the final error message.</p>
 <h2 id="tab-completion"><a class="header" href="#tab-completion">Tab completion</a></h2>
-<p>Pass a <code>completion_callback</code> to hook into the line editor. The callback receives the current buffer and a <code>*Completions</code> value you push candidates onto:</p>
-<pre><code class="language-zig">fn complete(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
-    const candidates = &amp;[_][:0]const u8{ "add", "greet", "print", "tostring" };
-    for (candidates) |c| {
-        if (std.mem.startsWith(u8, c, buffer)) {
-            zua.Repl.linenoise.addCompletion(completions, c);
+<p>Pass a <code>completion_hook</code> to add completions. The callback receives the current prefix and a stable <code>*zua.Repl.Completer</code> helper that does not expose the underlying line-editor internals:</p>
+<pre><code class="language-zig">fn complete(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+    const items = &amp;[_][:0]const u8{ "add", "greet", "print", "tostring" };
+    for (items) |item| {
+        if (std.mem.startsWith(u8, item, prefix)) {
+            _ = completer.add(item);
         }
     }
 }
 
-try zua.Repl.run(z, .{
-    .completion_callback = complete,
+try zua.Repl.run(state, .{
+    .completion_hook = complete,
 });
 </code></pre>
+<p>The <code>Completer</code> API is the stable public hook surface. If we swap the line editor library again in the future, your completion callback still works.</p>
+<p>Use <code>completer.addEx(candidate, display, help)</code> when you want a richer entry with alternate label or help text.</p>
+<h3 id="runtime-lua-completion"><a class="header" href="#runtime-lua-completion">Runtime Lua completion</a></h3>
+<p>When <code>lua_completion</code> is enabled, the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as <code>foo.</code> and <code>foo:</code>.</p>
+<p>This works alongside <code>completion_hook</code>: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.</p>
+<pre><code class="language-zig">try zua.Repl.run(state, .{
+    .completion_hook = complete,
+    .lua_completion = true,
+});
+</code></pre>
+<p>If you only want custom candidates and not live runtime completion, omit <code>lua_completion</code> and keep only <code>completion_hook</code>.</p>
 <h2 id="syntax-highlighting"><a class="header" href="#syntax-highlighting">Syntax highlighting</a></h2>
-<p>Pass a <code>color_config</code> to color Lua source as the user types:</p>
-<pre><code class="language-zig">try zua.Repl.run(z, .{
-    .color_config = zua.Repl.highlight.ColorConfig{
-        .keyword       = .{ .color = .{ .ansi = 93 }, .bold = true },
-        .keyword_value = .{ .color = .{ .ansi = 96 } },
-        .builtin       = .{ .color = .{ .ansi = 32 } },
-        .string        = .{ .color = .{ .ansi = 34 } },
-        .integer       = .{ .color = .{ .ansi = 95 } },
-        .number        = .{ .color = .{ .ansi = 95 } },
-        .symbol        = .{ .color = .{ .ansi = 33 } },
-        .comment       = .{ .color = .{ .ansi = 90 }, .dim = true },
-        .name          = .{ .color = .{ .ansi = 37 } },
-    },
-});
-</code></pre>
-<p>Fields left unset use their defaults (no color). Set <code>.ansi</code> for a standard terminal color code or <code>.rgb</code> for a 24-bit color if your terminal supports it. <code>.bold</code> and <code>.dim</code> apply on top of any color.</p>
-<h2 id="custom-identifier-classification"><a class="header" href="#custom-identifier-classification">Custom identifier classification</a></h2>
-<p>The highlighter knows Lua keywords, builtins, strings, and numbers. It does not know your API. Use <code>identifier_hook</code> to teach it:</p>
-<pre><code class="language-zig">fn myIdentifier(text: []const u8) bool {
-    return std.mem.startsWith(u8, text, "my_") or
-           std.mem.eql(u8, text, "greet");
+<p>Pass a <code>color_hook</code> to color Lua source as the user types:</p>
+<pre><code class="language-zig">fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    return switch (kind) {
+        .keyword =&gt; .{ .fg = .{ .ansi = 93 }, .bold = true },
+        .keyword_value =&gt; .{ .fg = .{ .ansi = 96 } },
+        .builtin =&gt; .{ .fg = .{ .ansi = 32 } },
+        .name =&gt; if (std.mem.startsWith(u8, text, "my_"))
+            .{ .fg = .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } } }
+        else
+            .{ .fg = .{ .ansi = 37 } },
+        .string =&gt; .{ .fg = .{ .ansi = 34 } },
+        .integer, .number =&gt; .{ .fg = .{ .ansi = 95 } },
+        .symbol =&gt; .{ .fg = .{ .ansi = 33 } },
+        .comment =&gt; .{ .fg = .{ .ansi = 90 }, .dim = true },
+    };
 }
 
-fn myColor(text: []const u8) zua.Repl.highlight.Color {
-    _ = text;
-    return .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } };
-}
-
-try zua.Repl.run(z, .{
-    .identifier_hook = myIdentifier,
-    .color_config    = zua.Repl.highlight.ColorConfig{
-        .custom = myColor,
-        // ... other colors
-    },
+try zua.Repl.run(state, .{
+    .color_hook = colorize,
 });
 </code></pre>
-<p>When <code>identifier_hook</code> returns <code>true</code> for a name, the lexer classifies it as <code>.custom</code> and the highlighter calls your <code>custom</code> color function. The function receives the text so you can vary the color by name if you want.</p>
+<p>Return <code>null</code> when you want the default style, or a <code>Style</code> when you want to override it.</p>
+<p>The hook gets both the token kind and the token text, so there is no separate identifier hook anymore. If you want to color your own globals, branch on <code>.name</code> and inspect the text.</p>
+<h2 id="stack-traces"><a class="header" href="#stack-traces">Stack traces</a></h2>
+<p>If you want nicer runtime errors during interactive sessions, enable <code>stack_trace</code>:</p>
+<pre><code class="language-zig">try zua.Repl.run(state, .{
+    .stack_trace = true,
+});
+</code></pre>
+<p>When enabled, runtime failures include a Lua traceback instead of only the final error line.</p>
 <h2 id="evaluation-context"><a class="header" href="#evaluation-context">Evaluation context</a></h2>
-<p>Each line typed at the REPL runs in a fresh <code>Context</code>, so arena-allocated scratch memory from one line does not carry over to the next. Global state in the Lua VM persists normally, so variables and functions defined at the prompt remain available for the rest of the session.</p>
+<p>Each line typed at the REPL runs in a fresh <code>Context</code>, so arena-allocated scratch memory from one line does not carry over to the next. Global state in the Lua VM still persists normally, so variables and functions defined at the prompt remain available for the rest of the session.</p>
 <h2 id="full-example"><a class="header" href="#full-example">Full example</a></h2>
 <pre><code class="language-zig">const std = @import("std");
 const zua = @import("zua");
@@ -271,54 +283,51 @@ fn example() []const u8 {
     return "this is just an example";
 }
 
-fn customIdentifier(text: []const u8) bool {
-    return std.mem.startsWith(u8, text, "custom_");
-}
-
-fn customColor(text: []const u8) zua.Repl.highlight.Color {
-    _ = text;
-    return .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } };
-}
-
-fn completionCallback(buffer: []const u8, completions: *zua.Repl.linenoise.Completions) void {
+fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+    _ = arg;
     const items = &amp;[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
-        if (std.mem.startsWith(u8, item, buffer)) {
-            zua.Repl.linenoise.addCompletion(completions, item);
+        if (std.mem.startsWith(u8, item, prefix)) {
+            _ = completer.add(item);
         }
     }
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-    try globals.set(&amp;ctx, "example",      example);
-    try globals.set(&amp;ctx, "custom_magic", example);
-
-    try zua.Repl.run(z, .{
-        .welcome_message     = "Welcome to the zua REPL!\n",
-        .history_path        = "zua_repl_history.txt",
-        .completion_callback = completionCallback,
-        .identifier_hook     = customIdentifier,
-        .color_config        = zua.Repl.highlight.ColorConfig{
-            .keyword       = .{ .color = .{ .ansi = 93 }, .bold = true },
-            .keyword_value = .{ .color = .{ .ansi = 96 } },
-            .builtin       = .{ .color = .{ .ansi = 32 } },
-            .custom        = customColor,
-            .name          = .{ .color = .{ .ansi = 37 } },
-            .string        = .{ .color = .{ .ansi = 34 } },
-            .integer       = .{ .color = .{ .ansi = 95 } },
-            .number        = .{ .color = .{ .ansi = 95 } },
-            .symbol        = .{ .color = .{ .ansi = 33 } },
-            .comment       = .{ .color = .{ .ansi = 90 }, .dim = true },
-        },
+    try state.addGlobals(&amp;ctx, .{
+        .example = example,
+        .custom_magic = example,
     });
+
+    try zua.Repl.run(state, .{
+        .welcome_message = "Welcome to the zua REPL!\n",
+        .history_path = "zua_repl_history.txt",
+        .completion_hook = completionCallback,
+        .color_hook = colorize,
+        .stack_trace = true,
+    });
+}
+
+fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    return switch (kind) {
+        .keyword =&gt; .{ .fg = .{ .ansi = 93 }, .bold = true },
+        .keyword_value =&gt; .{ .fg = .{ .ansi = 96 } },
+        .builtin =&gt; .{ .fg = .{ .ansi = 32 } },
+        .name =&gt; if (std.mem.startsWith(u8, text, "custom_"))
+            .{ .fg = .{ .rgb = .{ .r = 160, .g = 32, .b = 240 } } }
+        else
+            .{ .fg = .{ .ansi = 37 } },
+        .string =&gt; .{ .fg = .{ .ansi = 34 } },
+        .integer, .number =&gt; .{ .fg = .{ .ansi = 95 } },
+        .symbol =&gt; .{ .fg = .{ .ansi = 33 } },
+        .comment =&gt; .{ .fg = .{ .ansi = 90 }, .dim = true },
+    };
 }
 </code></pre>
 
@@ -326,7 +335,7 @@ pub fn main(init: std.process.Init) !void {
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="varargs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="shared-libraries.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -337,7 +346,7 @@ pub fn main(init: std.process.Init) !void {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="varargs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="shared-libraries.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

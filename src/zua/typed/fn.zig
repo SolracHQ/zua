@@ -82,13 +82,13 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         /// Creates a typed wrapper from a pushable Lua callback value.
         ///
         /// This convenience helper accepts existing raw function handles or
-        /// typed callback wrappers such as `zua.ZuaFn` and returns a typed
+        /// typed callback wrappers such as `NativeFn`/`Closure` and returns a typed
         /// `Fn(ins, outs)` handle for use in Zig values.
         pub fn create(ctx: *Context, callback: anytype) @This() {
             comptime {
                 const callback_type = @TypeOf(callback);
                 if (@typeInfo(callback_type) == .@"fn" or
-                    (@typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaFn")))
+                    (@typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaNativeFunction")))
                 {
                     checkCallbackSignature(callback, ins, outs);
                 }
@@ -120,7 +120,7 @@ fn callbackWrapperType(comptime callback: anytype) type {
     if (comptime @typeInfo(callback_type) == .@"fn") {
         return @TypeOf(Native.new(callback, .{}));
     }
-    if (comptime @typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaFn")) {
+    if (comptime @typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaNativeFunction")) {
         return callback_type;
     }
     @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
@@ -161,7 +161,7 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
             ", got " ++ @typeName(actual));
     }
 
-    const actual_return = wrapper_type.__ZuaFnReturnType;
+    const actual_return = wrapper_type.__ZuaNativeReturnType;
     const expected_return = outs;
     const actual_return_count = typeElementCount(actual_return);
     const expected_return_count = typeElementCount(expected_return);
@@ -173,4 +173,8 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));
     }
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

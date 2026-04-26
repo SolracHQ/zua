@@ -14,6 +14,7 @@ pub const ArgsConfig = trampoline.ArgsConfig;
 /// This controls how argument decoding failures and Zig errors are reported
 /// when the callback is called from Lua.
 pub const ErrorConfig = trampoline.ErrorConfig;
+pub const ArgInfo = trampoline.ArgInfo;
 
 // Public type constructors used in signatures (e.g. return type annotations).
 
@@ -46,7 +47,7 @@ pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) 
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context }, toTrampolineConfig(error_config));
+    return trampoline.make(function, .{ .hasContext = has_context }, error_config, .{});
 }
 
 /// Creates a concrete `Closure` wrapper type for the provided Zig callback.
@@ -80,7 +81,7 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, toTrampolineConfig(error_config));
+    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, error_config, .{});
 }
 
 // Value constructors used at call sites.
@@ -103,7 +104,7 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
 /// const fn_val = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" });
 /// globals.set(&ctx, "add", fn_val);
 /// ```
-pub fn new(comptime function: anytype, comptime error_config: ErrorConfig) NativeFn(function, error_config) {
+pub inline fn new(comptime function: anytype, comptime error_config: ErrorConfig) NativeFn(function, error_config) {
     return .{};
 }
 
@@ -126,7 +127,7 @@ pub fn new(comptime function: anytype, comptime error_config: ErrorConfig) Nativ
 /// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{});
 /// globals.set(&ctx, "counter", counter);
 /// ```
-pub fn closure(
+pub inline fn closure(
     comptime function: anytype,
     initial: anytype,
     comptime error_config: ErrorConfig,
@@ -134,11 +135,6 @@ pub fn closure(
     return .{ .initial = initial };
 }
 
-fn toTrampolineConfig(comptime cfg: ErrorConfig) trampoline.ErrorConfig {
-    return .{
-        .parse_err_fmt = cfg.parse_err_fmt,
-        .parse_err_hook = cfg.parse_err_hook,
-        .zig_err_fmt = cfg.zig_err_fmt,
-        .zig_err_hook = cfg.zig_err_hook,
-    };
+test {
+    std.testing.refAllDecls(@This());
 }

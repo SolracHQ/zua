@@ -3,8 +3,8 @@ const std = @import("std");
 // Low-level Lua API
 pub const lua = @import("lua/lua.zig");
 
-// linenoise c bindings for REPL input
-pub const linenoise = @import("linenoise/linenoise.zig");
+// low level isocline bindings
+pub const isocline = @import("isocline/isocline.zig");
 
 // State holders
 pub const Context = @import("zua/state/context.zig");
@@ -36,6 +36,9 @@ pub const Meta = @import("zua/meta.zig");
 // Final Execution utilities
 pub const Executor = @import("zua/exec/executor.zig");
 pub const Repl = @import("zua/repl/repl.zig");
+
+// Lua Doc generation utilities
+pub const Docs = @import("zua/docs/docs.zig");
 
 test {
     std.testing.refAllDecls(@This());

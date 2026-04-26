@@ -64,19 +64,18 @@ fn makeCounter(_: *zua.Context) Counter {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&ctx, "Counter", makeCounter);
-    try globals.set(&ctx, "makeEqCondition", makeEqCondition);
-    try globals.set(&ctx, "makeRangeCondition", makeRangeCondition);
-    try globals.set(&ctx, "describeCondition", describeCondition);
+    try state.addGlobals(&ctx, .{
+        .Counter = makeCounter,
+        .makeEqCondition = makeEqCondition,
+        .makeRangeCondition = makeRangeCondition,
+        .describeCondition = describeCondition,
+    });
 
     try executor.execute(&ctx, .{ .code = .{ .string =
         \\local c = Counter()

@@ -1,115 +1,197 @@
 //! ANSI syntax highlighting helpers for the embedded REPL.
 //!
-//! This module maps lexer token kinds to color and style sequences and
-//! renders highlighted source text for the current REPL line.
+//! Tokens are classified by the lexer and mapped to bbcode style tags
+//! understood by isocline's ic_highlight_formatted. The output string
+//! must match the raw input character-for-character outside of the tags.
 const std = @import("std");
+const isocline = @import("../../isocline/isocline.zig");
 const lexer = @import("lexer.zig");
 
-/// ANSI color variants used by the REPL syntax highlighter.
+// Token kinds
+
+pub const TokenKind = enum {
+    keyword,
+    keyword_value,
+    builtin,
+    name,
+    string,
+    integer,
+    number,
+    symbol,
+    comment,
+};
+
+// Color and style types
+
+/// An ANSI/RGB color value used by a style.
 ///
-/// This type is returned by custom identifier hooks and is used by the
-/// highlight renderer to produce the proper escape sequence for the current
-/// terminal.
+/// .none leaves the channel at the terminal default.
+/// .ansi uses a standard 8/16-color ANSI index.
+/// .ansi256 uses the 256-color xterm palette.
+/// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Color = union(enum) {
     none,
     ansi: u8,
     ansi256: u8,
     rgb: struct { r: u8, g: u8, b: u8 },
 
-    pub fn render(self: Color, buf: []u8) []const u8 {
-        return switch (self) {
-            .none => buf[0..0],
-            .ansi => |n| std.fmt.bufPrint(buf, "\x1b[{d}m", .{n}) catch buf[0..0],
-            .ansi256 => |n| std.fmt.bufPrint(buf, "\x1b[38;5;{d}m", .{n}) catch buf[0..0],
-            .rgb => |c| std.fmt.bufPrint(buf, "\x1b[38;2;{d};{d};{d}m", .{ c.r, c.g, c.b }) catch buf[0..0],
+    pub fn writeBbcodeFg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+        const result = switch (self) {
+            .none => return,
+            .ansi => |n| try std.fmt.allocPrint(allocator, "ansi-color={d} ", .{n}),
+            .ansi256 => |n| try std.fmt.allocPrint(allocator, "ansi-color={d} ", .{n}),
+            .rgb => |c| try std.fmt.allocPrint(allocator, "#{x:0>2}{x:0>2}{x:0>2} ", .{ c.r, c.g, c.b }),
         };
+        defer allocator.free(result);
+        try out.appendSlice(allocator, result);
+    }
+
+    pub fn writeBbcodeBg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+        const result = switch (self) {
+            .none => return,
+            .ansi => |n| try std.fmt.allocPrint(allocator, "on ansi-color={d} ", .{n}),
+            .ansi256 => |n| try std.fmt.allocPrint(allocator, "on ansi-color={d} ", .{n}),
+            .rgb => |c| try std.fmt.allocPrint(allocator, "on #{x:0>2}{x:0>2}{x:0>2} ", .{ c.r, c.g, c.b }),
+        };
+        defer allocator.free(result);
+        try out.appendSlice(allocator, result);
     }
 };
 
-/// A rendered ANSI style used to highlight a single token kind.
-///
-/// `Style` combines a base `Color` with optional bold and dim attributes.
-/// The resulting escape sequence is emitted before the token text.
+/// A renderable style combining colors and text attributes.
 pub const Style = struct {
-    color: Color = .none,
+    fg: Color = .none,
+    bg: Color = .none,
     bold: bool = false,
     dim: bool = false,
+    italic: bool = false,
 
-    pub fn render(self: Style, buf: []u8) []const u8 {
-        var out: []const u8 = buf[0..0];
-        if (self.color != .none) {
-            out = self.color.render(buf);
-        }
-        if (self.bold) {
-            const seq = std.fmt.bufPrint(buf[out.len..], "\x1b[1m", .{}) catch buf[0..0];
-            out = buf[0 .. out.len + seq.len];
-        }
-        if (self.dim) {
-            const seq = std.fmt.bufPrint(buf[out.len..], "\x1b[2m", .{}) catch buf[0..0];
-            out = buf[0 .. out.len + seq.len];
-        }
-        return out;
+    pub fn isEmpty(self: Style) bool {
+        return self.fg == .none and
+            self.bg == .none and
+            !self.bold and
+            !self.dim and
+            !self.italic;
+    }
+
+    /// Write the opening bbcode tag for this style, e.g. "[#ff0000 b]".
+    /// Does nothing when the style is empty.
+    pub fn writeOpenTag(self: Style, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+        if (self.isEmpty()) return;
+        try out.append(allocator, '[');
+        try self.fg.writeBbcodeFg(allocator, out);
+        try self.bg.writeBbcodeBg(allocator, out);
+        if (self.bold) try out.appendSlice(allocator, "b ");
+
+        if (self.italic) try out.appendSlice(allocator, "i ");
+        if (self.dim) try out.appendSlice(allocator, "dim ");
+        try out.append(allocator, ']');
+    }
+
+    pub fn writeCloseTag(_: Style, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
+        try out.appendSlice(allocator, "[/]");
     }
 };
 
-/// Syntax highlight configuration used by the REPL.
+/// Optional per-token style override hook.
 ///
-/// Each field controls the ANSI style emitted for a specific token kind.
-/// The `custom` hook may classify identifiers as `.custom` and return a
-/// `Color` to render those names specially.
-pub const ColorConfig = struct {
-    keyword: Style = .{ .color = .{ .ansi = 94 }, .bold = true },
-    keyword_value: Style = .{ .color = .{ .ansi = 96 } },
-    builtin: Style = .{ .color = .{ .ansi = 36 } },
-    custom: ?*const fn ([]const u8) Color = null,
-    name: Style = .{},
-    string: Style = .{ .color = .{ .ansi = 32 } },
-    integer: Style = .{ .color = .{ .ansi = 36 } },
-    number: Style = .{ .color = .{ .ansi = 36 } },
-    symbol: Style = .{ .color = .{ .ansi = 33 } },
-    comment: Style = .{ .color = .{ .ansi = 90 } },
+/// Return null to fall back to the built-in default for the kind.
+pub const ColorHook = ?*const fn (kind: TokenKind, text: []const u8) ?Style;
+
+/// Highlight state forwarded through isocline opaque arg pointers.
+pub const HighlightState = struct {
+    allocator: std.mem.Allocator,
+    color_hook: ColorHook,
 };
 
-/// Highlights the provided Lua source using the configured REPL colors.
+/// C callback wrapper for isocline syntax highlighting.
 ///
-/// This returns an ANSI-escaped buffer that can be displayed directly by the
-/// REPL line editor. It uses the lexer token list and the supplied identifier
-/// hook to classify tokens, then applies the configured `ColorConfig` styles.
+/// The callback delegates to `process` and forwards the formatted bbcode
+/// result back to isocline.
+pub fn highlightCallbackC(
+    henv: ?*isocline.HighlightEnv,
+    input: [*c]const u8,
+    arg: ?*anyopaque,
+) callconv(.c) void {
+    const state: *HighlightState = @ptrCast(@alignCast(arg orelse return));
+    const source = std.mem.span(input);
+    const formatted = process(state.allocator, source, state.color_hook) orelse return;
+    defer state.allocator.free(formatted);
+    // formatted is null-terminated; pass pointer as C string.
+    isocline.highlightFormatted(henv, input, formatted.ptr);
+}
+
+// Internal helpers
+
+fn tokenKindFromLexer(kind: lexer.TokenKind) ?TokenKind {
+    return switch (kind) {
+        .keyword => .keyword,
+        .keyword_value => .keyword_value,
+        .builtin => .builtin,
+        .name => .name,
+        .string => .string,
+        .integer => .integer,
+        .number => .number,
+        .symbol => .symbol,
+        .comment => .comment,
+        .eos => null,
+    };
+}
+
+fn defaultStyle(kind: TokenKind) Style {
+    return switch (kind) {
+        .keyword => .{ .fg = .{ .ansi = 94 }, .bold = true },
+        .keyword_value => .{ .fg = .{ .ansi = 96 } },
+        .builtin => .{ .fg = .{ .ansi = 36 } },
+        .name => .{},
+        .string => .{ .fg = .{ .ansi = 32 } },
+        .comment => .{ .fg = .{ .ansi = 90 } },
+        .integer => .{ .fg = .{ .ansi = 36 } },
+        .number => .{ .fg = .{ .ansi = 36 } },
+        .symbol => .{ .fg = .{ .ansi = 33 } },
+    };
+}
+
+fn resolveStyle(kind: TokenKind, text: []const u8, hook: ColorHook) Style {
+    if (hook) |f| {
+        if (f(kind, text)) |s| return s;
+    }
+    return defaultStyle(kind);
+}
+
+/// Build a bbcode-annotated copy of `source` suitable for ic_highlight_formatted.
 ///
-/// Arguments:
-/// - allocator: Allocator used to build the highlighted output buffer.
-/// - source: The raw Lua source line to highlight.
-/// - config: Color configuration for each token kind.
-/// - custom_hook: Optional identifier hook used for `.custom` token classification.
+/// The returned slice is null-terminated and owned by the caller (allocated with
+/// `allocator`). Returns null on allocation failure or lexer error.
 pub fn process(
     allocator: std.mem.Allocator,
     source: []const u8,
-    config: ColorConfig,
-    custom_hook: lexer.IdentifierHook,
+    color_hook: ColorHook,
 ) ?[]const u8 {
-    var tokens = lexer.lexWithHook(allocator, source, custom_hook) catch return null;
+    var tokens = lexer.lex(allocator, source) catch return null;
     defer tokens.deinit(allocator);
 
-    var out: std.ArrayList(u8) = .empty;
+    // Pre-size: bbcode tags can add ~30 bytes per token in the worst case.
+    var out = std.ArrayList(u8).initCapacity(allocator, source.len + tokens.items.len * 32) catch return null;
     var ok = false;
     defer if (!ok) out.deinit(allocator);
 
-    var color_buffer: [64]u8 = undefined;
     var pos: usize = 0;
     for (tokens.items) |token| {
-        if (token.kind == lexer.TokenKind.eos) continue;
+        const kind = tokenKindFromLexer(token.kind) orelse continue;
+
+        // Emit any gap between the last token and this one verbatim.
         if (token.offset > pos) {
             out.appendSlice(allocator, source[pos..token.offset]) catch return null;
         }
 
         const slice = source[token.offset .. token.offset + token.len];
-        const style = highlightStyle(token.kind, slice, config);
-        const color = style.render(color_buffer[0..]);
+        const style = resolveStyle(kind, slice, color_hook);
 
-        if (color.len != 0) {
-            out.appendSlice(allocator, color) catch return null;
+        if (!style.isEmpty()) {
+            style.writeOpenTag(allocator, &out) catch return null;
             out.appendSlice(allocator, slice) catch return null;
-            out.appendSlice(allocator, "\x1b[0m") catch return null;
+            style.writeCloseTag(allocator, &out) catch return null;
         } else {
             out.appendSlice(allocator, slice) catch return null;
         }
@@ -121,22 +203,16 @@ pub fn process(
         out.appendSlice(allocator, source[pos..]) catch return null;
     }
 
+    // Null-terminate so the C API can use the pointer directly.
+    out.append(allocator, 0) catch return null;
+
     ok = true;
-    return std.heap.c_allocator.dupeZ(u8, out.items) catch null;
+    const raw = out.toOwnedSlice(allocator) catch return null;
+    // Return the slice without the sentinel so callers get a plain []const u8,
+    // but the underlying buffer is still null-terminated for C interop.
+    return raw;
 }
 
-fn highlightStyle(kind: lexer.TokenKind, text: []const u8, config: ColorConfig) Style {
-    return switch (kind) {
-        .keyword => config.keyword,
-        .keyword_value => config.keyword_value,
-        .builtin => config.builtin,
-        .custom => if (config.custom) |hook| .{ .color = hook(text) } else config.name,
-        .string => config.string,
-        .comment => config.comment,
-        .integer => config.integer,
-        .number => config.number,
-        .symbol => config.symbol,
-        .name => config.name,
-        .eos => .{},
-    };
+test {
+    std.testing.refAllDecls(@This());
 }

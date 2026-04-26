@@ -83,7 +83,7 @@ const Connection = struct {
 
 ## __gc and the capture strategy
 
-Closures created with `ZuaFn.newClosure` use the `.capture` strategy, which also supports `__gc`. If the captured struct owns heap memory or Lua handles, declare `__gc` in `Meta.Capture` the same way:
+Closures created with `Native.closure` use the `.capture` strategy, which also supports `__gc`. If the captured struct owns heap memory or Lua handles, declare `__gc` in `Meta.Capture` the same way:
 
 ```zig
 const BufState = struct {

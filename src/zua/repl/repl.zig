@@ -1,335 +1,191 @@
-//! Interactive Lua REPL for Zua using linenoise.
+//! Interactive Lua REPL for Zua backed by isocline.
 //!
-//! This module exposes a small embedded REPL that evaluates each line
-//! against an existing Zua `State`. Each evaluation uses a fresh `Context`
-//! so temporary allocations are cleared after every command.
+//! This module exposes an embedded REPL that evaluates each line against an
+//! existing Zua `State`. Every command runs in a fresh `Context`, so scratch
+//! allocations are reclaimed before the next input.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const lexer = @import("lexer.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
 
-// Export repl components since callbacks may need to reference them
 pub const highlight = @import("highlight.zig");
-pub const linenoise = @import("../../linenoise/linenoise.zig");
+pub const completion = @import("completion.zig");
+pub const isocline = @import("../../isocline/isocline.zig");
 
 const REPL = @This();
 
-/// Optional callback used by the REPL to populate completion candidates.
-///
-/// `buffer` is the current input line. The callback may add suggestions to
-/// `completions` for the line currently being edited.
-pub const CompletionCallback = ?*const fn (buffer: []const u8, completions: *linenoise.Completions) void;
+// Exported helpers and callback types used by REPL clients.
+pub const Completer = completion.Completer;
+pub const CompletionHook = completion.CompletionHook;
 
 /// REPL configuration options.
 pub const Config = struct {
-    /// Prompt displayed for the first line of input.
-    prompt: [:0]const u8 = "zua> ",
+    /// Prompt displayed for each input line.
+    prompt: [:0]const u8 = "zua",
 
-    /// Prompt displayed when input spans multiple lines.
-    continuation_prompt: [:0]const u8 = "...> ",
+    /// Optional completion callback for the embedded REPL.
+    ///
+    /// The callback receives the current completion prefix and a stable
+    /// `*zua.Repl.Completer` helper. Use it to add custom completion candidates
+    /// that are not derived from the live Lua runtime.
+    completion_hook: CompletionHook = null,
 
-    /// Optional completion callback used by the embedded linenoise editor.
-    completion_callback: CompletionCallback = null,
+    /// Opaque argument forwarded to the completion callback.
+    completion_arg: ?*anyopaque = null,
 
-    /// Optional path to a history file to load and save command history.
+    /// Optional path to a history file.
     history_path: ?[:0]const u8 = null,
 
-    /// Optional welcome message printed when the REPL starts.
+    /// Maximum number of history entries. -1 uses the isocline default (200).
+    history_max: c_long = -1,
+
+    /// Optional welcome message printed once at startup.
     welcome_message: ?[]const u8 = null,
 
-    /// Optional custom lexer hook for user-defined identifier classification.
-    identifier_hook: lexer.IdentifierHook = null,
+    /// Enable stack trace capture for runtime errors.
+    ///
+    /// When enabled, the REPL uses the executor's stack trace
+    /// mode so tracebacks are available for errors.
+    stack_trace: bool = false,
 
-    /// Optional ANSI color configuration for syntax highlighting.
-    color_config: ?highlight.ColorConfig = null,
+    /// Optional per-token style hook for syntax highlighting.
+    color_hook: highlight.ColorHook = null,
+
+    /// When enabled, the REPL resolves chained Lua identifiers against the
+    /// live runtime and completes globals, fields, and methods.
+    ///
+    /// If configured, runtime completion is performed before the optional
+    /// `completion_hook`, so your custom hook can augment or override results.
+    lua_completion: bool = false,
 };
 
-/// The registered tab completion callback.
-/// This is stored globally because the linenoise API only supports one
-/// completion callback at a time.
-var completion_callback: CompletionCallback = null;
-
-/// Active syntax highlighting colors used by the current REPL session.
-/// This global exists to bridge the lexer/highlighter to the linenoise callback.
-var active_color_config: highlight.ColorConfig = .{};
-var active_identifier_hook: lexer.IdentifierHook = null;
-
-var running: bool = false;
+const HighlightState = highlight.HighlightState;
 
 /// Runs the interactive Zua REPL session using the provided `State`.
 ///
-/// Each entered command is evaluated in a fresh `Context`, which ensures
-/// temporary allocations are reclaimed between commands. The REPL supports
-/// multi-line input, optional history persistence, syntax highlighting, and
-/// optional completion callbacks.
-///
-/// Arguments:
-/// - state: The global Zua state used for Lua execution.
-/// - config: Runtime configuration for prompt text, history, and completion.
-///
-/// Returns:
-/// - !void: `error.Failed` on I/O or initialization failure.
+/// The REPL supports optional history persistence, syntax highlighting, and
+/// tab completion. Each entered line is evaluated in a fresh `Context`, which
+/// ensures temporary allocations are reclaimed between commands.
 pub fn run(state: *State, config: Config) !void {
-    var stdout_buffer: [4096]u8 = undefined;
-
     if (config.history_path) |path| {
-        // create the file if not already present
-        const file = std.Io.Dir.cwd().createFile(state.io, path, .{}) catch |err| {
-            return err;
-        };
-        file.close(state.io);
-        try linenoise.historyLoad(path);
+        isocline.setHistory(path, config.history_max);
     }
 
-    try printWelcome(state, &stdout_buffer, config.welcome_message);
+    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\n use shift+tab for multiline input\nctrl+d to exit\n", " \t\r\n");
+    try printMessage(state, "", welcome_message);
 
-    active_color_config = if (config.color_config) |cfg| cfg else .{};
-    active_identifier_hook = config.identifier_hook;
-    linenoise.setMultiLine(true);
-    linenoise.setHighlightCallback(highlightCallbackC);
-
-    if (config.completion_callback) |callback| {
-        completion_callback = callback;
-        linenoise.setCompletionCallback(completionCallbackC);
-    }
-
-    running = true;
-    while (running) {
-        const source = (try readChunk(state, config)) orelse break;
-        defer state.allocator.free(source);
-
-        if (std.mem.trim(u8, source, " \t\r\n").len == 0) continue;
-
-        const history_entry = try state.allocator.dupeZ(u8, source);
-        defer state.allocator.free(history_entry);
-        _ = linenoise.historyAdd(history_entry);
-
-        try evalSource(state, source, &stdout_buffer);
-    }
-
-    if (config.history_path) |path| {
-        try linenoise.historySave(path);
-    }
-}
-
-/// Reads one REPL input chunk, including continuation lines.
-///
-/// This returns a single owned buffer containing the full command entered by
-/// the user, until the input is complete or EOF is reached.
-fn readChunk(state: *State, config: Config) !?[]u8 {
-    var source: std.ArrayList(u8) = .empty;
-    errdefer source.deinit(state.allocator);
-
-    var current_prompt = config.prompt;
-    while (true) {
-        const line = linenoise.readLine(current_prompt) orelse {
-            if (source.items.len == 0) return null;
-            return try source.toOwnedSlice(state.allocator);
-        };
-        defer linenoise.freeLine(line);
-
-        if (source.items.len != 0) {
-            try source.append(state.allocator, '\n');
-        }
-        try source.appendSlice(state.allocator, line);
-
-        if (isChunkComplete(state, source.items)) {
-            return try source.toOwnedSlice(state.allocator);
-        }
-
-        current_prompt = config.continuation_prompt;
-    }
-}
-
-/// Checks whether the current source is a complete Lua chunk.
-///
-/// Expressions starting with `=` are accepted if they can be rewritten as a
-/// valid `return` statement. Otherwise this defers to Lua syntax parsing for
-/// statement completeness.
-fn isChunkComplete(state: *State, source: []const u8) bool {
-    if (canLoadAsExpression(state, source) catch false) return true;
-    return checkStatementCompleteness(state, source);
-}
-
-/// Attempts to load the source as a Lua statement and detects an unfinished
-/// chunk when the parser reports an unexpected end-of-file.
-fn checkStatementCompleteness(state: *State, source: []const u8) bool {
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
-
-    const chunk = state.allocator.dupeZ(u8, source) catch return true;
-    defer state.allocator.free(chunk);
-
-    lua.loadString(state.luaState, chunk) catch |err| {
-        if (err == error.Syntax) {
-            if (lua.toString(state.luaState, -1)) |msg| {
-                if (std.mem.endsWith(u8, msg, "<eof>")) {
-                    return false;
-                }
-            }
-        }
-        return true;
+    // Highlight state lives on the stack; isocline holds a pointer for the
+    // duration of the session. The HighlightState outlives every readline call.
+    var hl_state = HighlightState{
+        .allocator = state.allocator,
+        .color_hook = config.color_hook,
     };
 
-    return true;
+    // Register the highlighter once for the whole session.
+    isocline.setDefaultHighlighter(highlight.highlightCallbackC, &hl_state);
+    defer isocline.setDefaultHighlighter(null, null);
+
+    if (config.completion_hook != null or config.lua_completion) {
+        var comp_state = completion.CompletionState{
+            .state = state,
+            .user_hook = config.completion_hook,
+            .user_arg = config.completion_arg,
+            .lua_enabled = config.lua_completion,
+        };
+        isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
+    }
+    defer isocline.setDefaultCompleter(null, null);
+
+    while (true) {
+        const line = isocline.readline(config.prompt) orelse break;
+        defer isocline.freeMemory(@ptrCast(@constCast(line.ptr)));
+
+        const source = std.mem.trim(u8, line, " \t\r\n");
+        if (source.len == 0) continue;
+
+        try evalSource(state, source, config);
+    }
 }
 
-/// Evaluates a single REPL command and prints any result or error.
-///
-/// This creates a temporary `Context` for the command and restores the Lua
-/// stack top before returning.
-fn evalSource(state: *State, source: []const u8, stdout_buffer: *[4096]u8) !void {
+// Evaluation
+
+/// Evaluate a single REPL source line.
+fn evalSource(state: *State, source: []const u8, config: Config) !void {
     var ctx = Context.init(state);
     defer ctx.deinit();
 
     const previous_top = lua.getTop(state.luaState);
     defer lua.setTop(state.luaState, previous_top);
 
-    const can_expr = canLoadAsExpression(state, source) catch false;
-    if (can_expr) {
-        const expr_source = expressionInput(source);
-        const wrapped = try allocateReturnSource(state, expr_source);
-        defer state.allocator.free(wrapped);
-
-        lua.loadString(state.luaState, wrapped[0 .. wrapped.len - 1 :0]) catch {
-            const raw_message = lua.toDisplayString(state.luaState, -1) orelse "unknown error";
-            try printMessage(state, stdout_buffer, "Syntax error: ", raw_message);
-            return;
-        };
-
-        lua.protectedCall(state.luaState, 0, lua.MULT_RETURN, 0) catch {
-            const raw_message = lua.toDisplayString(state.luaState, -1) orelse "unknown error";
-            try printMessage(state, stdout_buffer, "Runtime error: ", raw_message);
-            return;
-        };
-
-        try printResults(state, stdout_buffer, previous_top);
-        return;
-    }
-
+    const wrapped = try tryWrapAsExpression(&ctx, source);
+    const load_source = wrapped orelse source;
     var executor: Executor = .{};
-    var config: Executor.Config = undefined;
-    config = Executor.Config{ .code = .{ .string = source }, .stack_trace = .no, .take_error_ownership = false };
-
-    executor.execute(&ctx, config) catch {
-        const message = ctx.err orelse "unknown error";
-        try printMessage(state, stdout_buffer, "Error: ", message);
-        return;
+    const exec_config = Executor.Config{
+        .code = .{ .string = load_source },
+        .stack_trace = if (config.stack_trace) .arena else .no,
+        .take_error_ownership = false,
     };
 
-    try printResults(state, stdout_buffer, previous_top);
+    executor.eval_untyped(&ctx, exec_config) catch {
+        const msg = ctx.err orelse "unknown error";
+        try printMessage(state, "Error: ", msg);
+        return;
+    };
+    try printResults(state, previous_top);
 }
 
-/// Normalizes REPL expression input by stripping a leading `=` prefix.
-///
-/// `=expr` is treated as `return expr` for convenience in the interactive prompt.
-fn expressionInput(source: []const u8) []const u8 {
-    const trimmed = std.mem.trim(u8, source, " \t\r\n");
-    if (trimmed.len != 0 and trimmed[0] == '=') {
-        return std.mem.trim(u8, trimmed[1..], " \t\r\n");
-    }
-    return source;
-}
+fn tryWrapAsExpression(ctx: *Context, source: []const u8) !?[]const u8 {
+    const trimmed_source = std.mem.trim(u8, source, " \t\r\n");
+    if (trimmed_source.len == 0) return null;
 
-/// Checks whether the given source can be parsed as an expression in the REPL.
-fn canLoadAsExpression(state: *State, source: []const u8) !bool {
-    const expr_source = expressionInput(source);
-    if (expr_source.len == 0) return false;
+    const previous_top = lua.getTop(ctx.state.luaState);
+    defer lua.setTop(ctx.state.luaState, previous_top);
 
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
-
-    const prefix = "return ";
-    const wrapped = try state.allocator.alloc(u8, prefix.len + expr_source.len + 1);
-    defer state.allocator.free(wrapped);
-
-    @memcpy(wrapped[0..prefix.len], prefix);
-    @memcpy(wrapped[prefix.len .. prefix.len + expr_source.len], expr_source);
-    wrapped[wrapped.len - 1] = 0;
-
-    lua.loadString(state.luaState, wrapped[0 .. wrapped.len - 1 :0]) catch |err| {
+    const wrapped = try std.fmt.allocPrintSentinel(ctx.arena(), "return {s}", .{trimmed_source}, 0);
+    lua.loadString(ctx.state.luaState, wrapped) catch |err| {
         return switch (err) {
-            error.Syntax => false,
+            error.Syntax => null,
             else => err,
         };
     };
-
-    return true;
+    return wrapped;
 }
 
-/// Allocates a null-terminated source buffer for `return` expressions.
-fn allocateReturnSource(state: *State, source: []const u8) ![]u8 {
-    const prefix = "return ";
-    const buffer = try state.allocator.alloc(u8, prefix.len + source.len + 1);
-    @memcpy(buffer[0..prefix.len], prefix);
-    @memcpy(buffer[prefix.len .. prefix.len + source.len], source);
-    buffer[buffer.len - 1] = 0;
-    return buffer;
-}
+// Output helpers
 
-/// Prints all values returned by the last Lua expression or statement.
-fn printResults(state: *State, stdout_buffer: *[4096]u8, previous_top: lua.StackIndex) !void {
-    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer);
+/// Print all values returned by the last Lua expression or statement.
+fn printResults(state: *State, previous_top: lua.StackIndex) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
     const top = lua.getTop(state.luaState);
     if (top == previous_top) return;
 
     var first = true;
     var index: lua.StackIndex = previous_top + 1;
     while (index <= top) : (index += 1) {
-        if (!first) {
-            try writer.interface.print(", ", .{});
-        }
+        if (!first) try writer.interface.print(", ", .{});
         first = false;
 
-        const abs_index = lua.absIndex(state.luaState, index);
-        if (lua.toDisplayString(state.luaState, abs_index)) |value| {
-            try writer.interface.print("{s}", .{value});
+        const abs = lua.absIndex(state.luaState, index);
+        if (lua.toDisplayString(state.luaState, abs)) |v| {
+            try writer.interface.print("{s}", .{v});
         } else {
-            try writer.interface.print("{s}", .{lua.typeName(state.luaState, lua.valueType(state.luaState, abs_index))});
+            try writer.interface.print("{s}", .{lua.typeName(state.luaState, lua.valueType(state.luaState, abs))});
         }
     }
     try writer.interface.print("\n", .{});
     try writer.interface.flush();
 }
 
-/// Prints the REPL welcome message to stdout.
-fn printWelcome(state: *State, stdout_buffer: *[4096]u8, welcome_message: ?[]const u8) !void {
-    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer);
-    if (welcome_message) |message| {
-        try writer.interface.print("{s}", .{message});
-    } else {
-        try writer.interface.print("Lua REPL with Zua\n", .{});
-    }
-    try writer.interface.flush();
-}
-
-/// Prints a single REPL message line with an optional prefix.
-fn printMessage(state: *State, stdout_buffer: *[4096]u8, prefix: []const u8, message: []const u8) !void {
-    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer);
+/// Print a single REPL message line using a local temporary writer buffer.
+fn printMessage(state: *State, prefix: []const u8, message: []const u8) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
     try writer.interface.print("{s}{s}\n", .{ prefix, message });
     try writer.interface.flush();
 }
 
-/// C callback wrapper for linenoise tab completion.
-fn completionCallbackC(buffer: [*c]const u8, completions: ?*linenoise.Completions) callconv(.c) void {
-    if (completion_callback) |callback| {
-        if (completions) |list| {
-            callback(std.mem.span(buffer), list);
-        }
-    }
-}
-
-/// C callback wrapper for linenoise syntax highlighting.
-///
-/// This delegates to the highlight module, which produces the ANSI-colored
-/// output for the current source line.
-fn highlightCallbackC(buffer: [*c]const u8, len: usize, out_len: [*c]usize) callconv(.c) [*c]const u8 {
-    const source = buffer[0..len];
-    var arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-    defer arena.deinit();
-    const out = highlight.process(arena.allocator(), source, active_color_config, active_identifier_hook) orelse return null;
-    out_len.* = out.len;
-    return out.ptr;
+test {
+    std.testing.refAllDecls(@This());
 }

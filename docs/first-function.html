@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,12 +188,12 @@ print(add("oops"))  -- error: add expects (i32, i32): got string
 </code></pre>
 <p>A raw Zig function reference is automatically wrapped as a Lua callable. <code>globals.set</code> generates a trampoline at compile time that decodes Lua arguments, calls your function, and pushes the return value back.</p>
 <h2 id="controlling-the-error-message"><a class="header" href="#controlling-the-error-message">Controlling the error message</a></h2>
-<p>When the caller passes wrong argument types, zua raises a Lua error before your function is ever called. By default the message is generic. Wrap the function in <code>ZuaFn.new</code> to control it:</p>
-<pre><code class="language-zig">globals.set(&amp;ctx, "add", zua.ZuaFn.new(add, .{
+<p>When the caller passes wrong argument types, zua raises a Lua error before your function is ever called. By default the message is generic. Wrap the function in <code>Native.new</code> to control it:</p>
+<pre><code class="language-zig">globals.set(&amp;ctx, "add", zua.Native.new(add, .{
     .parse_err_fmt = "add expects (i32, i32): {s}",
 }));
 </code></pre>
-<p>The <code>{s}</code> placeholder is filled with the decode failure description, for example <code>"expected i32, got string"</code>. <code>ZuaFn.new</code> is optional; use it only when the default message is not informative enough.</p>
+<p>The <code>{s}</code> placeholder is filled with the decode failure description, for example <code>"expected i32, got string"</code>. <code>Native.new</code> is optional; use it only when the default message is not informative enough.</p>
 <h2 id="argument-types"><a class="header" href="#argument-types">Argument types</a></h2>
 <p>zua maps Lua value types to Zig types automatically. The supported mappings for function parameters are:</p>
 <div class="table-wrapper">

@@ -7,16 +7,16 @@ Every zua program starts with three things: a `State`, a `Context`, and an `Exec
 `State` is the Lua VM. It owns the allocator, the Lua state pointer, and all the global tables.
 
 ```zig
-const z = try zua.State.init(allocator, io);
-defer z.deinit();
+const state = try zua.State.init(allocator, io);
+defer state.deinit();
 ```
 
 `State.init` takes a general-purpose allocator and a `std.Io` handle. The `io` handle is how zua participates in Zig's I/O system, which controls where Lua's `print` sends output and how file operations are routed. In a standard `main`, both are available directly from `init`:
 
 ```zig
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 }
 ```
 
@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
 `Context` is the per-call environment. It owns the arena allocator used during a single Lua call, carries any error message the call produced, and is passed to most zua functions.
 
 ```zig
-var ctx = zua.Context.init(z);
+var ctx = zua.Context.init(state);
 defer ctx.deinit();
 ```
 
@@ -63,16 +63,15 @@ The second argument to `eval` is the Zig type you expect back. zua decodes the L
 
 ## Globals
 
-To expose functions and values to Lua, get the globals table and call `set`:
+To expose functions and values to Lua, prefer `state.addGlobals(&ctx, .{ ... })`:
 
 ```zig
-const globals = z.globals();
-defer globals.release();
-
-try globals.set(&ctx, "add", add);
+try state.addGlobals(&ctx, .{
+    .add = add,
+});
 ```
 
-`globals()` returns a **stack-owned handle**. Call `.release()` when you are done registering, or use `defer` immediately as shown above. The registered functions remain available to Lua after the handle is released because zua stores them in the Lua VM, not in the handle itself.
+This is the short path for filling the globals table from a module-like struct literal. If you need the raw globals handle because you are doing something more manual, `state.globals()` is still there.
 
 ## Putting it together
 
@@ -87,17 +86,14 @@ fn add(a: i32, b: i32) i32 {
 }
 
 pub fn main(init: std.process.Init) !void {
-    const z = try zua.State.init(init.gpa, init.io);
-    defer z.deinit();
+    const state = try zua.State.init(init.gpa, init.io);
+    defer state.deinit();
 
     var executor = zua.Executor{};
-    var ctx = zua.Context.init(z);
+    var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const globals = z.globals();
-    defer globals.release();
-
-    try globals.set(&ctx, "add", add);
+    try state.addGlobals(&ctx, .{ .add = add });
 
     try executor.execute(&ctx, .{ .code = .{ .string = "print(add(1, 2))" } });
 }

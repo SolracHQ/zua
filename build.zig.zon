@@ -1,6 +1,6 @@
 .{
     .name = .zua,
-    .version = "0.9.0",
+    .version = "0.10.0",
     .fingerprint = 0xcedae8e9495a980e,
     .minimum_zig_version = "0.16.0-dev.2984+cb7d2b056",
     .dependencies = .{
@@ -8,6 +8,10 @@
             .url = "git+https://github.com/SolracHQ/lua?ref=v5.4#416697f000fcb7c336251081034b5e542cfff4af",
             .hash = "lua-5.4.8-X5QMMkjiDABht2oXTPEWzQXmIYCtCQC9rRCiOjx5hrWx",
         },
+        .isocline = .{
+            .url = "git+https://github.com/daanx/isocline.git#8d6dc1ef95b1b46711e66eb23d39d4467a0fcdac",
+            .hash = "N-V-__8AAI8vEwDBxs8j_tnNzQ_8MiBQBrR3SXBPbov4JY9z",
+        },
     },
-    .paths = .{ "build.zig", "build.zig.zon", "CHANGELOG.md", "README.md", "example", "src", "vendor", "handbook" },
+    .paths = .{ "build.zig", "build.zig.zon", "CHANGELOG.md", "README.md", "example", "src", "handbook" },
 }

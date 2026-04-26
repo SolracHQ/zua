@@ -92,10 +92,10 @@ Use `Handlers.release` in `__gc` when the object owns a collection of nested han
 Sometimes you want a Lua-facing table with public fields but a private Zig pointer backing it. Store the pointer as a light userdata key with a name that signals it is private by convention:
 
 ```zig
-const entry_table = Table.create(z, 0, 3);
+const entry_table = Table.create(state, 0, 3);
 try entry_table.set(&ctx, "address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
-try entry_table.set(&ctx, "get", zua.ZuaFn.new(entryGet, .{}));
+try entry_table.set(&ctx, "get", zua.Native.new(entryGet, .{}));
 ```
 
 Inside the method, retrieve it:

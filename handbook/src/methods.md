@@ -29,7 +29,7 @@ local p = makePoint(3, 4)
 print(p:distance())  -- 5
 ```
 
-The keys in the method list become the Lua method names. The values are Zig function references, and the same `ZuaFn.new` wrapper that works for top-level functions works here too, covered below.
+The keys in the method list become the Lua method names. The values are Zig function references, and the same `Native.new` wrapper that works for top-level functions works here too, covered below.
 
 > [!NOTE]
 > `zua.Meta.List` is a helper for sequence-like `.object` values. It generates common collection methods such as `get`, `__index`, `__len`, and `iter`, and merges them with your custom methods. Do not redeclare those generated names in the supplied `methods` struct.
@@ -130,12 +130,12 @@ print(tostring(c))  -- (4, 6)
 
 ## Customizing method error messages
 
-Wrap a method in `ZuaFn.new` to control the error message when argument types do not match. The wrapper is optional and can be used on individual methods without affecting others:
+Wrap a method in `Native.new` to control the error message when argument types do not match. The wrapper is optional and can be used on individual methods without affecting others:
 
 ```zig
 const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
-        .increment = zua.ZuaFn.new(increment, .{
+        .increment = zua.Native.new(increment, .{
             .parse_err_fmt = "Counter:increment expects (integer): {s}",
         }),
         .reset = reset,

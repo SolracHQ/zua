@@ -104,6 +104,10 @@ fn parseSingle(
     value_count: lua.StackCount,
     comptime T: type,
 ) !T {
+    if (comptime T == VarArgs) {
+        return buildVarArgs(ctx, start_index, @intCast(value_count));
+    }
+
     const is_opt = comptime Mapper.isOptional(T);
     const ChildT = if (comptime is_opt) Mapper.optionalChild(T) else T;
 
@@ -196,7 +200,7 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .pointer => |p| p.child,
         else => T,
     };
-    const strategy = comptime Meta.getMeta(Pointee).strategy;
+    const strategy = comptime Meta.strategyOf(Pointee);
 
     switch (strategy) {
         .object => {
@@ -278,9 +282,8 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
     }
 
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
-        if (comptime Meta.getMeta(T).decode_hook) |hook| {
-            if (try hook(ctx, prim)) |decoded| return decoded;
-        }
+        const meta = comptime Meta.getMeta(T);
+        if (try meta.DecodeHook(ctx, prim)) |decoded| return decoded;
     }
 
     return switch (comptime @typeInfo(T)) {
@@ -374,7 +377,7 @@ fn decodePointer(
 /// For `.object` or `.ptr` strategies the value is decoded as a host pointer.
 /// Otherwise, regular structs are decoded from Lua tables.
 fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
-    const strategy = comptime Meta.getMeta(T).strategy;
+    const strategy = comptime Meta.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
@@ -406,7 +409,7 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
 /// Objects and pointers are decoded via host pointer strategy. Other unions are
 /// decoded from Lua tables by matching the active variant key.
 fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context) !T {
-    const strategy = comptime Meta.getMeta(T).strategy;
+    const strategy = comptime Meta.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
@@ -508,4 +511,8 @@ fn decodeSlice(comptime T: type, ctx: *Context, table: Table) !T {
     }
 
     return slice;
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

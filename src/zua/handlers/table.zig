@@ -151,9 +151,8 @@ pub fn takeOwnership(self: Table) Table {
 /// ```
 pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) !void {
     const Key = @TypeOf(key);
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
+    const index = self.pushForAccess();
+    defer lua.pop(self.state.luaState, 1);
 
     if (comptime isStringKeyType(Key)) {
         const key_text = coerceStringKey(key);
@@ -185,15 +184,16 @@ pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) !void {
 /// ```
 pub fn get(self: Table, ctx: *Context, key: anytype, comptime T: type) !T {
     const Key = @TypeOf(key);
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
+    const index = self.pushForAccess();
 
     if (comptime isStringKeyType(Key)) {
         _ = lua.getField(self.state.luaState, index, coerceStringKey(key));
     } else {
         _ = lua.getIndex(self.state.luaState, index, coerceIntegerKey(key));
     }
+
+    // Drop the access copy while keeping the fetched value on the stack.
+    lua.remove(self.state.luaState, index);
 
     return try Mapper.Decoder.decodeAt(ctx, -1, T);
 }
@@ -214,9 +214,8 @@ pub fn get(self: Table, ctx: *Context, key: anytype, comptime T: type) !T {
 /// ```
 pub fn has(self: Table, key: anytype) bool {
     const Key = @TypeOf(key);
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
+    const index = self.pushForAccess();
+    defer lua.pop(self.state.luaState, 1);
 
     if (comptime isStringKeyType(Key)) {
         _ = lua.getField(self.state.luaState, index, coerceStringKey(key));
@@ -239,9 +238,8 @@ pub fn has(self: Table, key: anytype) bool {
 /// tbl.setLightUserdata("ctx", some_ptr);
 /// ```
 pub fn setLightUserdata(self: Table, key: [:0]const u8, ptr: anytype) void {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
+    const index = self.pushForAccess();
+    defer lua.pop(self.state.luaState, 1);
     lua.pushLightUserdata(self.state.luaState, ptr);
     lua.setField(self.state.luaState, index, key);
 }
@@ -257,9 +255,8 @@ pub fn setLightUserdata(self: Table, key: [:0]const u8, ptr: anytype) void {
 /// const ptr = try tbl.getLightUserdata(ctx, "ctx", *MyType);
 /// ```
 pub fn getLightUserdata(self: Table, key: [:0]const u8, comptime T: type) Error!*T {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
+    const index = self.pushForAccess();
+    defer lua.pop(self.state.luaState, 1);
     _ = lua.getField(self.state.luaState, index, key);
     defer lua.pop(self.state.luaState, 1);
 
@@ -280,14 +277,10 @@ pub fn getLightUserdata(self: Table, key: [:0]const u8, comptime T: type) Error!
 /// tbl.setMetatable(meta_tbl);
 /// ```
 pub fn setMetatable(self: Table, mt: Table) void {
-    const index = switch (self.handle) {
-        inline else => |idx| idx,
-    };
-    const mt_index = switch (mt.handle) {
-        inline else => |idx| idx,
-    };
-    lua.pushValue(self.state.luaState, mt_index);
+    const index = self.pushForAccess();
+    _ = mt.pushForAccess();
     _ = lua.setMetatable(self.state.luaState, index);
+    lua.pop(self.state.luaState, 1);
 }
 
 /// Releases this table from the stack (if stack-owned) or registry (if registry-owned).
@@ -298,6 +291,44 @@ pub fn setMetatable(self: Table, mt: Table) void {
 /// ```
 pub fn release(self: Table) void {
     self.handle.release(self.state);
+}
+
+// Pushes the table onto the stack and returns its absolute index.
+// Caller must call lua.pop(state.luaState, 1) when done.
+fn pushForAccess(self: Table) lua.StackIndex {
+    switch (self.handle) {
+        .borrowed, .stack_owned => |idx| {
+            lua.pushValue(self.state.luaState, idx);
+        },
+        .registry_owned => |ref| {
+            _ = lua.rawGetI(self.state.luaState, lua.REGISTRY_INDEX, ref);
+        },
+    }
+
+    return lua.absIndex(self.state.luaState, -1);
+}
+
+/// Returns all string keys present in this table.
+///
+/// The result slice is allocated from `ctx.arena()` and is valid for the
+/// duration of the current callback invocation.
+pub fn keys(self: Table, ctx: *Context) ![]const [:0]const u8 {
+    const table_index = self.pushForAccess();
+    defer lua.pop(self.state.luaState, 1);
+
+    var key_list = std.ArrayList([:0]const u8).empty;
+
+    lua.pushNil(self.state.luaState);
+    while (lua.next(self.state.luaState, table_index)) {
+        if (lua.valueType(self.state.luaState, -2) == .string) {
+            if (lua.toString(self.state.luaState, -2)) |key| {
+                try key_list.append(ctx.arena(), key);
+            }
+        }
+        lua.pop(self.state.luaState, 1);
+    }
+
+    return key_list.items;
 }
 
 // Key helpers
@@ -337,4 +368,8 @@ fn coerceIntegerKey(key: anytype) lua.Integer {
         .comptime_int, .int => std.math.cast(lua.Integer, key) orelse @panic("table integer key out of range"),
         else => @compileError("Unsupported table key type: " ++ @typeName(T)),
     };
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }

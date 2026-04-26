@@ -180,3 +180,9 @@ fn isHandlerType(comptime T: type) bool {
     }
     return isHandler;
 }
+
+const std = @import("std");
+
+test {
+    std.testing.refAllDecls(@This());
+}

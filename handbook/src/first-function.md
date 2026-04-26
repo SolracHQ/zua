@@ -21,15 +21,15 @@ A raw Zig function reference is automatically wrapped as a Lua callable. `global
 
 ## Controlling the error message
 
-When the caller passes wrong argument types, zua raises a Lua error before your function is ever called. By default the message is generic. Wrap the function in `ZuaFn.new` to control it:
+When the caller passes wrong argument types, zua raises a Lua error before your function is ever called. By default the message is generic. Wrap the function in `Native.new` to control it:
 
 ```zig
-globals.set(&ctx, "add", zua.ZuaFn.new(add, .{
+globals.set(&ctx, "add", zua.Native.new(add, .{
     .parse_err_fmt = "add expects (i32, i32): {s}",
 }));
 ```
 
-The `{s}` placeholder is filled with the decode failure description, for example `"expected i32, got string"`. `ZuaFn.new` is optional; use it only when the default message is not informative enough.
+The `{s}` placeholder is filled with the decode failure description, for example `"expected i32, got string"`. `Native.new` is optional; use it only when the default message is not informative enough.
 
 ## Argument types
 

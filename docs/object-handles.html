@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-56fa5ad3.js";
+            window.path_to_searchindex_js = "searchindex-e94c044b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-79e67a69.js"></script>
+        <script src="toc-7d4dbe5e.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -247,10 +247,10 @@ fn buildScene(bg: zua.Object(Texture), click: zua.Function) Scene {
 <p>Use <code>Handlers.release</code> in <code>__gc</code> when the object owns a collection of nested handles that would be tedious to release individually.</p>
 <h2 id="hiding-a-pointer-on-a-table"><a class="header" href="#hiding-a-pointer-on-a-table">Hiding a pointer on a table</a></h2>
 <p>Sometimes you want a Lua-facing table with public fields but a private Zig pointer backing it. Store the pointer as a light userdata key with a name that signals it is private by convention:</p>
-<pre><code class="language-zig">const entry_table = Table.create(z, 0, 3);
+<pre><code class="language-zig">const entry_table = Table.create(state, 0, 3);
 try entry_table.set(&amp;ctx, "address", "0x7fff1234");
 entry_table.setLightUserdata("_ptr", entry_ptr);
-try entry_table.set(&amp;ctx, "get", zua.ZuaFn.new(entryGet, .{}));
+try entry_table.set(&amp;ctx, "get", zua.Native.new(entryGet, .{}));
 </code></pre>
 <p>Inside the method, retrieve it:</p>
 <pre><code class="language-zig">fn entryGet(ctx: *zua.Context, self: zua.Table) !f64 {

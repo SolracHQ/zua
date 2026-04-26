@@ -6,7 +6,7 @@ zua uses handles to represent Lua values on the Zig side. A handle is a thin wra
 
 **Borrowed** handles point to a Lua stack slot owned by the current call frame. They are valid only for the duration of the current callback. You cannot call `.release()` on a borrowed handle because you do not own it.
 
-**Stack-owned** handles own a Lua value on the current stack. They remain valid until `.release()` removes the value. `Table.create()` and `z.globals()` return stack-owned handles.
+**Stack-owned** handles own a Lua value on the current stack. They remain valid until `.release()` removes the value. `Table.create()` and `state.globals()` return stack-owned handles.
 
 **Registry-owned** handles own a Lua registry reference. They survive after the current callback returns and across callback invocations. They must be released explicitly with `.release()`.
 
@@ -48,7 +48,7 @@ If you need a second registry-owned copy without releasing the original handle, 
 Stack-owned handles must be released before the enclosing scope returns. The standard pattern is `defer`:
 
 ```zig
-const globals = z.globals();
+const globals = state.globals();
 defer globals.release();
 
 try globals.set(&ctx, "add", add);
@@ -59,7 +59,7 @@ If you return a stack-owned handle from a callback, the trampoline takes ownersh
 
 ```zig
 fn makeTable(ctx: *zua.Context) !zua.Table {
-    const t = Table.create(z, 0, 2);
+    const t = Table.create(state, 0, 2);
     try t.set(ctx, "x", 1);
     try t.set(ctx, "y", 2);
     return t;  // trampoline takes ownership, do not release
