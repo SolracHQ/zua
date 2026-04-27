@@ -97,6 +97,14 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
             return .{ .function = Function.fromStack(ctx.state, -1) };
         }
 
+        /// Creates a new typed wrapper owning the same underlying Lua function.
+        ///
+        /// The returned wrapper duplicates the raw function handle so both the
+        /// original and the new wrapper remain valid.
+        pub fn owned(self: @This()) @This() {
+            return .{ .function = self.function.owned() };
+        }
+
         /// Converts the wrapper into an owned function handle anchored in the Lua registry.
         ///
         /// This is useful when the callback needs to be stored beyond the current Lua

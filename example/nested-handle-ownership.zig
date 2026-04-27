@@ -1,99 +1,98 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const Handlers = zua.Handlers;
-const Userdata = zua.Userdata;
 const Object = zua.Object;
 
-const Leaf = struct {
-    pub const ZUA_META = zua.Meta.Object(Leaf, .{
+const User = struct {
+    pub const ZUA_META = zua.Meta.Object(User, .{
         .getId = getId,
         .getName = getName,
-        .__gc = deinit,
+        .__gc = cleanup,
     });
 
     id: i32,
     name: []const u8,
 
-    pub fn getId(self: *Leaf) i32 {
+    pub fn getId(self: *User) i32 {
         return self.id;
     }
 
-    pub fn getName(self: *Leaf) []const u8 {
+    pub fn getName(self: *User) []const u8 {
         return self.name;
     }
 
-    fn deinit(self: *Leaf) void {
-        _ = self;
-        std.debug.print("Leaf object being released\n", .{});
+    fn cleanup(ctx: *zua.Context, self: *User) void {
+        std.debug.print("User {d}:{s} released\n", .{ self.id, self.name });
+        ctx.heap().free(self.name);
     }
 };
 
-const Extra = struct {
-    other: Object(Leaf),
-};
-
-const ChildGroup = struct {
-    children: [5]Object(Leaf),
-    extra: Extra,
-};
-
-const Root = struct {
-    pub const ZUA_META = zua.Meta.Object(Root, .{
-        .describe = describe,
-        .__gc = deinit,
+const UserList = struct {
+    pub const ZUA_META = zua.Meta.List(UserList, UserList.getElements, .{
+        .__gc = UserList.cleanup,
+        .__tostring = UserList.display,
+        .filter = UserList.filter,
     });
 
-    group: ChildGroup,
+    users: std.ArrayList(zua.Object(User)),
 
-    pub fn describe(self: *Root, ctx: *zua.Context) ![]const u8 {
-        const first_child = self.group.children[0].get();
-        const extra_child = self.group.extra.other.get();
-        return std.fmt.allocPrint(
-            ctx.arena(),
-            "root with first child={d}:{s} and extra={d}:{s}",
-            .{ first_child.id, first_child.name, extra_child.id, extra_child.name },
-        ) catch try ctx.failTyped([]const u8, "out of memory");
+    pub fn getElements(self: *UserList) []zua.Object(User) {
+        return self.users.items;
     }
 
-    fn deinit(self: *Root) void {
-        std.debug.print("Root object being released\n", .{});
-        Handlers.release(Root, self.*);
+    pub fn display(ctx: *zua.Context, self: *UserList) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "UserList({d} users)", .{self.users.items.len}) catch ctx.failTyped([]const u8, "Out of memory");
+    }
+
+    pub fn filter(ctx: *zua.Context, self: *UserList, min_id: i32) !UserList {
+        var result = std.ArrayList(zua.Object(User)).empty;
+        errdefer result.deinit(ctx.heap());
+
+        for (self.users.items) |user| {
+            if (user.get().id >= min_id) {
+                try result.append(ctx.heap(), user.owned());
+            }
+        }
+
+        return UserList{ .users = result };
+    }
+
+    fn cleanup(ctx: *zua.Context, self: *UserList) void {
+        for (self.users.items) |user| {
+            user.release();
+        }
+        self.users.deinit(ctx.heap());
     }
 };
 
-const Holder = struct {
-    pub const ZUA_META = zua.Meta.Object(Holder, .{
-        .__gc = deinit,
-    });
-
-    root: Object(Root),
-
-    fn deinit(self: *Holder) void {
-        std.debug.print("Holder object being released\n", .{});
-        self.root.release();
+pub fn createUserList(ctx: *zua.Context, elements: []const User) !UserList {
+    var list = UserList{ .users = std.ArrayList(zua.Object(User)).empty };
+    errdefer {
+        for (list.users.items) |user| {
+            user.release();
+        }
+        list.users.deinit(ctx.heap());
     }
-};
 
-fn makeLeaf(id: i32, name: []const u8) Leaf {
-    return Leaf{ .id = id, .name = name };
+    for (elements) |user| {
+        try list.users.append(ctx.heap(), zua.Object(User).create(ctx.state, user).takeOwnership());
+    }
+    return list;
 }
 
-fn makeRoot(c1: Object(Leaf), c2: Object(Leaf), c3: Object(Leaf), c4: Object(Leaf), c5: Object(Leaf), extra: Object(Leaf)) Root {
-    var wrapper = Root{
-        .group = ChildGroup{
-            .children = .{ c1, c2, c3, c4, c5 },
-            .extra = Extra{ .other = extra },
-        },
+fn makeUser(ctx: *zua.Context, id: i32, name: []const u8) !User {
+    const owned_name = ctx.heap().dupe(u8, name) catch return ctx.failTyped(User, "out of memory");
+    return User{ .id = id, .name = owned_name };
+}
+
+fn makeUsers(ctx: *zua.Context) !UserList {
+    const users = [_]User{
+        try makeUser(ctx, 1, "alice"),
+        try makeUser(ctx, 2, "bob"),
+        try makeUser(ctx, 3, "carol"),
+        try makeUser(ctx, 4, "dave"),
     };
-    Handlers.takeOwnership(&wrapper);
-    return wrapper;
-}
-
-fn makeHolder(_: *zua.Context, root: Object(Root)) Holder {
-    var holder = Holder{ .root = root };
-    Handlers.takeOwnership(&holder);
-    return holder;
+    return try createUserList(ctx, users[0..]);
 }
 
 pub fn main(init: std.process.Init) !void {
@@ -105,28 +104,20 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .make_leaf = zua.Native.new(makeLeaf, .{ .parse_err_fmt = "make_leaf expects (number, string): {s}" }),
-        .make_root = zua.Native.new(makeRoot, .{ .parse_err_fmt = "make_root expects (leaf, leaf, leaf, leaf, leaf, leaf): {s}" }),
-        .make_holder = zua.Native.new(makeHolder, .{ .parse_err_fmt = "make_holder expects (root): {s}" }),
+        .make_users = zua.Native.new(makeUsers, .{ .parse_err_fmt = "make_users expects no arguments: {s}" }),
     });
 
     executor.execute(&ctx, .{ .code = .{ .string =
-        \\local function build_and_drop()
-        \\    local root = make_root(
-        \\        make_leaf(1, "one"),
-        \\        make_leaf(2, "two"),
-        \\        make_leaf(3, "three"),
-        \\        make_leaf(4, "four"),
-        \\        make_leaf(5, "five"),
-        \\        make_leaf(6, "extra")
-        \\    )
-        \\    local holder = make_holder(root)
-        \\    print("created holder and root inside function")
-        \\end
-        \\build_and_drop()
+        \\local users = make_users()
+        \\print(users)
+        \\local filtered = users:filter(3)
+        \\print(filtered)
+        \\users = nil
         \\collectgarbage("collect")
+        \\print("after clearing users: only filtered should keep user 3 and 4 alive")
+        \\filtered = nil
         \\collectgarbage("collect")
-        \\print("done")
+        \\print("after clearing filtered: all users should be released")
     } }) catch {
         std.debug.print("Execution error: {s}\n", .{ctx.err.?});
     };

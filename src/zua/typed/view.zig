@@ -70,6 +70,14 @@ pub fn TableView(comptime T: type) type {
             try Mapper.Encoder.fillTable(ctx, self.handle, self.ref.*);
         }
 
+        /// Creates a new view wrapper owning the same underlying Lua table handle.
+        ///
+        /// The returned view duplicates the table handle and shares the same typed
+        /// mirror for the current callback frame.
+        pub fn owned(self: @This()) @This() {
+            return .{ .handle = self.handle.owned(), .ref = self.ref };
+        }
+
         /// Converts the view's table handle to registry ownership.
         ///
         /// The typed mirror is copied into the state allocator so the view can

@@ -83,6 +83,11 @@ pub fn Object(comptime T: type) type {
             return .{ .handle = self.handle.takeOwnership() };
         }
 
+        /// Creates a second independent registry-owned handle to the same Lua userdata.
+        pub fn owned(self: @This()) @This() {
+            return .{ .handle = self.handle.owned() };
+        }
+
         /// Releases the wrapped raw userdata handle.
         pub fn release(self: @This()) void {
             self.handle.release();

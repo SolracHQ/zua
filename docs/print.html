@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e94c044b.js";
+            window.path_to_searchindex_js = "searchindex-c9c1ad23.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7d4dbe5e.js"></script>
@@ -860,6 +860,9 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
 <p><code>__gc</code> is only called for the <strong>userdata allocation itself</strong>, meaning the struct fields that live inline inside the userdata block. Fields of type <code>i32</code>, <code>f64</code>, <code>bool</code>, and similar scalar types live inline and are collected automatically with the userdata; you do not need to do anything for them.</p>
 <p>Fields that point to external memory, <code>[]const u8</code>, <code>*T</code>, or any other pointer, point to memory outside the userdata block that Lua does not know about. Those must be freed in <code>__gc</code>.</p>
 <p>Fields that hold Lua handles, <code>zua.Function</code>, <code>zua.Table</code>, <code>zua.Object(T)</code>, anchor Lua values in the registry. Those must be released in <code>__gc</code> to avoid leaking Lua references. The <a href="#object-handles-1">Object handles</a> chapter covers this in detail.</p>
+<blockquote>
+<p><strong>Warning:</strong> <code>.object</code> values are owned by Lua’s garbage collector. If you need to create an additional reference to the same object inside a method, use <code>.owned()</code> on the handle instead of copying the typed struct value by assignment. A shallow copy duplicates the payload pointers and can lead to double-free bugs when Lua collects both objects.</p>
+</blockquote>
 <h2 id="object-fields-and-the-state-allocator"><a class="header" href="#object-fields-and-the-state-allocator">Object fields and the state allocator</a></h2>
 <p>When a function creates an <code>.object</code> value, zua allocates the userdata in Lua’s GC memory and places the Zig struct directly in that allocation. This means:</p>
 <ul>
