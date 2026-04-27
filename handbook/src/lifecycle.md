@@ -41,6 +41,8 @@ Fields that point to external memory, `[]const u8`, `*T`, or any other pointer, 
 
 Fields that hold Lua handles, `zua.Function`, `zua.Table`, `zua.Object(T)`, anchor Lua values in the registry. Those must be released in `__gc` to avoid leaking Lua references. The [Object handles](./object-handles.md) chapter covers this in detail.
 
+> **Warning:** `.object` values are owned by Lua's garbage collector. If you need to create an additional reference to the same object inside a method, use `.owned()` on the handle instead of copying the typed struct value by assignment. A shallow copy duplicates the payload pointers and can lead to double-free bugs when Lua collects both objects.
+
 ## Object fields and the state allocator
 
 When a function creates an `.object` value, zua allocates the userdata in Lua's GC memory and places the Zig struct directly in that allocation. This means:

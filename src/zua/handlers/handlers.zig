@@ -34,7 +34,11 @@ pub const Handle = union(enum) {
 
     pub fn owned(self: Handle, state: *State) Handle {
         return switch (self) {
-            .registry_owned => self,
+            .registry_owned => |ref| {
+                _ = lua.rawGetI(state.luaState, lua.REGISTRY_INDEX, ref);
+                const new_ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);
+                return .{ .registry_owned = new_ref };
+            },
             .borrowed => |idx| {
                 lua.pushValue(state.luaState, idx);
                 const ref = lua.ref(state.luaState, lua.REGISTRY_INDEX);

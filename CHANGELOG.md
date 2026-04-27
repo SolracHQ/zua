@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1
+
+### Added
+- `Object(T).owned()` support for creating an additional reference to the same `.object` userdata handle without shallow-copying the underlying payload.
+- `Fn.owned()` and `TableView.owned()` support for duplicating typed Lua handles safely without copying the wrapper payload by value.
+
 ## 0.10.0
 
 ### Breaking
