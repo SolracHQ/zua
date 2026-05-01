@@ -13,73 +13,34 @@ pub const highlight = @import("highlight.zig");
 pub const completion = @import("completion.zig");
 pub const isocline = @import("../../isocline/isocline.zig");
 
-const REPL = @This();
+pub const Repl = @This();
 
 // Exported helpers and callback types used by REPL clients.
 pub const Completer = completion.Completer;
 pub const CompletionHook = completion.CompletionHook;
 
-/// REPL configuration options.
-pub const Config = struct {
-    /// Prompt displayed for each input line.
-    prompt: [:0]const u8 = "zua",
-
-    /// Optional completion callback for the embedded REPL.
-    ///
-    /// The callback receives the current completion prefix and a stable
-    /// `*zua.Repl.Completer` helper. Use it to add custom completion candidates
-    /// that are not derived from the live Lua runtime.
-    completion_hook: CompletionHook = null,
-
-    /// Opaque argument forwarded to the completion callback.
-    completion_arg: ?*anyopaque = null,
-
-    /// Optional path to a history file.
-    history_path: ?[:0]const u8 = null,
-
-    /// Maximum number of history entries. -1 uses the isocline default (200).
-    history_max: c_long = -1,
-
-    /// Optional welcome message printed once at startup.
-    welcome_message: ?[]const u8 = null,
-
-    /// Enable stack trace capture for runtime errors.
-    ///
-    /// When enabled, the REPL uses the executor's stack trace
-    /// mode so tracebacks are available for errors.
-    stack_trace: bool = false,
-
-    /// Optional per-token style hook for syntax highlighting.
-    color_hook: highlight.ColorHook = null,
-
-    /// When enabled, the REPL resolves chained Lua identifiers against the
-    /// live runtime and completes globals, fields, and methods.
-    ///
-    /// If configured, runtime completion is performed before the optional
-    /// `completion_hook`, so your custom hook can augment or override results.
-    lua_completion: bool = false,
-};
-
 const HighlightState = highlight.HighlightState;
+
+pub const Config = @import("config.zig");
 
 /// Runs the interactive Zua REPL session using the provided `State`.
 ///
 /// The REPL supports optional history persistence, syntax highlighting, and
 /// tab completion. Each entered line is evaluated in a fresh `Context`, which
 /// ensures temporary allocations are reclaimed between commands.
-pub fn run(state: *State, config: Config) !void {
+pub fn run(state: *State, config: *Config) !void {
     if (config.history_path) |path| {
         isocline.setHistory(path, config.history_max);
     }
 
-    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\n use shift+tab for multiline input\nctrl+d to exit\n", " \t\r\n");
+    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\nUse shift+tab for multiline input\nUse ctrl+d to exit\n", " \t\r\n");
     try printMessage(state, "", welcome_message);
 
     // Highlight state lives on the stack; isocline holds a pointer for the
     // duration of the session. The HighlightState outlives every readline call.
     var hl_state = HighlightState{
         .allocator = state.allocator,
-        .color_hook = config.color_hook,
+        .config = config,
     };
 
     // Register the highlighter once for the whole session.
@@ -111,7 +72,7 @@ pub fn run(state: *State, config: Config) !void {
 // Evaluation
 
 /// Evaluate a single REPL source line.
-fn evalSource(state: *State, source: []const u8, config: Config) !void {
+fn evalSource(state: *State, source: []const u8, config: *Config) !void {
     var ctx = Context.init(state);
     defer ctx.deinit();
 

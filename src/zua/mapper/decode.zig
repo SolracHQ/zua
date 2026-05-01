@@ -453,7 +453,15 @@ fn decodeEnum(comptime T: type, prim: Primitive, ctx: *Context) !T {
 pub fn decodeStruct(ctx: *Context, table: Table, comptime T: type) !T {
     var result: T = undefined;
     inline for (@typeInfo(T).@"struct".fields) |field| {
-        @field(result, field.name) = try table.get(ctx, field.name, field.type);
+        if (comptime field.default_value_ptr) |default| {
+            if (try table.get(ctx, field.name, ?field.type)) |val| {
+                @field(result, field.name) = val;
+            } else {
+                @field(result, field.name) = @as(*const field.type, @ptrCast(@alignCast(default))).*;
+            }
+        } else {
+            @field(result, field.name) = try table.get(ctx, field.name, field.type);
+        }
     }
     return result;
 }

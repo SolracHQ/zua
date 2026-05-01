@@ -3,6 +3,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
+run:
+    zig build run
+
 test:
     zig build test
 

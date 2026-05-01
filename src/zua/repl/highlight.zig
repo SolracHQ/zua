@@ -6,6 +6,12 @@
 const std = @import("std");
 const isocline = @import("../../isocline/isocline.zig");
 const lexer = @import("lexer.zig");
+const Config = @import("config.zig");
+const Context = @import("../state/context.zig");
+const Meta = @import("../meta.zig");
+const Mapper = @import("../mapper/mapper.zig");
+
+const Primitive = Mapper.Decoder.Primitive;
 
 // Token kinds
 
@@ -19,6 +25,8 @@ pub const TokenKind = enum {
     number,
     symbol,
     comment,
+
+    pub const ZUA_META = Meta.strEnum(TokenKind, .{});
 };
 
 // Color and style types
@@ -34,6 +42,8 @@ pub const Color = union(enum) {
     ansi: u8,
     ansi256: u8,
     rgb: struct { r: u8, g: u8, b: u8 },
+
+    pub const ZUA_META = Meta.Table(Color, .{}).withDecode(decodeColor);
 
     pub fn writeBbcodeFg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         const result = switch (self) {
@@ -57,6 +67,51 @@ pub const Color = union(enum) {
         try out.appendSlice(allocator, result);
     }
 };
+
+fn decodeColor(ctx: *Context, prim: Primitive) !?Color {
+    return switch (prim) {
+        .integer => |n| Color{ .ansi = @intCast(n) },
+        .string => |s| {
+            if (s.len > 0 and s[0] == '#') {
+                if (s.len != 7) return ctx.failTyped(?Color, "invalid RGB hex color, expected #rrggbb");
+                const r = try std.fmt.parseInt(u8, s[1..3], 16);
+                const g = try std.fmt.parseInt(u8, s[3..5], 16);
+                const b = try std.fmt.parseInt(u8, s[5..7], 16);
+                return Color{ .rgb = .{ .r = r, .g = g, .b = b } };
+            }
+            const ansi = ansiFromName(s) orelse return ctx.failTyped(?Color, "unknown color name");
+            return Color{ .ansi = ansi };
+        },
+        .table => |t| {
+            const r = try t.get(ctx, "r", u8);
+            const g = try t.get(ctx, "g", u8);
+            const b = try t.get(ctx, "b", u8);
+            return Color{ .rgb = .{ .r = r, .g = g, .b = b } };
+        },
+        else => null,
+    };
+}
+
+fn ansiFromName(name: []const u8) ?u8 {
+    if (std.mem.eql(u8, name, "black")) return 0;
+    if (std.mem.eql(u8, name, "red")) return 1;
+    if (std.mem.eql(u8, name, "green")) return 2;
+    if (std.mem.eql(u8, name, "yellow")) return 3;
+    if (std.mem.eql(u8, name, "blue")) return 4;
+    if (std.mem.eql(u8, name, "magenta")) return 5;
+    if (std.mem.eql(u8, name, "purple")) return 5;
+    if (std.mem.eql(u8, name, "cyan")) return 6;
+    if (std.mem.eql(u8, name, "white")) return 7;
+    if (std.mem.eql(u8, name, "bright_black") or std.mem.eql(u8, name, "gray") or std.mem.eql(u8, name, "grey")) return 8;
+    if (std.mem.eql(u8, name, "bright_red")) return 9;
+    if (std.mem.eql(u8, name, "bright_green")) return 10;
+    if (std.mem.eql(u8, name, "bright_yellow")) return 11;
+    if (std.mem.eql(u8, name, "bright_blue")) return 12;
+    if (std.mem.eql(u8, name, "bright_magenta")) return 13;
+    if (std.mem.eql(u8, name, "bright_cyan")) return 14;
+    if (std.mem.eql(u8, name, "bright_white")) return 15;
+    return null;
+}
 
 /// A renderable style combining colors and text attributes.
 pub const Style = struct {
@@ -101,7 +156,7 @@ pub const ColorHook = ?*const fn (kind: TokenKind, text: []const u8) ?Style;
 /// Highlight state forwarded through isocline opaque arg pointers.
 pub const HighlightState = struct {
     allocator: std.mem.Allocator,
-    color_hook: ColorHook,
+    config: *Config,
 };
 
 /// C callback wrapper for isocline syntax highlighting.
@@ -115,7 +170,7 @@ pub fn highlightCallbackC(
 ) callconv(.c) void {
     const state: *HighlightState = @ptrCast(@alignCast(arg orelse return));
     const source = std.mem.span(input);
-    const formatted = process(state.allocator, source, state.color_hook) orelse return;
+    const formatted = process(state.allocator, source, &state.config.style_overrides, state.config.color_hook) orelse return;
     defer state.allocator.free(formatted);
     // formatted is null-terminated; pass pointer as C string.
     isocline.highlightFormatted(henv, input, formatted.ptr);
@@ -152,7 +207,13 @@ fn defaultStyle(kind: TokenKind) Style {
     };
 }
 
-fn resolveStyle(kind: TokenKind, text: []const u8, hook: ColorHook) Style {
+fn resolveStyle(
+    kind: TokenKind,
+    text: []const u8,
+    style_overrides: *const std.EnumArray(TokenKind, ?Style),
+    hook: ColorHook,
+) Style {
+    if (style_overrides.get(kind)) |s| return s;
     if (hook) |f| {
         if (f(kind, text)) |s| return s;
     }
@@ -166,6 +227,7 @@ fn resolveStyle(kind: TokenKind, text: []const u8, hook: ColorHook) Style {
 pub fn process(
     allocator: std.mem.Allocator,
     source: []const u8,
+    style_overrides: *const std.EnumArray(TokenKind, ?Style),
     color_hook: ColorHook,
 ) ?[]const u8 {
     var tokens = lexer.lex(allocator, source) catch return null;
@@ -186,7 +248,7 @@ pub fn process(
         }
 
         const slice = source[token.offset .. token.offset + token.len];
-        const style = resolveStyle(kind, slice, color_hook);
+        const style = resolveStyle(kind, slice, style_overrides, color_hook);
 
         if (!style.isEmpty()) {
             style.writeOpenTag(allocator, &out) catch return null;

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.11.0
+
+### Breaking
+- `run` now takes `*Config` instead of a by-value struct. The old `try run(state, .{...})` single-expression form no longer works; callers must explicitly allocate and pass a mutable pointer:
+  - Stack-allocated (no Lua exposure): `var config = zua.Repl.Config{ ... }; try run(state, &config);`
+  - Object-wrapped (Lua-facing): `const config = zua.Object(zua.Repl.Config).create(state, .{ ... }); try run(state, config.get());`
+- `Config` is now an `.object` strategy type (`Meta.Object(Config, .{...})`). Simple stack-allocated usage requires `var` + `&` but otherwise unchanged.
+- `decodeStruct` now respects field defaults: when a Lua table key is missing and the Zig field has a default value, the default is used instead of failing. Fields without defaults still require the key.
+
+### Added
+- `Color.decodeColor` decode hook: `Color` now accepts integers (ANSI), `"#rrggbb"` strings, named color strings, and `{r,g,b}` tables from Lua via `Meta.Table(Color, .{}).withDecode(...)`.
+- `Config.setColor(kind, color)` and `Config.setStyle(kind, style)` Lua-facing methods for overriding per-token syntax highlighting at runtime.
+- Per-token `style_overrides` field on `Config`, checked before the `color_hook` callback, so `setColor`/`setStyle` changes are visible immediately during highlighting.
+
 ## 0.10.1
 
 ### Added
