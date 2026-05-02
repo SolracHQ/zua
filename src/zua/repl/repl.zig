@@ -38,8 +38,9 @@ pub fn run(state: *State, config: *Config) !void {
 
     // Highlight state lives on the stack; isocline holds a pointer for the
     // duration of the session. The HighlightState outlives every readline call.
+    // ctx is set each readline cycle before the call.
     var hl_state = HighlightState{
-        .allocator = state.allocator,
+        .ctx = undefined,
         .config = config,
     };
 
@@ -59,27 +60,29 @@ pub fn run(state: *State, config: *Config) !void {
     defer isocline.setDefaultCompleter(null, null);
 
     while (true) {
+        var ctx = Context.init(state);
+        defer ctx.deinit();
+
+        hl_state.ctx = &ctx;
+
         const line = isocline.readline(config.prompt) orelse break;
         defer isocline.freeMemory(@ptrCast(@constCast(line.ptr)));
 
         const source = std.mem.trim(u8, line, " \t\r\n");
         if (source.len == 0) continue;
 
-        try evalSource(state, source, config);
+        try evalSource(state, &ctx, source, config);
     }
 }
 
 // Evaluation
 
 /// Evaluate a single REPL source line.
-fn evalSource(state: *State, source: []const u8, config: *Config) !void {
-    var ctx = Context.init(state);
-    defer ctx.deinit();
-
+fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *Config) !void {
     const previous_top = lua.getTop(state.luaState);
     defer lua.setTop(state.luaState, previous_top);
 
-    const wrapped = try tryWrapAsExpression(&ctx, source);
+    const wrapped = try tryWrapAsExpression(ctx, source);
     const load_source = wrapped orelse source;
     var executor: Executor = .{};
     const exec_config = Executor.Config{
@@ -88,7 +91,7 @@ fn evalSource(state: *State, source: []const u8, config: *Config) !void {
         .take_error_ownership = false,
     };
 
-    executor.eval_untyped(&ctx, exec_config) catch {
+    executor.eval_untyped(ctx, exec_config) catch {
         const msg = ctx.err orelse "unknown error";
         try printMessage(state, "Error: ", msg);
         return;

@@ -80,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
         .test_list = TestList{ .items = SampleItems[0..] },
     });
 
-    try zua.Repl.run(state, .{
+    var repl_config = zua.Repl.Config{
         // First line shown when the REPL starts.
         .welcome_message = "Welcome to Zua REPL with custom lexer and multi line support!\nshift+tab for multiline input, ctrl+d to exit.\n",
         // Path to save REPL command history across sessions.
@@ -88,13 +88,15 @@ pub fn main(init: std.process.Init) !void {
         // Custom syntax highlighting rules for the REPL input.
         .completion_hook = completionCallback,
         // you can customize all the token kinds.
-        .color_hook = colorize,
+        .style_hook = colorize,
         .stack_trace = true,
         .lua_completion = true,
-    });
+    };
+    try zua.Repl.run(state, &repl_config);
 }
 
-fn colorize(kind: highlight.TokenKind, text: []const u8) ?highlight.Style {
+fn colorize(ctx: *zua.Context, kind: highlight.TokenKind, text: []const u8) ?highlight.Style {
+    _ = ctx;
     return switch (kind) {
         .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
         .keyword_value => .{ .fg = .{ .ansi = 96 } },

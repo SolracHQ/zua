@@ -8,6 +8,7 @@ const isocline = @import("../../isocline/isocline.zig");
 const lexer = @import("lexer.zig");
 const Config = @import("config.zig");
 const Context = @import("../state/context.zig");
+const lua = @import("../../lua/lua.zig");
 const Meta = @import("../meta.zig");
 const Mapper = @import("../mapper/mapper.zig");
 
@@ -151,11 +152,11 @@ pub const Style = struct {
 /// Optional per-token style override hook.
 ///
 /// Return null to fall back to the built-in default for the kind.
-pub const ColorHook = ?*const fn (kind: TokenKind, text: []const u8) ?Style;
+pub const ColorHook = ?*const fn (ctx: *Context, kind: TokenKind, text: []const u8) ?Style;
 
 /// Highlight state forwarded through isocline opaque arg pointers.
 pub const HighlightState = struct {
-    allocator: std.mem.Allocator,
+    ctx: *Context,
     config: *Config,
 };
 
@@ -168,10 +169,12 @@ pub fn highlightCallbackC(
     input: [*c]const u8,
     arg: ?*anyopaque,
 ) callconv(.c) void {
-    const state: *HighlightState = @ptrCast(@alignCast(arg orelse return));
+    const hs: *HighlightState = @ptrCast(@alignCast(arg orelse return));
+    const previous_top = lua.getTop(hs.ctx.state.luaState);
+    defer lua.setTop(hs.ctx.state.luaState, previous_top);
     const source = std.mem.span(input);
-    const formatted = process(state.allocator, source, &state.config.style_overrides, state.config.color_hook) orelse return;
-    defer state.allocator.free(formatted);
+    const formatted = process(hs.ctx, source, &hs.config.style_overrides, hs.config) orelse return;
+    defer hs.ctx.arena().free(formatted);
     // formatted is null-terminated; pass pointer as C string.
     isocline.highlightFormatted(henv, input, formatted.ptr);
 }
@@ -211,11 +214,15 @@ fn resolveStyle(
     kind: TokenKind,
     text: []const u8,
     style_overrides: *const std.EnumArray(TokenKind, ?Style),
-    hook: ColorHook,
+    config: *Config,
+    ctx: *Context,
 ) Style {
-    if (style_overrides.get(kind)) |s| return s;
-    if (hook) |f| {
-        if (f(kind, text)) |s| return s;
+    if (style_overrides.get(kind)) |style| return style;
+    if (config.lua_style_hook) |hook| {
+        if (hook.call(ctx, .{ kind, text }) catch null) |style| return style;
+    }
+    if (config.style_hook) |hook| {
+        if (hook(ctx, kind, text)) |style| return style;
     }
     return defaultStyle(kind);
 }
@@ -225,18 +232,19 @@ fn resolveStyle(
 /// The returned slice is null-terminated and owned by the caller (allocated with
 /// `allocator`). Returns null on allocation failure or lexer error.
 pub fn process(
-    allocator: std.mem.Allocator,
+    ctx: *Context,
     source: []const u8,
     style_overrides: *const std.EnumArray(TokenKind, ?Style),
-    color_hook: ColorHook,
+    config: *Config,
 ) ?[]const u8 {
-    var tokens = lexer.lex(allocator, source) catch return null;
-    defer tokens.deinit(allocator);
+    const arena = ctx.arena();
+    var tokens = lexer.lex(arena, source) catch return null;
+    defer tokens.deinit(arena);
 
     // Pre-size: bbcode tags can add ~30 bytes per token in the worst case.
-    var out = std.ArrayList(u8).initCapacity(allocator, source.len + tokens.items.len * 32) catch return null;
+    var out = std.ArrayList(u8).initCapacity(arena, source.len + tokens.items.len * 32) catch return null;
     var ok = false;
-    defer if (!ok) out.deinit(allocator);
+    defer if (!ok) out.deinit(arena);
 
     var pos: usize = 0;
     for (tokens.items) |token| {
@@ -244,32 +252,32 @@ pub fn process(
 
         // Emit any gap between the last token and this one verbatim.
         if (token.offset > pos) {
-            out.appendSlice(allocator, source[pos..token.offset]) catch return null;
+            out.appendSlice(arena, source[pos..token.offset]) catch return null;
         }
 
         const slice = source[token.offset .. token.offset + token.len];
-        const style = resolveStyle(kind, slice, style_overrides, color_hook);
+        const style = resolveStyle(kind, slice, style_overrides, config, ctx);
 
         if (!style.isEmpty()) {
-            style.writeOpenTag(allocator, &out) catch return null;
-            out.appendSlice(allocator, slice) catch return null;
-            style.writeCloseTag(allocator, &out) catch return null;
+            style.writeOpenTag(arena, &out) catch return null;
+            out.appendSlice(arena, slice) catch return null;
+            style.writeCloseTag(arena, &out) catch return null;
         } else {
-            out.appendSlice(allocator, slice) catch return null;
+            out.appendSlice(arena, slice) catch return null;
         }
 
         pos = token.offset + token.len;
     }
 
     if (pos < source.len) {
-        out.appendSlice(allocator, source[pos..]) catch return null;
+        out.appendSlice(arena, source[pos..]) catch return null;
     }
 
     // Null-terminate so the C API can use the pointer directly.
-    out.append(allocator, 0) catch return null;
+    out.append(arena, 0) catch return null;
 
     ok = true;
-    const raw = out.toOwnedSlice(allocator) catch return null;
+    const raw = out.toOwnedSlice(arena) catch return null;
     // Return the slice without the sentinel so callers get a plain []const u8,
     // but the underlying buffer is still null-terminated for C interop.
     return raw;

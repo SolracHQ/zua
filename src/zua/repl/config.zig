@@ -3,6 +3,7 @@ const std = @import("std");
 const completion = @import("completion.zig");
 const highlight = @import("highlight.zig");
 
+const Fn = @import("../typed/fn.zig").Fn;
 const Meta = @import("../meta.zig");
 
 const Completer = completion.Completer;
@@ -12,8 +13,10 @@ const CompletionHook = completion.CompletionHook;
 pub const Config = @This();
 
 pub const ZUA_META = Meta.Object(Config, .{
-    .setColor = setColor,
-    .setStyle = setStyle,
+    .set_color = setColor,
+    .set_style = setStyle,
+    .set_style_hook = setStyleHook,
+    .__gc = gc,
 });
 
 /// Prompt displayed for each input line.
@@ -45,7 +48,7 @@ welcome_message: ?[]const u8 = null,
 stack_trace: bool = false,
 
 /// Optional per-token style hook for syntax highlighting.
-color_hook: highlight.ColorHook = null,
+style_hook: highlight.ColorHook = null,
 
 /// When enabled, the REPL resolves chained Lua identifiers against the
 /// live runtime and completes globals, fields, and methods.
@@ -57,8 +60,10 @@ lua_completion: bool = false,
 /// Per-kind style overrides. Set via repl:set_color or repl:set_style from Lua.
 style_overrides: std.EnumArray(highlight.TokenKind, ?highlight.Style) = .initFill(null),
 
-/// Lua-side color hook. Called when set, before the Zig color_hook.
-lua_color_hook: ?*anyopaque = null,
+/// Lua-side style hook called in resolveStyle, before the Zig style_hook.
+///
+/// Receives the token kind and the token text. Returns a Style table or nil.
+lua_style_hook: ?Fn(.{ highlight.TokenKind, []const u8 }, ?highlight.Style) = null,
 
 /// Lua-side completion hook. Called when set, after runtime completion.
 lua_completion_hook: ?*anyopaque = null,
@@ -79,4 +84,17 @@ fn setColor(self: *Config, kind: highlight.TokenKind, color: highlight.Color) vo
 /// optional fg, bg, bold, dim, italic fields.
 fn setStyle(self: *Config, kind: highlight.TokenKind, style: highlight.Style) void {
     self.style_overrides.set(kind, style);
+}
+
+/// repl:set_style_hook(hook)
+///
+/// Sets a Lua-side style hook that receives (kind: TokenKind, text: string)
+/// and returns a Style table or nil. Replaces any previously set hook.
+fn setStyleHook(self: *Config, hook: Fn(.{ highlight.TokenKind, []const u8 }, ?highlight.Style)) void {
+    if (self.lua_style_hook) |prev| prev.release();
+    self.lua_style_hook = hook.takeOwnership();
+}
+
+fn gc(self: *Config) void {
+    if (self.lua_style_hook) |hook| hook.release();
 }

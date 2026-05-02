@@ -3,16 +3,23 @@
 ## 0.11.0
 
 ### Breaking
-- `run` now takes `*Config` instead of a by-value struct. The old `try run(state, .{...})` single-expression form no longer works; callers must explicitly allocate and pass a mutable pointer:
-  - Stack-allocated (no Lua exposure): `var config = zua.Repl.Config{ ... }; try run(state, &config);`
-  - Object-wrapped (Lua-facing): `const config = zua.Object(zua.Repl.Config).create(state, .{ ... }); try run(state, config.get());`
-- `Config` is now an `.object` strategy type (`Meta.Object(Config, .{...})`). Simple stack-allocated usage requires `var` + `&` but otherwise unchanged.
-- `decodeStruct` now respects field defaults: when a Lua table key is missing and the Zig field has a default value, the default is used instead of failing. Fields without defaults still require the key.
+- `run` now takes `*Config` instead of a by-value struct. Callers must explicitly allocate and pass a mutable pointer.
+- `Config.color_hook` renamed to `Config.style_hook`.
+- `ColorHook` callback signature changed: first parameter is now `*Context`.
+- `Config` is now an `.object` strategy type. Stack-allocated usage requires `var` + `&` but otherwise unchanged.
 
 ### Added
-- `Color.decodeColor` decode hook: `Color` now accepts integers (ANSI), `"#rrggbb"` strings, named color strings, and `{r,g,b}` tables from Lua via `Meta.Table(Color, .{}).withDecode(...)`.
-- `Config.setColor(kind, color)` and `Config.setStyle(kind, style)` Lua-facing methods for overriding per-token syntax highlighting at runtime.
-- Per-token `style_overrides` field on `Config`, checked before the `color_hook` callback, so `setColor`/`setStyle` changes are visible immediately during highlighting.
+- `Config.setColor(kind, color)` and `Config.setStyle(kind, style)` Lua-facing methods for per-token syntax highlighting overrides.
+- `Config.set_style_hook(hook)` Lua-facing method to set a style hook from Lua.
+- `Config.style_overrides` field for per-token style overrides.
+
+### Changed
+- REPL now creates one `Context` per readline cycle, shared by highlight and evaluation paths.
+- `evalSource` receives its `Context` from the caller instead of creating its own.
+
+### Fixed
+- `decodeStruct` now respects field defaults: when a Lua table key is missing and the Zig field has a default value, the default is used instead of failing.
+- Fixed latent compile error in `decode.zig:parseSingle` when decoding optional return types from typed `Fn` handles.
 
 ## 0.10.1
 

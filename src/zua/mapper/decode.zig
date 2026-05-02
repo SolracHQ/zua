@@ -120,7 +120,7 @@ fn parseSingle(
 
     if (is_opt and value_count == 0) return null;
 
-    return decodeAt(ctx, start_index, ChildT);
+    return try decodeAt(ctx, start_index, ChildT);
 }
 
 /// Parses multiple Lua stack values into a tuple of Zig types.

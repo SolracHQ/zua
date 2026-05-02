@@ -10,7 +10,7 @@ pub fn main(init: std.process.Init) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    var conf = zua.Object(zua.Repl.Config).create(state, .{ .lua_completion = true });
+    var conf: zua.Object(zua.Repl.Config) = .create(state, .{ .lua_completion = true, .history_path = "zua_repl_history.txt" });
     defer conf.release();
 
     try state.addGlobals(&ctx, .{ .repl = conf });

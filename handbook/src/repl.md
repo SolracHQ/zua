@@ -97,7 +97,8 @@ If you only want custom candidates and not live runtime completion, omit `lua_co
 Pass a `color_hook` to color Lua source as the user types:
 
 ```zig
-fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+fn colorize(ctx: *zua.Context, kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    _ = ctx;
     return switch (kind) {
         .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
         .keyword_value => .{ .fg = .{ .ansi = 96 } },
@@ -114,13 +115,13 @@ fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.high
 }
 
 try zua.Repl.run(state, .{
-    .color_hook = colorize,
+    .style_hook = colorize,
 });
 ```
 
 Return `null` when you want the default style, or a `Style` when you want to override it.
 
-The hook gets both the token kind and the token text, so there is no separate identifier hook anymore. If you want to color your own globals, branch on `.name` and inspect the text.
+The hook receives a `*Context`, the token kind, and the token text. The context gives you access to the Lua state: read or modify globals, query the registry, or retrieve config stored by your host via a registry key. If you want to color your own globals, branch on `.name` and inspect the text.
 
 ## Stack traces
 
@@ -174,12 +175,13 @@ pub fn main(init: std.process.Init) !void {
         .welcome_message = "Welcome to the zua REPL!\n",
         .history_path = "zua_repl_history.txt",
         .completion_hook = completionCallback,
-        .color_hook = colorize,
+        .style_hook = colorize,
         .stack_trace = true,
     });
 }
 
-fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+fn colorize(ctx: *zua.Context, kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    _ = ctx;
     return switch (kind) {
         .keyword => .{ .fg = .{ .ansi = 93 }, .bold = true },
         .keyword_value => .{ .fg = .{ .ansi = 96 } },
