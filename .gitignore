@@ -3,3 +3,4 @@ zig-out/
 zig-pkg/
 *.so
 zua_repl_history.txt
+docs/
