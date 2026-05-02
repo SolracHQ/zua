@@ -46,9 +46,7 @@ fn customColor(text: []const u8) highlight.Color {
 /// Provide tab completion candidates from a custom list.
 ///
 /// Completion is offered for matching names as the user types.
-fn completionCallback(completer: *REPL.Completer, prefix: []const u8, arg: ?*anyopaque) void {
-    _ = arg;
-
+fn completionCallback(completer: *REPL.Completer, prefix: []const u8) void {
     const items = &[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
         if (std.mem.startsWith(u8, item, prefix)) {
@@ -90,7 +88,7 @@ pub fn main(init: std.process.Init) !void {
         // you can customize all the token kinds.
         .style_hook = colorize,
         .stack_trace = true,
-        .lua_completion = true,
+        .runtime_completion = true,
     };
     try zua.Repl.run(state, &repl_config);
 }

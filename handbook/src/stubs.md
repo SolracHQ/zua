@@ -84,15 +84,13 @@ try generator.add(Counter);
 For functions, parameter names and descriptions come from `withDescriptions`.
 
 ```zig
-const ArgInfo = zua.Native.ArgInfo;
-
-const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(.{
-    ArgInfo{ .name = "x", .description = "Initial horizontal coordinate." },
-    ArgInfo{ .name = "y", .description = "Initial vertical coordinate." },
+const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(&.{
+    .{ .name = "x", .description = "Initial horizontal coordinate." },
+    .{ .name = "y", .description = "Initial vertical coordinate." },
 }).withName("make_vector").withDescription("Construct a new Vector2 value.");
 ```
 
-`ArgInfo.name` is the displayed parameter name in the stub. `ArgInfo.description` is optional and appears as the trailing comment in the generated `---@param` line.
+Each entry provides `name` (displayed as the parameter name in the stub) and an optional `description` (appears as a trailing comment in the generated `---@param` line).
 
 This is necessary because Zig's function type info does not carry parameter names in a form the generator can read at comptime.
 
@@ -103,8 +101,8 @@ For `.table` types, field descriptions come from `withAttribDescriptions` on `ZU
 ```zig
 const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
-        .scale = zua.Native.new(scale, .{}).withDescriptions(.{
-            ArgInfo{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
+        .scale = zua.Native.new(scale, .{}).withDescriptions(&.{
+            .{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
         }),
     })
         .withDescription("Simple table-backed 2D vector.")

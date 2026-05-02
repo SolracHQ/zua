@@ -1,7 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
 const lua = zua.lua;
-const ArgInfo = zua.Native.ArgInfo;
 
 const Vec2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vec2, .{
@@ -60,18 +59,18 @@ fn docs(ctx: *zua.Context) ![]const u8 {
 const vec2_fn = zua.Native.new(vec2, .{})
     .withName("vec2")
     .withDescription("Construct a new Vec2 value.")
-    .withDescriptions(.{
-    ArgInfo{ .name = "x", .description = "Horizontal component." },
-    ArgInfo{ .name = "y", .description = "Vertical component." },
+    .withDescriptions(&.{
+    .{ .name = "x", .description = "Horizontal component." },
+    .{ .name = "y", .description = "Vertical component." },
 });
 
 const lerp_fn = zua.Native.new(lerp, .{})
     .withName("lerp")
     .withDescription("Linearly interpolate between two Vec2 values.")
-    .withDescriptions(.{
-    ArgInfo{ .name = "a", .description = "Starting vector." },
-    ArgInfo{ .name = "b", .description = "Ending vector." },
-    ArgInfo{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+    .withDescriptions(&.{
+    .{ .name = "a", .description = "Starting vector." },
+    .{ .name = "b", .description = "Ending vector." },
+    .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
 });
 
 const docs_fn = zua.Native.new(docs, .{})

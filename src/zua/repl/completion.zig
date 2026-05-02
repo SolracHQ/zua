@@ -2,31 +2,64 @@
 //!
 //! This module exposes a small completion API for REPL clients while hiding
 //! the raw `isocline` callback state and C interop details.
+
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Table = @import("../handlers/table.zig").Table;
+const Meta = @import("../meta.zig");
 const Mapper = @import("../mapper/mapper.zig");
-
+const Native = @import("../functions/native.zig");
+const Object = @import("../typed/object.zig").Object;
 const isocline = @import("../../isocline/isocline.zig");
+const Config = @import("config.zig");
 
 /// REPL completion helper.
 ///
 /// This wrapper hides `isocline` internals and provides a safe interface for
-/// completion callbacks.
+/// completion callbacks. One `Completer` is created as a zua object per REPL
+/// session and reused across tab events by updating `_env` and `_ctx`.
 pub const Completer = struct {
-    _env: ?*isocline.CompletionEnv,
-    _arena: std.heap.ArenaAllocator,
+    pub const ZUA_META = Meta.Object(Completer, .{
+    .add = Native.new(add, .{}).withDescriptions(&.{
+        .{ .name = "candidate", .description = "Completion candidate string." },
+    }).withDescription("Add a completion candidate."),
+    .addEx = Native.new(addEx, .{}).withDescriptions(&.{
+        .{ .name = "candidate", .description = "Completion candidate string." },
+        .{ .name = "display", .description = "Optional alternate display text." },
+        .{ .name = "help", .description = "Optional help text shown alongside the candidate." },
+    }).withDescription("Add a completion candidate with display and help text."),
+    }).withDescription("Session-scoped completion helper wrapping isocline internals.")
+        .withName("Completer");
 
+    _env: ?*isocline.CompletionEnv,
+    _ctx: *Context,
+
+    /// Returns the per-cycle arena allocator for temporary completions.
     pub fn arena(self: *Completer) std.mem.Allocator {
-        return self._arena.allocator();
+        return self._ctx.arena();
     }
 
+    /// Returns the shared `State` backing this completion session.
+    pub fn state(self: *Completer) *State {
+        return self._ctx.state;
+    }
+
+    /// Publishes `candidate` as a completion result.
+    ///
+    /// Returns `true` to continue adding more candidates, or `false` when the
+    /// callback should stop.
     pub fn add(self: *Completer, candidate: [:0]const u8) bool {
         return isocline.addCompletion(self._env, candidate);
     }
 
+    /// Publishes a completion candidate with alternate display text and help.
+    ///
+    /// `display` is shown in the completion menu when the candidate is focused.
+    /// `help` appears as a hint alongside the candidate. Both can be `null`.
+    /// Returns `true` to continue adding more candidates, or `false` when the
+    /// callback should stop.
     pub fn addEx(self: *Completer, candidate: [:0]const u8, display: ?[:0]const u8, help: ?[:0]const u8) bool {
         return isocline.addCompletionEx(self._env, candidate, display, help);
     }
@@ -35,56 +68,82 @@ pub const Completer = struct {
 /// Completion callback type used by the REPL.
 ///
 /// The callback is invoked on each tab-completion request.
-/// `prefix` is the current token or expression fragment to complete, and
-/// `arg` is the opaque argument passed through `zua.Repl.Config`.
+/// `prefix` is the current token or expression fragment to complete.
 ///
 /// The callback may call `completer.add(candidate)` or
 /// `completer.addEx(candidate, display, help)` to publish results.
-///
-/// This callback is used both for custom completions and when runtime
-/// Lua completion is enabled via `zua.Repl.Config.lua_completion`.
 pub const CompletionHook = ?*const fn (
     completer: *Completer,
     prefix: []const u8,
-    arg: ?*anyopaque,
 ) void;
 
-/// Internal completion state forwarded through the `isocline` opaque callback arg.
+/// Internal completion state forwarded through the isocline opaque callback arg.
 ///
-/// This state tracks the shared `State`, the optional user completion hook,
-/// the opaque user argument, and whether live Lua runtime completion should
-/// be performed.
+/// This state carries the shared config, the per-cycle Context, and a
+/// session-scoped `Completer` handle allocated as a zua Object.
 pub const CompletionState = struct {
-    state: *State,
-    user_hook: CompletionHook,
-    user_arg: ?*anyopaque,
-    lua_enabled: bool,
+    config: *Config,
+    ctx: *Context,
+    completer: Object(Completer),
 };
 
-/// Public `isocline` completion callback wrapper used by Zua.
+/// Public isocline completion callback wrapper used by Zua.
 ///
 /// When registered as the default completer, this wrapper bridges raw line
-/// editor events into Zua's `CompletionState` and optionally performs
-/// live Lua runtime completion. If `lua_enabled` is disabled, only the
-/// configured custom completion hook is invoked.
+/// editor events into Zua's CompletionState. A stack guard protects the Lua
+/// stack across the callback boundary.
 pub fn completionCallbackC(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
-    const raw_arg = isocline.completionArg(cenv) orelse return;
-    const state: *CompletionState = @ptrCast(@alignCast(raw_arg));
-    isocline.completeWord(cenv, std.mem.span(prefix), completionWord, if (state.lua_enabled) &luaCompletionWordChar else null);
+    const cs: *CompletionState = @ptrCast(@alignCast(isocline.completionArg(cenv) orelse return));
+    const previous_top = lua.getTop(cs.ctx.state.luaState);
+    defer lua.setTop(cs.ctx.state.luaState, previous_top);
+
+    cs.completer.get()._ctx = cs.ctx;
+
+    const raw_prefix = std.mem.span(prefix);
+    isocline.completeWord(cenv, raw_prefix, completionWord, if (cs.config.runtime_completion) &luaCompletionWordChar else null);
 }
 
-pub const LuaCompleter = struct {
-    inner: *Completer,
-    state: *State,
+/// Completion entry point for isocline.
+///
+/// Runs runtime Lua completion, the Zig completion hook, and the Lua
+/// completion hook in order. All three contribute candidates.
+fn completionWord(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
+    const cs: *CompletionState = @ptrCast(@alignCast(isocline.completionArg(cenv) orelse return));
+    const raw_input = std.mem.span(prefix);
 
-    pub fn arena(self: *LuaCompleter) std.mem.Allocator {
-        return self.inner.arena();
+    const completer_ptr = cs.completer.get();
+    completer_ptr._env = cenv;
+
+    // 1. Runtime Lua completion
+    if (cs.config.runtime_completion and raw_input.len > 0) {
+        const chain_prefix = extractChainPrefix(raw_input);
+        if (chain_prefix.len > 0) {
+            if (findLastSeparator(chain_prefix)) |sep_index| {
+                const separator = chain_prefix[sep_index];
+                const filter_prefix = chain_prefix[sep_index + 1 ..];
+                const object_prefix = chain_prefix[0..sep_index];
+                const full_prefix = chain_prefix[0 .. sep_index + 1];
+                if (separator == ':') {
+                    completeMemberPrefix(cs.ctx, completer_ptr, object_prefix, full_prefix, filter_prefix, true);
+                } else {
+                    completeMemberPrefix(cs.ctx, completer_ptr, object_prefix, full_prefix, filter_prefix, false);
+                }
+            } else {
+                completeGlobalPrefix(cs.ctx, completer_ptr, chain_prefix);
+            }
+        }
     }
 
-    pub fn add(self: *LuaCompleter, candidate: [:0]const u8) bool {
-        return self.inner.add(candidate);
+    // 2. Zig-side completion hook
+    if (cs.config.completion_hook) |hook| {
+        hook(completer_ptr, raw_input);
     }
-};
+
+    // 3. Lua-side completion hook
+    if (cs.config.lua_completion_hook) |hook| {
+        hook.call(cs.ctx, .{ cs.completer, raw_input }) catch {};
+    }
+}
 
 /// Extracts the current completion fragment from a full input prefix.
 ///
@@ -171,7 +230,7 @@ fn resolveObjectPrefix(
 
 /// Appends a candidate to the completer using the provided prefix.
 fn addCompletionCandidate(
-    completer: *LuaCompleter,
+    completer: *Completer,
     prefix: []const u8,
     key: []const u8,
 ) void {
@@ -184,7 +243,7 @@ fn addCompletionCandidate(
 /// If `restrict_functions` is true, only function-valued keys are returned.
 fn collectTableKeys(
     ctx: *Context,
-    completer: *LuaCompleter,
+    completer: *Completer,
     table_index: lua.StackIndex,
     filter_prefix: []const u8,
     prefix: []const u8,
@@ -215,7 +274,7 @@ fn collectTableKeys(
 /// Adds string values from a Lua table as completion candidates.
 fn collectStringValues(
     state: *lua.State,
-    completer: *LuaCompleter,
+    completer: *Completer,
     table_index: lua.StackIndex,
     filter_prefix: []const u8,
     prefix: []const u8,
@@ -239,7 +298,7 @@ fn collectStringValues(
 /// Completes fields from a runtime introspection function.
 fn collectIntrospection(
     ctx: *Context,
-    completer: *LuaCompleter,
+    completer: *Completer,
     introspection_fn_index: lua.StackIndex,
     filter_prefix: []const u8,
     prefix: []const u8,
@@ -271,7 +330,7 @@ fn collectIntrospection(
 /// This handles direct table keys and metatable-based introspection.
 fn collectFromValue(
     ctx: *Context,
-    completer: *LuaCompleter,
+    completer: *Completer,
     filter_prefix: []const u8,
     prefix: []const u8,
     restrict_functions: bool,
@@ -299,7 +358,7 @@ fn collectFromValue(
 /// Completes top-level Lua globals using the current runtime environment.
 fn completeGlobalPrefix(
     ctx: *Context,
-    completer: *LuaCompleter,
+    completer: *Completer,
     filter_prefix: []const u8,
 ) void {
     const state = ctx.state;
@@ -313,7 +372,7 @@ fn completeGlobalPrefix(
 /// Completes members for a chained expression like `foo.` or `foo:`.
 fn completeMemberPrefix(
     ctx: *Context,
-    completer: *LuaCompleter,
+    completer: *Completer,
     object_prefix: []const u8,
     full_prefix: []const u8,
     filter_prefix: []const u8,
@@ -325,53 +384,6 @@ fn completeMemberPrefix(
 
     if (!resolveObjectPrefix(ctx, object_prefix)) return;
     collectFromValue(ctx, completer, filter_prefix, full_prefix, restrict_functions);
-}
-
-/// Completion entry point for isocline.
-///
-/// Optionally performs runtime Lua completion when enabled, then invokes the
-/// configured custom completion hook.
-fn completionWord(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
-    const raw_arg = isocline.completionArg(cenv) orelse return;
-    const state: *CompletionState = @ptrCast(@alignCast(raw_arg));
-    const raw_input = std.mem.span(prefix);
-
-    var completer = Completer{
-        ._env = cenv,
-        ._arena = std.heap.ArenaAllocator.init(state.state.allocator),
-    };
-    defer completer._arena.deinit();
-
-    if (state.lua_enabled) {
-        const chain_prefix = extractChainPrefix(raw_input);
-        var ctx = Context.init(state.state);
-        defer ctx.deinit();
-
-        var lua_completer = LuaCompleter{
-            .inner = &completer,
-            .state = state.state,
-        };
-
-        if (chain_prefix.len > 0) {
-            if (findLastSeparator(chain_prefix)) |sep_index| {
-                const separator = chain_prefix[sep_index];
-                const filter_prefix = chain_prefix[sep_index + 1 ..];
-                const object_prefix = chain_prefix[0..sep_index];
-                const full_prefix = chain_prefix[0 .. sep_index + 1];
-                if (separator == ':') {
-                    completeMemberPrefix(&ctx, &lua_completer, object_prefix, full_prefix, filter_prefix, true);
-                } else {
-                    completeMemberPrefix(&ctx, &lua_completer, object_prefix, full_prefix, filter_prefix, false);
-                }
-            } else {
-                completeGlobalPrefix(&ctx, &lua_completer, chain_prefix);
-            }
-        }
-    }
-
-    if (state.user_hook) |hook| {
-        hook(&completer, raw_input, state.user_arg);
-    }
 }
 
 test {

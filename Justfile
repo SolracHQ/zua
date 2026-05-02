@@ -3,8 +3,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-run:
-    zig build run
+run *ARGS:
+    zig build run -- {{ARGS}}
 
 test:
     zig build test

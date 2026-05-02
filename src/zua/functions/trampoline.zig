@@ -73,7 +73,7 @@ pub const ArgInfo = struct {
 /// - `function`: the Zig callback to wrap. Must have an explicit return type.
 /// - `kind`: describes whether the callback receives `*Context` and/or a capture pointer.
 /// - `error_config`: format strings and optional hooks for parse and Zig error reporting.
-/// - `args_descriptions`: a comptime struct of `ArgInfo` values, used purely for
+/// - `args_descriptions`: a comptime `[]const ArgInfo`, used purely for
 ///   documentation. Pass `.{}` to omit. Use `withDescriptions` on the returned
 ///   type to attach descriptions after the fact without repeating the other args.
 ///
@@ -83,9 +83,8 @@ pub const ArgInfo = struct {
 ///
 /// Example:
 /// ```zig
-/// const T = trampoline.make(myFn, .{ .hasContext = true }, .{}, .{
-///     .address = "Memory address to read",
-///     .size    = "Number of bytes",
+/// const T = trampoline.make(myFn, .{ .hasContext = true }, .{}, &.{
+///     ArgInfo{ .name = "address", .description = "Memory address to read" },
 /// });
 /// globals.set(&ctx, "read", T{});
 /// ```
@@ -93,7 +92,7 @@ pub fn make(
     comptime function: anytype,
     comptime kind: ArgsConfig,
     comptime error_config: ErrorConfig,
-    comptime args_descriptions: anytype,
+    comptime args_descriptions: []const ArgInfo,
 ) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
@@ -128,29 +127,29 @@ pub fn make(
         /// Optional documentation string for the wrapped function.
         description: []const u8 = "",
 
-        /// Comptime parameter metadata used only for documentation generation.
-        args: @TypeOf(args_descriptions) = args_descriptions,
+        /// Parameter metadata used only for documentation generation.
+        args: []const ArgInfo = args_descriptions,
 
         /// For closures, the initial capture value to bundle with the callback.
         initial: CaptureType = undefined,
 
         /// Returns a new wrapper type identical to this one but with the given
-        /// parameter documentation attached for documentation generation.
+        /// parameter documentation attached for stub generation.
         ///
-        /// Each field value in `new_args` should be an `ArgInfo`. Since Zig
-        /// function type info does not carry parameter names, `ArgInfo.name`
-        /// is the canonical source of the displayed parameter name.
+        /// Since Zig function type info does not carry parameter names,
+        /// each entry must provide `ArgInfo.name` explicitly.
         ///
         /// Example:
         /// ```zig
         /// const get_fn = zua.Native.NativeFn(get, .{})
-        ///     .withDescriptions(.{
-        ///         .address = .{ .name = "address", .description = "Memory address to read from" },
-        ///         .type = .{ .name = "type", .description = "Data type string, e.g. 'u32'" },
+        ///     .withDescriptions(&.{
+        ///         .{ .name = "address", .description = "Memory address to read from" },
         ///     });
         /// ```
-        pub fn withDescriptions(prev: @This(), comptime new_args: anytype) make(function, kind, error_config, new_args) {
-            return .{ .name = prev.name, .description = prev.description, .args = new_args, .initial = prev.initial };
+        pub fn withDescriptions(prev: @This(), new_args: []const ArgInfo) @This() {
+            var copy = prev;
+            copy.args = new_args;
+            return copy;
         }
 
         pub fn withName(prev: @This(), comptime new_name: []const u8) make(function, kind, error_config, args_descriptions) {

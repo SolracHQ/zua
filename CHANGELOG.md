@@ -7,19 +7,43 @@
 - `Config.color_hook` renamed to `Config.style_hook`.
 - `ColorHook` callback signature changed: first parameter is now `*Context`.
 - `Config` is now an `.object` strategy type. Stack-allocated usage requires `var` + `&` but otherwise unchanged.
+- `Config.lua_completion` renamed to `Config.runtime_completion` (default changed from `false` to `true`).
+- `Config.completion_arg` removed. Ambient state is accessed via the `*Context` on the `Completer`.
+- `Config.lua_completion_hook` type changed from `?*anyopaque` to `?Fn(.{ Object(Completer), []const u8 }, void)`.
+- `CompletionHook` signature: removed `arg: ?*anyopaque` parameter.
+- `CompletionState` redesigned: `state`, `user_hook`, `user_arg`, `lua_enabled` replaced by `config`, `ctx`, `completer: Object(Completer)`.
+- `LuaCompleter` removed. `Completer` carries `*Context` directly and serves both Zig and Lua completion paths.
+- `Completer._arena` replaced by `_ctx`. Callers no longer pass an allocator; the completer uses the per-cycle `Context` arena.
+- `withDescriptions` parameter changed from `comptime new_args: anytype` to `new_args: []const ArgInfo`. The named-field form (`.{ .name = "desc" }`) is dropped; use `&.{ .{ .name = "x", .description = "..." } }`.
+- `main.zig` CLI changed: no arguments or `help` shows usage; `repl` starts the REPL; `docs` prints Lua stubs.
 
 ### Added
-- `Config.setColor(kind, color)` and `Config.setStyle(kind, style)` Lua-facing methods for per-token syntax highlighting overrides.
-- `Config.set_style_hook(hook)` Lua-facing method to set a style hook from Lua.
-- `Config.style_overrides` field for per-token style overrides.
+- `Config.set_completion_hook(hook)` and `Config.set_runtime_completion(enabled)` Lua-facing methods.
+- `Completer` gains `ZUA_META` (`.object` strategy) with `add`/`addEx` methods callable from Lua.
+- Completion call order: runtime Lua completion → Zig `completion_hook` -> Lua `lua_completion_hook`. All three fire on the same tab event.
+- Session-scoped `Completer` allocated once as a `zua.Object(Completer)` and reused per tab event by swapping `_env` and `_ctx`.
+- Stack guard (`getTop`/`setTop`) in `completionCallbackC`, mirroring `highlightCallbackC`.
+- Metadata descriptions and names on `Config`, `Completer`, `TokenKind`, `Color`, `Style`, and `Rgb` for stub generation.
+- `Rgb` named struct extracted from `Color.rgb` anonymous struct, with `ZUA_META` and field descriptions.
+- `docs` subcommand in `main.zig` prints editor stubs for REPL types.
+- Argument passthrough to the `zig build run` step and `Justfile` `run` recipe.
 
 ### Changed
-- REPL now creates one `Context` per readline cycle, shared by highlight and evaluation paths.
-- `evalSource` receives its `Context` from the caller instead of creating its own.
+- `completionWord` call order: runtime completion -> Zig hook -> Lua hook (previously runtime completion only with a separate user hook).
+- REPL always registers the default completer (no conditional `if`).
+- `comp_state.ctx` set each readline cycle alongside `hl_state.ctx`.
+- Completion candidate methods accept `[:0]const u8` directly from Lua strings (they are already null-terminated).
+- `withDescriptions` field type changed from comptime-derived struct to `[]const ArgInfo`, enabling `&.{ .{ .name = "...", .description = "..." } }` syntax.
+- `argDocInfo` simplified in docs generator since only the `[]const ArgInfo` form is supported.
+- Docs generator now skips methods whose name starts with `__`.
+
+### Removed
+- `LuaCompleter` wrapper struct (no longer needed; `Completer` handles both paths).
 
 ### Fixed
 - `decodeStruct` now respects field defaults: when a Lua table key is missing and the Zig field has a default value, the default is used instead of failing.
 - Fixed latent compile error in `decode.zig:parseSingle` when decoding optional return types from typed `Fn` handles.
+- Docs generator `functionHandleSignature` comptime resolution for `Fn` types with complex argument types.
 
 ## 0.10.1
 

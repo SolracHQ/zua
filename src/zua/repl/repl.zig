@@ -3,11 +3,13 @@
 //! This module exposes an embedded REPL that evaluates each line against an
 //! existing Zua `State`. Every command runs in a fresh `Context`, so scratch
 //! allocations are reclaimed before the next input.
+
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
+const Object = @import("../typed/object.zig").Object;
 
 pub const highlight = @import("highlight.zig");
 pub const completion = @import("completion.zig");
@@ -37,26 +39,29 @@ pub fn run(state: *State, config: *Config) !void {
     try printMessage(state, "", welcome_message);
 
     // Highlight state lives on the stack; isocline holds a pointer for the
-    // duration of the session. The HighlightState outlives every readline call.
-    // ctx is set each readline cycle before the call.
+    // duration of the session. ctx is set each readline cycle before the call.
     var hl_state = HighlightState{
         .ctx = undefined,
         .config = config,
     };
 
-    // Register the highlighter once for the whole session.
     isocline.setDefaultHighlighter(highlight.highlightCallbackC, &hl_state);
     defer isocline.setDefaultHighlighter(null, null);
 
-    if (config.completion_hook != null or config.lua_completion) {
-        var comp_state = completion.CompletionState{
-            .state = state,
-            .user_hook = config.completion_hook,
-            .user_arg = config.completion_arg,
-            .lua_enabled = config.lua_completion,
-        };
-        isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
-    }
+    // Completion state with a session-scoped Completer as a zua Object.
+    var comp_state = completion.CompletionState{
+        .config = config,
+        .ctx = undefined,
+        .completer = blk: {
+            const initial = completion.Completer{
+                ._env = null,
+                ._ctx = undefined,
+            };
+            break :blk Object(completion.Completer).create(state, initial).takeOwnership();
+        },
+    };
+    isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
+    defer comp_state.completer.release();
     defer isocline.setDefaultCompleter(null, null);
 
     while (true) {
@@ -64,6 +69,7 @@ pub fn run(state: *State, config: *Config) !void {
         defer ctx.deinit();
 
         hl_state.ctx = &ctx;
+        comp_state.ctx = &ctx;
 
         const line = isocline.readline(config.prompt) orelse break;
         defer isocline.freeMemory(@ptrCast(@constCast(line.ptr)));

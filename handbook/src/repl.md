@@ -59,7 +59,7 @@ try zua.Repl.run(state, .{
 Pass a `completion_hook` to add completions. The callback receives the current prefix and a stable `*zua.Repl.Completer` helper that does not expose the underlying line-editor internals:
 
 ```zig
-fn complete(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+fn complete(completer: *zua.Repl.Completer, prefix: []const u8) void {
     const items = &[_][:0]const u8{ "add", "greet", "print", "tostring" };
     for (items) |item| {
         if (std.mem.startsWith(u8, item, prefix)) {
@@ -79,18 +79,31 @@ Use `completer.addEx(candidate, display, help)` when you want a richer entry wit
 
 ### Runtime Lua completion
 
-When `lua_completion` is enabled, the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as `foo.` and `foo:`.
+When `runtime_completion` is enabled (default: true), the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as `foo.` and `foo:`.
 
 This works alongside `completion_hook`: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.
 
 ```zig
 try zua.Repl.run(state, .{
     .completion_hook = complete,
-    .lua_completion = true,
+    .runtime_completion = true,
 });
 ```
 
-If you only want custom candidates and not live runtime completion, omit `lua_completion` and keep only `completion_hook`.
+If you only want custom candidates and not live runtime completion, set `runtime_completion = false` and keep only `completion_hook`.
+
+### Lua-side completion hook
+
+When the `Config` is exposed as a Lua object via `zua.Object(zua.Repl.Config)`, you can set a completion hook from Lua at runtime with `repl:set_completion_hook(hook)`. The hook receives the session `Completer` handle and the input prefix:
+
+```lua
+repl:set_completion_hook(function(completer, prefix)
+    completer:add(prefix .. "_suffix")
+    completer:addEx(prefix .. "_rich", "display text", "help message")
+end)
+```
+
+The Lua hook runs after both runtime completion and the Zig `completion_hook`, so it can augment or override earlier results.
 
 ## Syntax highlighting
 
@@ -149,8 +162,7 @@ fn example() []const u8 {
     return "this is just an example";
 }
 
-fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
-    _ = arg;
+fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8) void {
     const items = &[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
         if (std.mem.startsWith(u8, item, prefix)) {

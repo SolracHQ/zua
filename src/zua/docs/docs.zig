@@ -338,6 +338,7 @@ fn collectMethods(
     comptime recurse_nested: bool,
 ) anyerror!void {
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
+        if (comptime std.mem.startsWith(u8, field.name, "__")) continue;
         const method_value = @field(methods, field.name);
         const wrapped = wrapMethod(method_value);
         var doc = Function{
@@ -534,22 +535,22 @@ fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "fun(");
 
-    const arg_count = typeListCount(T.Args);
-    inline for (0..arg_count) |index| {
-        if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{index + 1});
-        const arg_type = try self.displayTypeName(typeListAt(T.Args, index), .parameter);
-        try appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type });
+    if (comptime @typeInfo(T.Args) == .@"struct") {
+        inline for (@typeInfo(T.Args).@"struct".fields, 0..) |field, index| {
+            if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
+            const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{index + 1});
+            const arg_type_str = try self.displayTypeName(field.type, .parameter);
+            try appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type_str });
+        }
     }
 
     try out.appendSlice(self.arena.allocator(), ")");
 
-    const return_count = typeListCount(T.Result);
-    if (return_count > 0) {
+    if (comptime @typeInfo(T.Result) == .@"struct") {
         try out.appendSlice(self.arena.allocator(), ": ");
-        inline for (0..return_count) |index| {
+        inline for (@typeInfo(T.Result).@"struct".fields, 0..) |field, index| {
             if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-            try out.appendSlice(self.arena.allocator(), try self.displayTypeName(typeListAt(T.Result, index), .return_value));
+            try out.appendSlice(self.arena.allocator(), try self.displayTypeName(field.type, .return_value));
         }
     }
 
@@ -714,23 +715,11 @@ fn fieldDescription(comptime descriptions: anytype, comptime field_name: []const
     return "";
 }
 
-fn argDocInfo(comptime args: anytype, comptime index: usize) struct { name: []const u8, description: []const u8 } {
-    const fields = @typeInfo(@TypeOf(args)).@"struct".fields;
-    if (index < fields.len) {
-        const field = fields[index];
-        const value = @field(args, field.name);
-        const ValueType = @TypeOf(value);
-
-        if (ValueType == Native.ArgInfo) {
-            return .{
-                .name = value.name,
-                .description = value.description orelse "",
-            };
-        }
-
+fn argDocInfo(args: []const Native.ArgInfo, comptime index: usize) struct { name: []const u8, description: []const u8 } {
+    if (index < args.len) {
         return .{
-            .name = field.name,
-            .description = value,
+            .name = args[index].name,
+            .description = args[index].description orelse "",
         };
     }
 

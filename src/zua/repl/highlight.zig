@@ -27,7 +27,9 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_META = Meta.strEnum(TokenKind, .{});
+    pub const ZUA_META = Meta.strEnum(TokenKind, .{})
+        .withDescription("Token kinds recognized by the REPL syntax highlighter.")
+        .withName("TokenKind");
 };
 
 // Color and style types
@@ -38,13 +40,25 @@ pub const TokenKind = enum {
 /// .ansi uses a standard 8/16-color ANSI index.
 /// .ansi256 uses the 256-color xterm palette.
 /// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
+pub const Rgb = struct {
+    pub const ZUA_META = Meta.Table(Rgb, .{})
+        .withDescription("24-bit RGB color with separate red, green, and blue channels.")
+        .withName("Rgb");
+
+    r: u8,
+    g: u8,
+    b: u8,
+};
+
 pub const Color = union(enum) {
     none,
     ansi: u8,
     ansi256: u8,
-    rgb: struct { r: u8, g: u8, b: u8 },
+    rgb: Rgb,
 
-    pub const ZUA_META = Meta.Table(Color, .{}).withDecode(decodeColor);
+    pub const ZUA_META = Meta.Table(Color, .{}).withDecode(decodeColor)
+        .withDescription("ANSI or RGB color value used by a Style. Accepted forms: ANSI int, #rrggbb hex string, named color string, or {r,g,b} table.")
+        .withName("Color");
 
     pub fn writeBbcodeFg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         const result = switch (self) {
@@ -116,6 +130,17 @@ fn ansiFromName(name: []const u8) ?u8 {
 
 /// A renderable style combining colors and text attributes.
 pub const Style = struct {
+    pub const ZUA_META = Meta.Table(Style, .{})
+        .withDescription("Style with foreground/background color and text attributes.")
+        .withAttribDescriptions(.{
+            .fg = "Foreground color.",
+            .bg = "Background color.",
+            .bold = "Bold text attribute.",
+            .dim = "Dim text attribute.",
+            .italic = "Italic text attribute.",
+        })
+        .withName("Style");
+
     fg: Color = .none,
     bg: Color = .none,
     bold: bool = false,
