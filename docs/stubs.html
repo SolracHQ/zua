@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c9c1ad23.js";
+            window.path_to_searchindex_js = "searchindex-c2761eea.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7d4dbe5e.js"></script>
@@ -238,21 +238,19 @@ try generator.add(Counter);
 </code></pre>
 <h2 id="adding-parameter-descriptions"><a class="header" href="#adding-parameter-descriptions">Adding parameter descriptions</a></h2>
 <p>For functions, parameter names and descriptions come from <code>withDescriptions</code>.</p>
-<pre><code class="language-zig">const ArgInfo = zua.Native.ArgInfo;
-
-const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(.{
-    ArgInfo{ .name = "x", .description = "Initial horizontal coordinate." },
-    ArgInfo{ .name = "y", .description = "Initial vertical coordinate." },
+<pre><code class="language-zig">const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(&amp;.{
+    .{ .name = "x", .description = "Initial horizontal coordinate." },
+    .{ .name = "y", .description = "Initial vertical coordinate." },
 }).withName("make_vector").withDescription("Construct a new Vector2 value.");
 </code></pre>
-<p><code>ArgInfo.name</code> is the displayed parameter name in the stub. <code>ArgInfo.description</code> is optional and appears as the trailing comment in the generated <code>---@param</code> line.</p>
+<p>Each entry provides <code>name</code> (displayed as the parameter name in the stub) and an optional <code>description</code> (appears as a trailing comment in the generated <code>---@param</code> line).</p>
 <p>This is necessary because Zig’s function type info does not carry parameter names in a form the generator can read at comptime.</p>
 <h2 id="adding-field-descriptions"><a class="header" href="#adding-field-descriptions">Adding field descriptions</a></h2>
 <p>For <code>.table</code> types, field descriptions come from <code>withAttribDescriptions</code> on <code>ZUA_META</code>:</p>
 <pre><code class="language-zig">const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
-        .scale = zua.Native.new(scale, .{}).withDescriptions(.{
-            ArgInfo{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
+        .scale = zua.Native.new(scale, .{}).withDescriptions(&amp;.{
+            .{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
         }),
     })
         .withDescription("Simple table-backed 2D vector.")
