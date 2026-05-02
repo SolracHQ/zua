@@ -1,73 +1,8 @@
 # zua
 
-A Zig toolkit for Lua interop. Write Zig types and functions, pass them to Lua, and skip the ceremony: no stack arithmetic, no manual type mapping, no hand-rolled table traversal, no fighting longjmp to keep defer alive.
+A Zig toolkit for Lua 5.4 interop. Write Zig types and functions, pass them to Lua, and skip the ceremony: no stack arithmetic, no manual type mapping, no hand-rolled table traversal, no fighting longjmp to keep defer alive.
 
 The Lua C API is expressive but exhausting at some point. Type checks are runtime branches on magic constants. Nested tables require building and decoding each level by hand. Userdata lifetime is manual. Error propagation via longjmp bypasses Zig defer, so allocations on the way in leak silently. zua solves all of that once so you do not solve it again in every file.
-
-This started as a personal project inspired by [mlua](https://github.com/mlua-rs/mlua). The initial goal was to bring the comfort mlua offers to Zig, but the project evolved in a different direction. Zig's comptime and lack of traits open up different possibilities that shaped the API differently. The spirit is there, but the focus shifted toward ergonomics and convenience over compatibility, which is why zua only supports Lua 5.4.
-
-Every feature exists because I hit a wall without it. It probably has bugs, and if you find one please open an issue, I will be glad to help.
-
-## What it offers
-
-### Type mapping in both directions.
-
-Structs, unions, enums, slices, optionals, and nested containers are handled automatically via comptime dispatch. No registration, no runtime reflection: the encode and decode paths are resolved at compile time from the type itself.
-
-### Three object strategies.
-
-`.table` for plain data, `.object` for GC-managed userdata with methods and `__gc`, `.ptr` for light userdata pointers.
-
-### Encode and decode hooks.
-
-Customize how any type crosses the boundary without abandoning the automatic path for everything else. Declare a hook once and the pipeline picks it up everywhere that type appears.
-
-### Safe error propagation.
-
-`ctx.fail` and `ctx.failWithFmt` propagate errors as typed Zig errors instead of longjmping over your defer statements.
-
-### Memory management.
-
-`ctx.arena()` for call-scoped allocations, `ctx.heap()` for persistent allocations, both available inside any lua function including `__gc` so owned resources can be freed safely when Lua collects an object.
-
-### Closures.
-
-`Meta.Capture` and `Native.closure` for stateful callbacks and partial application. The capture struct lives as userdata in the closure's upvalue and follows the same GC lifecycle as any object.
-
-### List-style object support.
-
-`zua.Meta.List` makes sequence-like userdata behave like Lua lists, with `__index`, `__len`, and iterator support built in.
-
-### Handles and ownership.
-
-Borrowed, stack-owned, and registry-owned handles with explicit transfer via `takeOwnership` and `release`. Hold a `zua.Function` in the registry and call it later with typed arguments and a typed return.
-
-### Doc generation.
-
-`zua.Docs` emits Lua stub files from the same metadata the encoder uses, so editor completion always reflects the current API without writing or maintaining stubs by hand.
-
-### Built-in REPL.
-
-`zua.Repl.run` drops a full interactive shell into any project, with persistent history, tab completion, and syntax highlighting.
-
-### Shared library support.
-
-`State.libState` attaches the zua machinery to an existing `lua_State`, so you can publish a native module loadable with `require` without owning the VM.
-
-# Usage
-
-```zig
-const state = try zua.State.init(gpa, io);
-defer state.deinit();
-var ctx = zua.Context.init(state);
-defer ctx.deinit();
-var executor = zua.Executor{};
-
-const result = try executor.eval(&ctx, i32, .{ .code = .{ .string = "return 2 + 3" } });
-// result == 5
-```
-
-Expose a Zig function that accepts a struct:
 
 ```zig
 const Point = struct { x: f64, y: f64 };
@@ -85,6 +20,67 @@ try globals.set(&ctx, "distance", distance);
 print(distance({x=0, y=0}, {x=3, y=4}))  -- 5.0
 print(distance({x=0, y=0}, "oops"))       -- error: distance expects (Point, Point): got string
 ```
+
+# Installation
+
+```sh
+zig fetch --save git+https://github.com/SolracHQ/zua
+```
+
+```zig
+const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
+exe.root_module.addImport("zua", zua.module("zua"));
+```
+
+No system packages needed. Lua and isocline are pulled as Zig packages automatically.
+
+# What it offers
+
+## Type mapping in both directions.
+
+Structs, unions, enums, slices, optionals, and nested containers are handled automatically via comptime dispatch. No registration, no runtime reflection: the encode and decode paths are resolved at compile time from the type itself.
+
+## Three object strategies.
+
+`.table` for plain data, `.object` for GC-managed userdata with methods and `__gc`, `.ptr` for light userdata pointers.
+
+## Encode and decode hooks.
+
+Customize how any type crosses the boundary without abandoning the automatic path for everything else. Declare a hook once and the pipeline picks it up everywhere that type appears.
+
+## Safe error propagation.
+
+`ctx.fail` and `ctx.failWithFmt` propagate errors as typed Zig errors instead of longjmping over your defer statements.
+
+## Memory management.
+
+`ctx.arena()` for call-scoped allocations, `ctx.heap()` for persistent allocations, both available inside any lua function including `__gc` so owned resources can be freed safely when Lua collects an object.
+
+## Closures.
+
+`Meta.Capture` and `Native.closure` for stateful callbacks and partial application. The capture struct lives as userdata in the closure's upvalue and follows the same GC lifecycle as any object.
+
+## List-style object support.
+
+`zua.Meta.List` makes sequence-like userdata behave like Lua lists, with `__index`, `__len`, and iterator support built in.
+
+## Handles and ownership.
+
+Borrowed, stack-owned, and registry-owned handles with explicit transfer via `takeOwnership` and `release`. Hold a `zua.Function` in the registry and call it later with typed arguments and a typed return.
+
+## Doc generation.
+
+`zua.Docs` emits Lua stub files from the same metadata the encoder uses, so editor completion always reflects the current API without writing or maintaining stubs by hand.
+
+## Built-in REPL.
+
+`zua.Repl.run` drops a full interactive shell into any project, with persistent history, tab completion, and syntax highlighting.
+
+## Shared library support.
+
+`State.libState` attaches the zua machinery to an existing `lua_State`, so you can publish a native module loadable with `require` without owning the VM.
+
+# Longer examples
 
 Expose a stateful type as a Lua object with methods:
 
@@ -114,43 +110,24 @@ c:increment(5)
 print(c)  -- Counter(5)
 ```
 
-# Installation
+# Demo binary
+
+The repo includes a small `zua` binary that demonstrates what the library can do. Think of it like `lua` itself: useful for quick experiments, but the real value of zua is using it as a dependency to build Zig code that interacts with Lua.
 
 ```sh
-zig fetch --save git+https://github.com/SolracHQ/zua
+just run help
+just run repl
+just run eval return 2 + 3
+just run docs
 ```
-
-```zig
-const zua = b.dependency("zua", .{ .target = target, .optimize = optimize });
-exe.root_module.addImport("zua", zua.module("zua"));
-```
-
-No system packages needed. Lua and isocline are pulled as Zig packages automatically.
 
 # Run the Examples
 
-List available examples:
-
 ```sh
-just list-examples
-```
-
-Run a specific example:
-
-```sh
-just run-example guided-tour
-```
-
-Pick one interactively with fzf:
-
-```sh
-just example
-```
-
-Build and run the shared library example:
-
-```sh
-just dylib
+just list-examples              # list available examples
+just run-example guided-tour    # run a specific one
+just example                    # pick one interactively with fzf
+just dylib                      # build and run the shared library example
 ```
 
 # Documentation

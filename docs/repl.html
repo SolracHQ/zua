@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c9c1ad23.js";
+            window.path_to_searchindex_js = "searchindex-c2761eea.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7d4dbe5e.js"></script>
@@ -218,7 +218,7 @@ try zua.Repl.run(state, .{});
 <p><code>stack_trace</code> enables Lua traceback capture for runtime errors, which is useful when you want more than just the final error message.</p>
 <h2 id="tab-completion"><a class="header" href="#tab-completion">Tab completion</a></h2>
 <p>Pass a <code>completion_hook</code> to add completions. The callback receives the current prefix and a stable <code>*zua.Repl.Completer</code> helper that does not expose the underlying line-editor internals:</p>
-<pre><code class="language-zig">fn complete(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
+<pre><code class="language-zig">fn complete(completer: *zua.Repl.Completer, prefix: []const u8) void {
     const items = &amp;[_][:0]const u8{ "add", "greet", "print", "tostring" };
     for (items) |item| {
         if (std.mem.startsWith(u8, item, prefix)) {
@@ -234,17 +234,26 @@ try zua.Repl.run(state, .{
 <p>The <code>Completer</code> API is the stable public hook surface. If we swap the line editor library again in the future, your completion callback still works.</p>
 <p>Use <code>completer.addEx(candidate, display, help)</code> when you want a richer entry with alternate label or help text.</p>
 <h3 id="runtime-lua-completion"><a class="header" href="#runtime-lua-completion">Runtime Lua completion</a></h3>
-<p>When <code>lua_completion</code> is enabled, the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as <code>foo.</code> and <code>foo:</code>.</p>
+<p>When <code>runtime_completion</code> is enabled (default: true), the REPL uses the live Lua runtime to complete globals, table fields, methods, and chained identifiers such as <code>foo.</code> and <code>foo:</code>.</p>
 <p>This works alongside <code>completion_hook</code>: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.</p>
 <pre><code class="language-zig">try zua.Repl.run(state, .{
     .completion_hook = complete,
-    .lua_completion = true,
+    .runtime_completion = true,
 });
 </code></pre>
-<p>If you only want custom candidates and not live runtime completion, omit <code>lua_completion</code> and keep only <code>completion_hook</code>.</p>
+<p>If you only want custom candidates and not live runtime completion, set <code>runtime_completion = false</code> and keep only <code>completion_hook</code>.</p>
+<h3 id="lua-side-completion-hook"><a class="header" href="#lua-side-completion-hook">Lua-side completion hook</a></h3>
+<p>When the <code>Config</code> is exposed as a Lua object via <code>zua.Object(zua.Repl.Config)</code>, you can set a completion hook from Lua at runtime with <code>repl:set_completion_hook(hook)</code>. The hook receives the session <code>Completer</code> handle and the input prefix:</p>
+<pre><code class="language-lua">repl:set_completion_hook(function(completer, prefix)
+    completer:add(prefix .. "_suffix")
+    completer:addEx(prefix .. "_rich", "display text", "help message")
+end)
+</code></pre>
+<p>The Lua hook runs after both runtime completion and the Zig <code>completion_hook</code>, so it can augment or override earlier results.</p>
 <h2 id="syntax-highlighting"><a class="header" href="#syntax-highlighting">Syntax highlighting</a></h2>
 <p>Pass a <code>color_hook</code> to color Lua source as the user types:</p>
-<pre><code class="language-zig">fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+<pre><code class="language-zig">fn colorize(ctx: *zua.Context, kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    _ = ctx;
     return switch (kind) {
         .keyword =&gt; .{ .fg = .{ .ansi = 93 }, .bold = true },
         .keyword_value =&gt; .{ .fg = .{ .ansi = 96 } },
@@ -261,11 +270,11 @@ try zua.Repl.run(state, .{
 }
 
 try zua.Repl.run(state, .{
-    .color_hook = colorize,
+    .style_hook = colorize,
 });
 </code></pre>
 <p>Return <code>null</code> when you want the default style, or a <code>Style</code> when you want to override it.</p>
-<p>The hook gets both the token kind and the token text, so there is no separate identifier hook anymore. If you want to color your own globals, branch on <code>.name</code> and inspect the text.</p>
+<p>The hook receives a <code>*Context</code>, the token kind, and the token text. The context gives you access to the Lua state: read or modify globals, query the registry, or retrieve config stored by your host via a registry key. If you want to color your own globals, branch on <code>.name</code> and inspect the text.</p>
 <h2 id="stack-traces"><a class="header" href="#stack-traces">Stack traces</a></h2>
 <p>If you want nicer runtime errors during interactive sessions, enable <code>stack_trace</code>:</p>
 <pre><code class="language-zig">try zua.Repl.run(state, .{
@@ -283,8 +292,7 @@ fn example() []const u8 {
     return "this is just an example";
 }
 
-fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8, arg: ?*anyopaque) void {
-    _ = arg;
+fn completionCallback(completer: *zua.Repl.Completer, prefix: []const u8) void {
     const items = &amp;[_][:0]const u8{ "example", "custom_magic", "custom_value", "print" };
     for (items) |item| {
         if (std.mem.startsWith(u8, item, prefix)) {
@@ -309,12 +317,13 @@ pub fn main(init: std.process.Init) !void {
         .welcome_message = "Welcome to the zua REPL!\n",
         .history_path = "zua_repl_history.txt",
         .completion_hook = completionCallback,
-        .color_hook = colorize,
+        .style_hook = colorize,
         .stack_trace = true,
     });
 }
 
-fn colorize(kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+fn colorize(ctx: *zua.Context, kind: zua.Repl.highlight.TokenKind, text: []const u8) ?zua.Repl.highlight.Style {
+    _ = ctx;
     return switch (kind) {
         .keyword =&gt; .{ .fg = .{ .ansi = 93 }, .bold = true },
         .keyword_value =&gt; .{ .fg = .{ .ansi = 96 } },

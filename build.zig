@@ -37,9 +37,25 @@ pub fn build(b: *std.Build) void {
     isocline_mod.addCSourceFile(.{ .file = isocline_dep.path("src/isocline.c") });
     module.addImport("isocline", isocline_mod);
 
+    const repl = b.addExecutable(.{ .name = "zua", .root_module = b.createModule(.{ .root_source_file = b.path("src/main.zig"), .target = target, .optimize = optimize, .imports = &.{.{ .name = "zua", .module = module }} }) });
+    b.installArtifact(repl);
+
+    const run_step = b.step("run", "Run the app");
+    const run_cmd = b.addRunArtifact(repl);
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+    run_step.dependOn(&run_cmd.step);
+    run_cmd.step.dependOn(b.getInstallStep());
+
+    setupExamples(b, module, target, optimize);
+}
+
+fn setupExamples(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const mod_tests = b.addTest(.{
         .root_module = module,
     });
+
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
     const vecmath_module = b.createModule(.{
@@ -101,5 +117,6 @@ pub fn build(b: *std.Build) void {
     }
 
     const test_step = b.step("test", "Run tests");
+
     test_step.dependOn(&run_mod_tests.step);
 }

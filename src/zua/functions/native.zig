@@ -47,7 +47,7 @@ pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) 
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context }, error_config, .{});
+    return trampoline.make(function, .{ .hasContext = has_context }, error_config, &.{});
 }
 
 /// Creates a concrete `Closure` wrapper type for the provided Zig callback.
@@ -81,7 +81,7 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, error_config, .{});
+    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, error_config, &.{});
 }
 
 // Value constructors used at call sites.

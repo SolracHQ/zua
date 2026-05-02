@@ -3,122 +3,92 @@
 //! This module exposes an embedded REPL that evaluates each line against an
 //! existing Zua `State`. Every command runs in a fresh `Context`, so scratch
 //! allocations are reclaimed before the next input.
+
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
+const Object = @import("../typed/object.zig").Object;
 
 pub const highlight = @import("highlight.zig");
 pub const completion = @import("completion.zig");
 pub const isocline = @import("../../isocline/isocline.zig");
 
-const REPL = @This();
+pub const Repl = @This();
 
 // Exported helpers and callback types used by REPL clients.
 pub const Completer = completion.Completer;
 pub const CompletionHook = completion.CompletionHook;
 
-/// REPL configuration options.
-pub const Config = struct {
-    /// Prompt displayed for each input line.
-    prompt: [:0]const u8 = "zua",
-
-    /// Optional completion callback for the embedded REPL.
-    ///
-    /// The callback receives the current completion prefix and a stable
-    /// `*zua.Repl.Completer` helper. Use it to add custom completion candidates
-    /// that are not derived from the live Lua runtime.
-    completion_hook: CompletionHook = null,
-
-    /// Opaque argument forwarded to the completion callback.
-    completion_arg: ?*anyopaque = null,
-
-    /// Optional path to a history file.
-    history_path: ?[:0]const u8 = null,
-
-    /// Maximum number of history entries. -1 uses the isocline default (200).
-    history_max: c_long = -1,
-
-    /// Optional welcome message printed once at startup.
-    welcome_message: ?[]const u8 = null,
-
-    /// Enable stack trace capture for runtime errors.
-    ///
-    /// When enabled, the REPL uses the executor's stack trace
-    /// mode so tracebacks are available for errors.
-    stack_trace: bool = false,
-
-    /// Optional per-token style hook for syntax highlighting.
-    color_hook: highlight.ColorHook = null,
-
-    /// When enabled, the REPL resolves chained Lua identifiers against the
-    /// live runtime and completes globals, fields, and methods.
-    ///
-    /// If configured, runtime completion is performed before the optional
-    /// `completion_hook`, so your custom hook can augment or override results.
-    lua_completion: bool = false,
-};
-
 const HighlightState = highlight.HighlightState;
+
+pub const Config = @import("config.zig");
 
 /// Runs the interactive Zua REPL session using the provided `State`.
 ///
 /// The REPL supports optional history persistence, syntax highlighting, and
 /// tab completion. Each entered line is evaluated in a fresh `Context`, which
 /// ensures temporary allocations are reclaimed between commands.
-pub fn run(state: *State, config: Config) !void {
+pub fn run(state: *State, config: *Config) !void {
     if (config.history_path) |path| {
         isocline.setHistory(path, config.history_max);
     }
 
-    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\n use shift+tab for multiline input\nctrl+d to exit\n", " \t\r\n");
+    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\nUse shift+tab for multiline input\nUse ctrl+d to exit\n", " \t\r\n");
     try printMessage(state, "", welcome_message);
 
     // Highlight state lives on the stack; isocline holds a pointer for the
-    // duration of the session. The HighlightState outlives every readline call.
+    // duration of the session. ctx is set each readline cycle before the call.
     var hl_state = HighlightState{
-        .allocator = state.allocator,
-        .color_hook = config.color_hook,
+        .ctx = undefined,
+        .config = config,
     };
 
-    // Register the highlighter once for the whole session.
     isocline.setDefaultHighlighter(highlight.highlightCallbackC, &hl_state);
     defer isocline.setDefaultHighlighter(null, null);
 
-    if (config.completion_hook != null or config.lua_completion) {
-        var comp_state = completion.CompletionState{
-            .state = state,
-            .user_hook = config.completion_hook,
-            .user_arg = config.completion_arg,
-            .lua_enabled = config.lua_completion,
-        };
-        isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
-    }
+    // Completion state with a session-scoped Completer as a zua Object.
+    var comp_state = completion.CompletionState{
+        .config = config,
+        .ctx = undefined,
+        .completer = blk: {
+            const initial = completion.Completer{
+                ._env = null,
+                ._ctx = undefined,
+            };
+            break :blk Object(completion.Completer).create(state, initial).takeOwnership();
+        },
+    };
+    isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
+    defer comp_state.completer.release();
     defer isocline.setDefaultCompleter(null, null);
 
     while (true) {
+        var ctx = Context.init(state);
+        defer ctx.deinit();
+
+        hl_state.ctx = &ctx;
+        comp_state.ctx = &ctx;
+
         const line = isocline.readline(config.prompt) orelse break;
         defer isocline.freeMemory(@ptrCast(@constCast(line.ptr)));
 
         const source = std.mem.trim(u8, line, " \t\r\n");
         if (source.len == 0) continue;
 
-        try evalSource(state, source, config);
+        try evalSource(state, &ctx, source, config);
     }
 }
 
 // Evaluation
 
 /// Evaluate a single REPL source line.
-fn evalSource(state: *State, source: []const u8, config: Config) !void {
-    var ctx = Context.init(state);
-    defer ctx.deinit();
-
+fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *Config) !void {
     const previous_top = lua.getTop(state.luaState);
     defer lua.setTop(state.luaState, previous_top);
 
-    const wrapped = try tryWrapAsExpression(&ctx, source);
+    const wrapped = try tryWrapAsExpression(ctx, source);
     const load_source = wrapped orelse source;
     var executor: Executor = .{};
     const exec_config = Executor.Config{
@@ -127,7 +97,7 @@ fn evalSource(state: *State, source: []const u8, config: Config) !void {
         .take_error_ownership = false,
     };
 
-    executor.eval_untyped(&ctx, exec_config) catch {
+    executor.eval_untyped(ctx, exec_config) catch {
         const msg = ctx.err orelse "unknown error";
         try printMessage(state, "Error: ", msg);
         return;

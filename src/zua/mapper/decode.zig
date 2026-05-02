@@ -120,7 +120,7 @@ fn parseSingle(
 
     if (is_opt and value_count == 0) return null;
 
-    return decodeAt(ctx, start_index, ChildT);
+    return try decodeAt(ctx, start_index, ChildT);
 }
 
 /// Parses multiple Lua stack values into a tuple of Zig types.
@@ -453,7 +453,15 @@ fn decodeEnum(comptime T: type, prim: Primitive, ctx: *Context) !T {
 pub fn decodeStruct(ctx: *Context, table: Table, comptime T: type) !T {
     var result: T = undefined;
     inline for (@typeInfo(T).@"struct".fields) |field| {
-        @field(result, field.name) = try table.get(ctx, field.name, field.type);
+        if (comptime field.default_value_ptr) |default| {
+            if (try table.get(ctx, field.name, ?field.type)) |val| {
+                @field(result, field.name) = val;
+            } else {
+                @field(result, field.name) = @as(*const field.type, @ptrCast(@alignCast(default))).*;
+            }
+        } else {
+            @field(result, field.name) = try table.get(ctx, field.name, field.type);
+        }
     }
     return result;
 }

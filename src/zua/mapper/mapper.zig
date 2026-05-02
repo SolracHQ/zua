@@ -22,7 +22,7 @@ pub const Primitive =
         boolean: bool,
         integer: i64,
         float: f64,
-        string: []const u8,
+        string: [:0]const u8,
         table: Handlers.Table,
         function: Handlers.Function,
         light_userdata: *anyopaque,
