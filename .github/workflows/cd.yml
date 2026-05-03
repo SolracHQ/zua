@@ -16,13 +16,8 @@ jobs:
       - name: Extract version from build.zig.zon
         id: version
         run: |
-          VERSION=$(grep -oP 'version = "\K[^"]+' build.zig.zon)
+          VERSION=$(grep -oP '^\s+\.version = "\K[^"]+' build.zig.zon)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create tag
-        run: |
-          git tag ${{ steps.version.outputs.version }}
-          git push origin ${{ steps.version.outputs.version }}
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
@@ -32,11 +27,13 @@ jobs:
       - name: Build demo binary with ReleaseSafe
         run: zig build --release=safe
 
-      - name: Upload demo binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: zua-${{ steps.version.outputs.version }}
-          path: zig-out/bin/zua
+      - name: Create tag and release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.version.outputs.version }} zig-out/bin/zua \
+            --target ${{ github.sha }} \
+            --title "v${{ steps.version.outputs.version }}"
 
       - name: Install mdBook
         run: |
