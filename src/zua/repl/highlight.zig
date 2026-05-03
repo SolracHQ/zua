@@ -277,7 +277,24 @@ fn resolveStyle(
     if (config.style_hook) |hook| {
         if (hook(ctx, kind, text)) |style| return style;
     }
+    if (!config.default_styles) return .{};
     return defaultStyle(kind);
+}
+
+/// Appends `text` to `out`, escaping `[` as `\[` and `\` as `\\` so that the
+/// bbcode parser in isocline does not misinterpret them as tag delimiters or
+/// escape sequences.
+fn appendBbcodeEscaped(out: *std.ArrayList(u8), allocator: std.mem.Allocator, text: []const u8) !void {
+    if (std.mem.indexOfAny(u8, text, "[\\") == null) {
+        return out.appendSlice(allocator, text);
+    }
+    for (text) |c| {
+        switch (c) {
+            '[' => try out.appendSlice(allocator, "\\["),
+            '\\' => try out.appendSlice(allocator, "\\\\"),
+            else => try out.append(allocator, c),
+        }
+    }
 }
 
 /// Build a bbcode-annotated copy of `source` suitable for ic_highlight_formatted.
@@ -305,7 +322,7 @@ pub fn process(
 
         // Emit any gap between the last token and this one verbatim.
         if (token.offset > pos) {
-            out.appendSlice(arena, source[pos..token.offset]) catch return null;
+            appendBbcodeEscaped(&out, arena, source[pos..token.offset]) catch return null;
         }
 
         const slice = source[token.offset .. token.offset + token.len];
@@ -313,17 +330,17 @@ pub fn process(
 
         if (!style.isEmpty()) {
             style.writeOpenTag(arena, &out) catch return null;
-            out.appendSlice(arena, slice) catch return null;
+            appendBbcodeEscaped(&out, arena, slice) catch return null;
             style.writeCloseTag(arena, &out) catch return null;
         } else {
-            out.appendSlice(arena, slice) catch return null;
+            appendBbcodeEscaped(&out, arena, slice) catch return null;
         }
 
         pos = token.offset + token.len;
     }
 
     if (pos < source.len) {
-        out.appendSlice(arena, source[pos..]) catch return null;
+        appendBbcodeEscaped(&out, arena, source[pos..]) catch return null;
     }
 
     // Null-terminate so the C API can use the pointer directly.

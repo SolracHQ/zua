@@ -47,6 +47,12 @@ const methods = .{
             .{ .name = "enabled", .description = "Whether live Lua runtime completion is enabled." },
         },
     }),
+    .set_default_styles = Native.new(setDefaultStyles, .{}, .{
+        .description = "Enable or disable built-in default syntax highlighting styles.",
+        .args = &.{
+            .{ .name = "enabled", .description = "When true (default), built-in styles are used as fallback after hooks and overrides." },
+        },
+    }),
     .__gc = gc,
 };
 
@@ -88,6 +94,10 @@ style_hook: highlight.ColorHook = null,
 /// hooks, so custom hooks can augment or override results.
 runtime_completion: bool = true,
 
+/// When true (default), built-in default syntax highlighting styles are used
+/// as a fallback after custom overrides and hooks.
+default_styles: bool = true,
+
 /// Per-kind style overrides. Set via repl:set_color or repl:set_style from Lua.
 style_overrides: std.EnumArray(highlight.TokenKind, ?highlight.Style) = .initFill(null),
 
@@ -123,6 +133,10 @@ fn setLuaCompletionHook(self: *Config, hook: Fn(.{ Object(Completer), []const u8
 
 fn setRuntimeCompletion(self: *Config, enabled: bool) void {
     self.runtime_completion = enabled;
+}
+
+fn setDefaultStyles(self: *Config, enabled: bool) void {
+    self.default_styles = enabled;
 }
 
 fn gc(self: *Config) void {
