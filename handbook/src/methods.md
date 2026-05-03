@@ -13,7 +13,7 @@ Pass the method list as the second argument to `Meta.Table` or `Meta.Object`:
 const Point = struct {
     pub const ZUA_META = zua.Meta.Table(Point, .{
         .distance = distance,
-    });
+    }, .{});
 
     x: f64,
     y: f64,
@@ -48,7 +48,7 @@ const Counter = struct {
     pub const ZUA_META = zua.Meta.Table(Counter, .{
         .value     = getValue,
         .increment = increment,
-    });
+    }, .{});
 
     count: i32,
 
@@ -101,7 +101,7 @@ const Vec2 = struct {
         .length     = length,
         .__tostring = toString,
         .__add      = add,
-    });
+    }, .{});
 
     x: f64,
     y: f64,
@@ -139,7 +139,7 @@ const Counter = struct {
             .parse_err_fmt = "Counter:increment expects (integer): {s}",
         }),
         .reset = reset,
-    });
+    }, .{});
 
     count: i32 = 0,
 

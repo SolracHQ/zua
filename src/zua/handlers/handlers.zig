@@ -32,6 +32,17 @@ pub const Handle = union(enum) {
     /// Lua stack frame.
     registry_owned: c_int,
 
+    /// Creates a registry-owned copy of this handle.
+    ///
+    /// Regardless of the handle's current ownership mode, the returned handle
+    /// always uses `registry_owned`. The original handle is not consumed and
+    /// must still be released separately.
+    ///
+    /// Arguments:
+    /// - state: The Zua state whose Lua registry receives the copy.
+    ///
+    /// Returns:
+    /// - Handle: A new registry-owned handle pointing to the same Lua value.
     pub fn owned(self: Handle, state: *State) Handle {
         return switch (self) {
             .registry_owned => |ref| {
@@ -52,6 +63,17 @@ pub const Handle = union(enum) {
         };
     }
 
+    /// Converts this handle to registry ownership, consuming the original.
+    ///
+    /// After this call the caller should use the returned handle and stop
+    /// using `self`. For `stack_owned` handles the stack slot is removed;
+    /// for `borrowed` handles the value is copied into the registry.
+    ///
+    /// Arguments:
+    /// - state: The Zua state whose Lua registry takes ownership.
+    ///
+    /// Returns:
+    /// - Handle: A registry-owned handle. Pass-through when already registry-owned.
     pub fn takeOwnership(self: Handle, state: *State) Handle {
         return switch (self) {
             .registry_owned => self,
@@ -69,6 +91,14 @@ pub const Handle = union(enum) {
         };
     }
 
+    /// Releases the resources held by this handle.
+    ///
+    /// - `registry_owned`: unrefs the Lua registry reference.
+    /// - `stack_owned`: removes the value from the Lua stack.
+    /// - `borrowed`: no-op, the caller owns the stack slot.
+    ///
+    /// Arguments:
+    /// - state: The Zua state whose Lua resources are released.
     pub fn release(self: Handle, state: *State) void {
         switch (self) {
             .borrowed => {},

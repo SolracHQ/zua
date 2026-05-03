@@ -8,7 +8,7 @@ const User = struct {
         .getId = getId,
         .getName = getName,
         .__gc = cleanup,
-    });
+    }, .{});
 
     id: i32,
     name: []const u8,
@@ -32,7 +32,7 @@ const UserList = struct {
         .__gc = UserList.cleanup,
         .__tostring = UserList.display,
         .filter = UserList.filter,
-    });
+    }, .{});
 
     users: std.ArrayList(zua.Object(User)),
 
@@ -104,7 +104,7 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .make_users = zua.Native.new(makeUsers, .{ .parse_err_fmt = "make_users expects no arguments: {s}" }),
+        .make_users = zua.Native.new(makeUsers, .{ .parse_err_fmt = "make_users expects no arguments: {s}" }, .{}),
     });
 
     executor.execute(&ctx, .{ .code = .{ .string =

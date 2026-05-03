@@ -8,7 +8,8 @@ const Function = @import("../handlers/function.zig");
 const Native = @import("../functions/native.zig");
 const Context = @import("../state/context.zig");
 const Mapper = @import("../mapper/mapper.zig");
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
+const helpers = @import("../meta/helpers.zig");
 
 const std = @import("std");
 
@@ -18,7 +19,7 @@ const std = @import("std");
 pub fn Fn(comptime ins: anytype, outs: anytype) type {
     return struct {
         /// Metadata used to encode and decode this typed function wrapper.
-        pub const ZUA_META = Meta.Table(@This(), .{}).withEncode(Function, encode).withDecode(decode);
+        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withEncode(Function, encode).withDecode(decode);
         pub const Args = Mapper.Decoder.ParseResult(ins);
         pub const Result = Mapper.Decoder.ParseResult(outs);
 
@@ -87,8 +88,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         pub fn create(ctx: *Context, callback: anytype) @This() {
             comptime {
                 const callback_type = @TypeOf(callback);
-                if (@typeInfo(callback_type) == .@"fn" or
-                    (@typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaNativeFunction")))
+                if (@typeInfo(callback_type) == .@"fn" or helpers.isNativeWrapperType(callback_type))
                 {
                     checkCallbackSignature(callback, ins, outs);
                 }
@@ -126,44 +126,24 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
 fn callbackWrapperType(comptime callback: anytype) type {
     const callback_type = @TypeOf(callback);
     if (comptime @typeInfo(callback_type) == .@"fn") {
-        return @TypeOf(Native.new(callback, .{}));
+        return @TypeOf(Native.new(callback, .{}, .{}));
     }
-    if (comptime @typeInfo(callback_type) == .@"struct" and @hasDecl(callback_type, "__IsZuaNativeFunction")) {
+    if (comptime helpers.isNativeWrapperType(callback_type)) {
         return callback_type;
     }
     @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
-}
-
-fn typeElementCount(comptime T: anytype) usize {
-    const Ty = @TypeOf(T);
-    if (Ty == type) {
-        const ti = @typeInfo(T);
-        return if (ti == .void) 0 else if (ti == .@"struct" and ti.@"struct".is_tuple) T.len else 1;
-    }
-    return T.len;
-}
-
-fn typeElementAt(comptime T: anytype, comptime index: usize) type {
-    const Ty = @TypeOf(T);
-    if (Ty == type) {
-        const ti = @typeInfo(T);
-        if (ti == .@"struct" and ti.@"struct".is_tuple) return T[index];
-        if (index == 0) return T;
-        @compileError("Index bigger than 0 is out of bounds for non-tuple type " ++ @typeName(T));
-    }
-    return T[index];
 }
 
 fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, comptime outs: anytype) void {
     const wrapper_type = callbackWrapperType(callback);
     const actual_args = wrapper_type.decodedParameterTypes();
     const expected_args = ins;
-    const actual_count = typeElementCount(actual_args);
-    const expected_count = typeElementCount(expected_args);
+    const actual_count = helpers.typeListCount(actual_args);
+    const expected_count = helpers.typeListCount(expected_args);
     if (comptime actual_count != expected_count) @compileError("Fn.create: callback argument count mismatch: expected " ++ @typeName(expected_count) ++ " args, got " ++ @typeName(actual_count));
     inline for (0..actual_count) |i| {
-        const actual = typeElementAt(actual_args, i);
-        const expected = typeElementAt(expected_args, i);
+        const actual = helpers.typeListAt(actual_args, i);
+        const expected = helpers.typeListAt(expected_args, i);
         if (comptime actual != expected) @compileError("Fn.create: callback argument #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));
@@ -171,12 +151,12 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
 
     const actual_return = wrapper_type.__ZuaNativeReturnType;
     const expected_return = outs;
-    const actual_return_count = typeElementCount(actual_return);
-    const expected_return_count = typeElementCount(expected_return);
+    const actual_return_count = helpers.typeListCount(actual_return);
+    const expected_return_count = helpers.typeListCount(expected_return);
     if (comptime actual_return_count != expected_return_count) @compileError("Fn.create: callback return count mismatch: expected " ++ @typeName(expected_return_count) ++ " return values, got " ++ @typeName(actual_return_count));
     inline for (0..actual_return_count) |i| {
-        const actual = typeElementAt(actual_return, i);
-        const expected = typeElementAt(expected_return, i);
+        const actual = helpers.typeListAt(actual_return, i);
+        const expected = helpers.typeListAt(expected_return, i);
         if (comptime actual != expected) @compileError("Fn.create: callback return #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));

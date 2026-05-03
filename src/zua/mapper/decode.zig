@@ -13,7 +13,7 @@ const Function = @import("../handlers/function.zig");
 const Userdata = @import("../handlers/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 
 const Fn = @import("../typed/fn.zig").Fn;
 const Object = @import("../typed/object.zig").Object;

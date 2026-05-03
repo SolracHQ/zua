@@ -1,6 +1,6 @@
 .{
     .name = .zua,
-    .version = "0.11.0",
+    .version = "0.12.0",
     .fingerprint = 0xcedae8e9495a980e,
     .minimum_zig_version = "0.16.0-dev.2984+cb7d2b056",
     .dependencies = .{

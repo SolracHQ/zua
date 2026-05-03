@@ -12,7 +12,7 @@ const Vec2 = struct {
         .dot = dot,
         .length = length,
         .normalize = normalize,
-    });
+    }, .{});
 
     x: f64,
     y: f64,
@@ -56,26 +56,29 @@ fn docs(ctx: *zua.Context) ![]const u8 {
     return zua.Docs.generateModule(ctx.arena(), module, "vecmath");
 }
 
-const vec2_fn = zua.Native.new(vec2, .{})
-    .withName("vec2")
-    .withDescription("Construct a new Vec2 value.")
-    .withDescriptions(&.{
-    .{ .name = "x", .description = "Horizontal component." },
-    .{ .name = "y", .description = "Vertical component." },
+const vec2_fn = zua.Native.new(vec2, .{}, .{
+    .name = "vec2",
+    .description = "Construct a new Vec2 value.",
+    .args = &.{
+        .{ .name = "x", .description = "Horizontal component." },
+        .{ .name = "y", .description = "Vertical component." },
+    },
 });
 
-const lerp_fn = zua.Native.new(lerp, .{})
-    .withName("lerp")
-    .withDescription("Linearly interpolate between two Vec2 values.")
-    .withDescriptions(&.{
-    .{ .name = "a", .description = "Starting vector." },
-    .{ .name = "b", .description = "Ending vector." },
-    .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+const lerp_fn = zua.Native.new(lerp, .{}, .{
+    .name = "lerp",
+    .description = "Linearly interpolate between two Vec2 values.",
+    .args = &.{
+        .{ .name = "a", .description = "Starting vector." },
+        .{ .name = "b", .description = "Ending vector." },
+        .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+    },
 });
 
-const docs_fn = zua.Native.new(docs, .{})
-    .withName("docs")
-    .withDescription("Generate editor stubs for the vecmath module.");
+const docs_fn = zua.Native.new(docs, .{}, .{
+    .name = "docs",
+    .description = "Generate editor stubs for the vecmath module.",
+});
 
 const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn, .docs = docs_fn };
 

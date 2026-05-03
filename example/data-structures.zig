@@ -52,10 +52,10 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .print_point = zua.Native.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }),
-        .create_config = zua.Native.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }),
-        .get_config_value = zua.Native.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }),
-        .sum_numbers = zua.Native.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }),
+        .print_point = zua.Native.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }, .{}),
+        .create_config = zua.Native.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }, .{}),
+        .get_config_value = zua.Native.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }, .{}),
+        .sum_numbers = zua.Native.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }, .{}),
     });
 
     try executor.execute(&ctx, .{ .code = .{ .string =

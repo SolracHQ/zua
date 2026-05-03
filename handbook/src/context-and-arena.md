@@ -14,7 +14,7 @@ fn greet(ctx: *zua.Context, name: []const u8) []const u8 {
 
 globals.set(&ctx, "greet", zua.Native.new(greet, .{
     .parse_err_fmt = "greet expects (string): {s}",
-}));
+}, .{}));
 ```
 
 ```lua
@@ -47,7 +47,7 @@ const Entry = struct {
     pub const ZUA_META = zua.Meta.Object(Entry, .{
         .label = getLabel,
         .__gc = cleanup,
-    });
+    }, .{});
 
     // allocated from ctx.heap(), survives across calls
     label: []const u8,

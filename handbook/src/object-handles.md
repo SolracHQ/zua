@@ -10,7 +10,7 @@ When you have `.object` strategy values that need to be passed between functions
 const Node = struct {
     pub const ZUA_META = zua.Meta.Object(Node, .{
         .value = getValue,
-    });
+    }, .{});
     data: i32,
     pub fn getValue(self: *Node) i32 { return self.data; }
 };
@@ -19,7 +19,7 @@ const Wrapper = struct {
     pub const ZUA_META = zua.Meta.Object(Wrapper, .{
         .get_node = getNode,
         .__gc     = cleanup,
-    });
+    }, .{});
 
     node: zua.Object(Node),
 

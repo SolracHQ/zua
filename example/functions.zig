@@ -37,7 +37,7 @@ fn increment(x: i32) i32 {
 /// stores this struct as upvalue 1 of the Lua C closure so mutations
 /// persist across calls to the same closure instance.
 const CounterState = struct {
-    pub const ZUA_META = zua.Meta.Capture(@This(), .{});
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{}, .{});
     count: i32,
     step: i32,
 };
@@ -81,7 +81,7 @@ const CallbackRegistry = struct {
         .set_callback = setCallback,
         .call_stored = callStored,
         .__gc = deinit,
-    });
+    }, .{});
 
     // Stores owned callback, null if not set
     stored: ?zua.Fn(i32, i32) = null,
@@ -137,17 +137,17 @@ pub fn main(init: std.process.Init) !void {
     defer owned_typed_increment.release();
 
     const module = .{
-        .add = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }),
-        .greet = zua.Native.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }),
-        .divide = zua.Native.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }),
-        .apply_twice = zua.Native.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }),
-        .CallbackRegistry = zua.Native.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }),
+        .add = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }, .{}),
+        .greet = zua.Native.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }, .{}),
+        .divide = zua.Native.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }, .{}),
+        .apply_twice = zua.Native.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }, .{}),
+        .CallbackRegistry = zua.Native.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }, .{}),
         .increment = owned_increment,
         .typed_increment = owned_typed_increment,
-        .sum_all = zua.Native.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }),
-        .describe_args = zua.Native.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }),
-        .counter_by_one = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}),
-        .counter_by_ten = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}),
+        .sum_all = zua.Native.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }, .{}),
+        .describe_args = zua.Native.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }, .{}),
+        .counter_by_one = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}, .{}),
+        .counter_by_ten = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}, .{}),
     };
 
     try state.addGlobals(&ctx, module);

@@ -17,7 +17,7 @@ const TestList = struct {
     pub const ZUA_META = zua.Meta.List(TestList, getElements, .{
         .__tostring = display,
         .sum = sum,
-    });
+    }, .{});
 
     items: []const i32,
 
@@ -64,12 +64,14 @@ pub fn main(init: std.process.Init) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const example_fn = zua.Native.new(example, .{})
-        .withName("example")
-        .withDescription("Return a sample string from the host environment.");
-    const custom_magic_fn = zua.Native.new(example, .{})
-        .withName("custom_magic")
-        .withDescription("Alias for example() exposed for custom syntax highlighting.");
+    const example_fn = zua.Native.new(example, .{}, .{
+        .name = "example",
+        .description = "Return a sample string from the host environment.",
+    });
+    const custom_magic_fn = zua.Native.new(example, .{}, .{
+        .name = "custom_magic",
+        .description = "Alias for example() exposed for custom syntax highlighting.",
+    });
 
     // Register host functions and a sample list object into the Lua REPL environment.
     try state.addGlobals(&ctx, .{

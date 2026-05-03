@@ -67,7 +67,7 @@ const Condition = union(enum) {
     eq:       f64,
     in_range: Range,
 
-    pub const ZUA_META = zua.Meta.Table(Condition, .{});
+    pub const ZUA_META = zua.Meta.Table(Condition, .{}, .{});
 };
 ```
 

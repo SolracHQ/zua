@@ -15,6 +15,7 @@ pub const ArgsConfig = trampoline.ArgsConfig;
 /// when the callback is called from Lua.
 pub const ErrorConfig = trampoline.ErrorConfig;
 pub const ArgInfo = trampoline.ArgInfo;
+pub const DocOptions = trampoline.DocOptions;
 
 // Public type constructors used in signatures (e.g. return type annotations).
 
@@ -27,16 +28,17 @@ pub const ArgInfo = trampoline.ArgInfo;
 /// Arguments:
 /// - `function`: the Zig callback to expose to Lua.
 /// - `error_config`: parsing and Zig error formatting hooks for the wrapped callback.
+/// - `doc`: optional documentation metadata for stub generation.
 ///
 /// Returns:
 /// - `type`: a concrete wrapper type whose `trampoline()` method can be pushed to Lua.
 ///
 /// Example:
 /// ```zig
-/// const my_fn = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" });
+/// const my_fn = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }, .{});
 /// globals.set(&ctx, "add", my_fn);
 /// ```
-pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) type {
+pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig, comptime doc: DocOptions) type {
     const FunctionType = @TypeOf(function);
     if (comptime @typeInfo(FunctionType) != .@"fn") {
         @compileError("NativeFn expects a function, got " ++ @typeName(FunctionType));
@@ -47,7 +49,7 @@ pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) 
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context }, error_config, &.{});
+    return trampoline.make(function, .{ .hasContext = has_context }, error_config, doc);
 }
 
 /// Creates a concrete `Closure` wrapper type for the provided Zig callback.
@@ -59,16 +61,17 @@ pub fn NativeFn(comptime function: anytype, comptime error_config: ErrorConfig) 
 /// Arguments:
 /// - `function`: the Zig callback to expose to Lua.
 /// - `error_config`: parsing and Zig error formatting hooks for the wrapped callback.
+/// - `doc`: optional documentation metadata for stub generation.
 ///
 /// Returns:
 /// - `type`: a concrete closure wrapper type that carries the initial capture value.
 ///
 /// Example:
 /// ```zig
-/// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{});
+/// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{}, .{});
 /// globals.set(&ctx, "counter", counter);
 /// ```
-pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) type {
+pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig, comptime doc: DocOptions) type {
     const FunctionType = @TypeOf(function);
     if (comptime @typeInfo(FunctionType) != .@"fn") {
         @compileError("Closure expects a function, got " ++ @typeName(FunctionType));
@@ -81,7 +84,7 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
 
-    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, error_config, &.{});
+    return trampoline.make(function, .{ .hasContext = has_context, .hasCapture = true }, error_config, doc);
 }
 
 // Value constructors used at call sites.
@@ -95,16 +98,17 @@ pub fn Closure(comptime function: anytype, comptime error_config: ErrorConfig) t
 /// Arguments:
 /// - `function`: the Zig callback to expose to Lua.
 /// - `error_config`: parsing and Zig error formatting hooks.
+/// - `doc`: optional documentation metadata for stub generation.
 ///
 /// Returns:
 /// - `NativeFn`: a concrete wrapper value ready to be pushed to Lua.
 ///
 /// Example:
 /// ```zig
-/// const fn_val = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" });
+/// const fn_val = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }, .{});
 /// globals.set(&ctx, "add", fn_val);
 /// ```
-pub inline fn new(comptime function: anytype, comptime error_config: ErrorConfig) NativeFn(function, error_config) {
+pub inline fn new(comptime function: anytype, comptime error_config: ErrorConfig, comptime doc: DocOptions) NativeFn(function, error_config, doc) {
     return .{};
 }
 
@@ -118,20 +122,22 @@ pub inline fn new(comptime function: anytype, comptime error_config: ErrorConfig
 /// - `function`: the Zig callback to expose to Lua.
 /// - `initial`: the initial capture state passed as userdata upvalue 1.
 /// - `error_config`: parsing and Zig error formatting hooks.
+/// - `doc`: optional documentation metadata for stub generation.
 ///
 /// Returns:
 /// - `Closure`: a concrete closure wrapper value that carries the capture state.
 ///
 /// Example:
 /// ```zig
-/// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{});
+/// const counter = zua.Native.closure(counter_fn, CounterState{ .count = 0, .step = 1 }, .{}, .{});
 /// globals.set(&ctx, "counter", counter);
 /// ```
 pub inline fn closure(
     comptime function: anytype,
     initial: anytype,
     comptime error_config: ErrorConfig,
-) Closure(function, error_config) {
+    comptime doc: DocOptions,
+) Closure(function, error_config, doc) {
     return .{ .initial = initial };
 }
 

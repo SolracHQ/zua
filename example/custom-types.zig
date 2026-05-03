@@ -4,10 +4,10 @@ const zua = @import("zua");
 const Counter = struct {
     pub const ZUA_META = zua.Meta.Object(Counter, .{
         .value = getValue,
-        .increment = zua.Native.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }),
+        .increment = zua.Native.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }, .{}),
         .reset = reset,
         .__tostring = toString,
-    });
+    }, .{});
 
     count: i32 = 0,
 
@@ -41,7 +41,7 @@ const Condition = union(enum) {
     eq: f64,
     in_range: Range,
 
-    pub const ZUA_META = zua.Meta.Table(Condition, .{});
+    pub const ZUA_META = zua.Meta.Table(Condition, .{}, .{});
 };
 
 fn makeEqCondition(value: f64) Condition {

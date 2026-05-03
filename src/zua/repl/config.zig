@@ -4,7 +4,7 @@ const completion = @import("completion.zig");
 const highlight = @import("highlight.zig");
 
 const Fn = @import("../typed/fn.zig").Fn;
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 const Native = @import("../functions/native.zig");
 const Object = @import("../typed/object.zig").Object;
 
@@ -14,27 +14,43 @@ const CompletionHook = completion.CompletionHook;
 /// REPL configuration options.
 pub const Config = @This();
 
-pub const ZUA_META = Meta.Object(Config, .{
-    .set_color = Native.new(setColor, .{}).withDescriptions(&.{
-        .{ .name = "kind", .description = "Token kind to color." },
-        .{ .name = "color", .description = "Color value as ANSI int, hex string, color name, or {r,g,b} table." },
-    }).withDescription("Set a color override for a token kind."),
-    .set_style = Native.new(setStyle, .{}).withDescriptions(&.{
-        .{ .name = "kind", .description = "Token kind to style." },
-        .{ .name = "style", .description = "Style table with optional fg, bg, bold, dim, italic fields." },
-    }).withDescription("Set a full style override for a token kind."),
-    .set_style_hook = Native.new(setStyleHook, .{}).withDescriptions(&.{
-        .{ .name = "hook", .description = "Function receiving (kind, text) and returning a Style table or nil." },
-    }).withDescription("Set the Lua-side syntax highlighting hook."),
-    .set_completion_hook = Native.new(setLuaCompletionHook, .{}).withDescriptions(&.{
-        .{ .name = "hook", .description = "Function receiving (completer, prefix) and calling completer:add/addEx to publish candidates." },
-    }).withDescription("Set the Lua-side tab completion hook."),
-    .set_runtime_completion = Native.new(setRuntimeCompletion, .{}).withDescriptions(&.{
-        .{ .name = "enabled", .description = "Whether live Lua runtime completion is enabled." },
-    }).withDescription("Enable or disable live Lua runtime completion for chained identifiers."),
+const methods = .{
+    .set_color = Native.new(setColor, .{}, .{
+        .description = "Set a color override for a token kind.",
+        .args = &.{
+            .{ .name = "kind", .description = "Token kind to color." },
+            .{ .name = "color", .description = "Color value as ANSI int, hex string, color name, or {r,g,b} table." },
+        },
+    }),
+    .set_style = Native.new(setStyle, .{}, .{
+        .description = "Set a full style override for a token kind.",
+        .args = &.{
+            .{ .name = "kind", .description = "Token kind to style." },
+            .{ .name = "style", .description = "Style table with optional fg, bg, bold, dim, italic fields." },
+        },
+    }),
+    .set_style_hook = Native.new(setStyleHook, .{}, .{
+        .description = "Set the Lua-side syntax highlighting hook.",
+        .args = &.{
+            .{ .name = "hook", .description = "Function receiving (kind, text) and returning a Style table or nil." },
+        },
+    }),
+    .set_completion_hook = Native.new(setLuaCompletionHook, .{}, .{
+        .description = "Set the Lua-side tab completion hook.",
+        .args = &.{
+            .{ .name = "hook", .description = "Function receiving (completer, prefix) and calling completer:add/addEx to publish candidates." },
+        },
+    }),
+    .set_runtime_completion = Native.new(setRuntimeCompletion, .{}, .{
+        .description = "Enable or disable live Lua runtime completion for chained identifiers.",
+        .args = &.{
+            .{ .name = "enabled", .description = "Whether live Lua runtime completion is enabled." },
+        },
+    }),
     .__gc = gc,
-}).withDescription("REPL configuration with runtime Lua-facing controls.")
-    .withName("ReplConfig");
+};
+
+pub const ZUA_META = Meta.Object(Config, methods, .{ .name = "ReplConfig", .description = "REPL configuration with runtime Lua-facing controls." });
 
 /// Prompt displayed for each input line.
 prompt: [:0]const u8 = "zua",

@@ -8,7 +8,7 @@ const Priority = enum(u8) {
     normal = 1,
     high = 2,
 
-    pub const ZUA_META = zua.Meta.Table(Priority, .{})
+    pub const ZUA_META = zua.Meta.Table(Priority, .{}, .{})
         .withEncode([]const u8, encodeStr)
         .withDecode(decodeStrOrInt);
 
@@ -45,7 +45,7 @@ const Address = struct {
     pub const ZUA_META = zua.Meta.Object(Address, .{
         .value = getValue,
         .__tostring = toString,
-    }).withDecode(decodeHook);
+    }, .{}).withDecode(decodeHook);
 
     inner: u64,
 

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.12.0
+
+### Breaking
+- `Native.new` now requires a third comptime `DocOptions` argument for documentation metadata.
+- `Native.closure` now requires a fourth comptime `DocOptions` argument.
+- `Meta.Object`, `Meta.Table`, `Meta.Ptr`, `Meta.Capture`, `Meta.List`, and `Meta.strEnum` now require an additional comptime options struct argument for documentation metadata.
+- Removed `withDescription`, `withName`, and `withAttribDescriptions` chain methods from `MetaData`.
+- Removed `withDescriptions`, `withName`, and `withDescription` chain methods from `Native` wrapper types.
+- `meta.zig` internals restructured into submodules; direct imports of `meta.zig` subpaths may need adjustment.
+
+### Added
+- `Native.DocOptions` struct with fields `name`, `description`, and `args` for inline documentation on native wrappers.
+- `Meta.MetaOptions(comptime T: type, comptime strategy: MappingStrategy)` for typed documentation options on metadata types.
+- `Meta.FieldDescriptions(comptime T: type)` generates a comptime struct with `?[]const u8` fields matching `T`'s fields for `.table` strategy field descriptions.
+- Documentation metadata can now be provided inline at the call site instead of through chain methods.
+- `isNativeWrapperType`, `isCapturePointer`, `isTuple`, `isErrorUnion`, `unwrapErrorUnion`, `typeListCount`, `typeListAt`, and `hasStructDecl` type-introspection helpers added to `meta/helpers.zig`.
+
+### Changed
+- `meta.zig` split into `meta/helpers.zig`, `meta/metadata.zig`, and `meta/strategies.zig` for better organization.
+- `meta.zig` moved into `meta/meta.zig`.
+- `docs.zig` split into `docs/types.zig`, `docs/collect.zig`, `docs/emit.zig`, and `docs/helpers.zig`.
+- All examples and REPL types migrated to the new inline documentation API.
+- Centralized `isNativeWrapperType`, `isCapturePointer`, `typeListCount`, `typeListAt`, `isTuple`, `isErrorUnion`, `unwrapErrorUnion`, and `hasStructDecl` into `meta/helpers.zig`. Removed duplicate definitions from `docs.zig`, `trampoline.zig`, and `typed/fn.zig`. Replaced inline checks in `encode.zig`, `function.zig`, `metatable.zig`, and `typed/fn.zig`.
+
+### Removed
+- `withDescription`, `withName`, `withAttribDescriptions` chain methods from `MetaData`.
+- `withDescriptions`, `withName`, `withDescription` chain methods from `Native` wrappers.
+
+### Fixed
+- Docs generator `addWrappedFunction` now recurses into referenced parameter and return types, so types like tagged unions used by top-level functions appear in the stub output.
+
 ## 0.11.0
 
 ### Breaking

@@ -54,4 +54,4 @@ example:
     fi
 
 docs:
-    @cd handbook && mdbook build && rm -rf ../docs && mv book ../docs
+    @cd handbook && mdbook serve --open

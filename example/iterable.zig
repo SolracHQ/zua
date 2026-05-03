@@ -2,7 +2,7 @@ const std = @import("std");
 const zua = @import("zua");
 
 const IteratorState = struct {
-    pub const ZUA_META = zua.Meta.Capture(@This(), .{});
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{}, .{});
     start: usize,
     end: usize,
     step: usize,
@@ -19,7 +19,7 @@ pub fn closure(state: *IteratorState, unknown: ?void, prev: ?usize) ?usize {
     return current;
 }
 
-fn range(start: usize, end: usize, step: usize) zua.Native.Closure(closure, .{}) {
+fn range(start: usize, end: usize, step: usize) zua.Native.Closure(closure, .{}, .{}) {
     return .{ .initial = .{
         .start = start,
         .end = end,

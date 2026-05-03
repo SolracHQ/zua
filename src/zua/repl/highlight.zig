@@ -9,7 +9,7 @@ const lexer = @import("lexer.zig");
 const Config = @import("config.zig");
 const Context = @import("../state/context.zig");
 const lua = @import("../../lua/lua.zig");
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 const Mapper = @import("../mapper/mapper.zig");
 
 const Primitive = Mapper.Decoder.Primitive;
@@ -27,9 +27,10 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_META = Meta.strEnum(TokenKind, .{})
-        .withDescription("Token kinds recognized by the REPL syntax highlighter.")
-        .withName("TokenKind");
+    pub const ZUA_META = Meta.strEnum(TokenKind, .{}, .{
+        .name = "TokenKind",
+        .description = "Token kinds recognized by the REPL syntax highlighter.",
+    });
 };
 
 // Color and style types
@@ -41,9 +42,10 @@ pub const TokenKind = enum {
 /// .ansi256 uses the 256-color xterm palette.
 /// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Rgb = struct {
-    pub const ZUA_META = Meta.Table(Rgb, .{})
-        .withDescription("24-bit RGB color with separate red, green, and blue channels.")
-        .withName("Rgb");
+    pub const ZUA_META = Meta.Table(Rgb, .{}, .{
+        .name = "Rgb",
+        .description = "24-bit RGB color with separate red, green, and blue channels.",
+    });
 
     r: u8,
     g: u8,
@@ -56,10 +58,18 @@ pub const Color = union(enum) {
     ansi256: u8,
     rgb: Rgb,
 
-    pub const ZUA_META = Meta.Table(Color, .{}).withDecode(decodeColor)
-        .withDescription("ANSI or RGB color value used by a Style. Accepted forms: ANSI int, #rrggbb hex string, named color string, or {r,g,b} table.")
-        .withName("Color");
+    pub const ZUA_META = Meta.Table(Color, .{}, .{
+        .name = "Color",
+        .description = "ANSI or RGB color value used by a Style. Accepted forms: ANSI int, #rrggbb hex string, named color string, or {r,g,b} table.",
+    }).withDecode(decodeColor);
 
+    /// Writes the foreground bbcode attribute for this color into `out`.
+    ///
+    /// Appends e.g. `ansi-color=4 ` or `#ff0000 `. No-op when color is `.none`.
+    ///
+    /// Arguments:
+    /// - allocator: Allocator for temporary format strings.
+    /// - out: Output buffer receiving the bbcode attribute fragment.
     pub fn writeBbcodeFg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         const result = switch (self) {
             .none => return,
@@ -71,6 +81,14 @@ pub const Color = union(enum) {
         try out.appendSlice(allocator, result);
     }
 
+    /// Writes the background bbcode attribute for this color into `out`.
+    ///
+    /// Appends e.g. `on ansi-color=4 ` or `on #ff0000 `. No-op when color is
+    /// `.none`.
+    ///
+    /// Arguments:
+    /// - allocator: Allocator for temporary format strings.
+    /// - out: Output buffer receiving the bbcode attribute fragment.
     pub fn writeBbcodeBg(self: Color, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         const result = switch (self) {
             .none => return,
@@ -130,16 +148,17 @@ fn ansiFromName(name: []const u8) ?u8 {
 
 /// A renderable style combining colors and text attributes.
 pub const Style = struct {
-    pub const ZUA_META = Meta.Table(Style, .{})
-        .withDescription("Style with foreground/background color and text attributes.")
-        .withAttribDescriptions(.{
+    pub const ZUA_META = Meta.Table(Style, .{}, .{
+        .name = "Style",
+        .description = "Style with foreground/background color and text attributes.",
+        .field_descriptions = .{
             .fg = "Foreground color.",
             .bg = "Background color.",
             .bold = "Bold text attribute.",
             .dim = "Dim text attribute.",
             .italic = "Italic text attribute.",
-        })
-        .withName("Style");
+        },
+    });
 
     fg: Color = .none,
     bg: Color = .none,
@@ -147,6 +166,8 @@ pub const Style = struct {
     dim: bool = false,
     italic: bool = false,
 
+    /// Returns whether this style has no attributes set (default foreground,
+    /// default background, no bold/dim/italic).
     pub fn isEmpty(self: Style) bool {
         return self.fg == .none and
             self.bg == .none and
@@ -169,6 +190,13 @@ pub const Style = struct {
         try out.append(allocator, ']');
     }
 
+    /// Writes the closing bbcode tag `[/]` into `out`.
+    ///
+    /// This resets all style attributes to the terminal default.
+    ///
+    /// Arguments:
+    /// - allocator: Unused, present for API symmetry with `writeOpenTag`.
+    /// - out: Output buffer receiving the closing tag.
     pub fn writeCloseTag(_: Style, allocator: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         try out.appendSlice(allocator, "[/]");
     }

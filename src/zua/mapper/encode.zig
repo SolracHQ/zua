@@ -13,7 +13,8 @@ const Function = @import("../handlers/function.zig");
 const Userdata = @import("../handlers/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
+const helpers = @import("../meta/helpers.zig");
 const MetaTable = @import("../metatable.zig");
 const Native = @import("../functions/native.zig");
 const Mapper = @import("mapper.zig");
@@ -55,7 +56,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return pushLuaPrimitive(ctx, value);
     }
 
-    if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "__IsZuaNativeFunction")) {
+    if (comptime helpers.isNativeWrapperType(T)) {
         if (comptime T.__IsZuaClosure) {
             // Closure: push initial capture as userdata (upvalue 1), then pushcclosure.
             const CaptureType = @TypeOf(value.initial);
@@ -70,7 +71,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
     }
 
     if (comptime @typeInfo(T) == .@"fn") {
-        return try pushValue(ctx, Native.new(value, .{}));
+        return try pushValue(ctx, Native.new(value, .{}, .{}));
     }
 
     // Check for custom encode hook first
