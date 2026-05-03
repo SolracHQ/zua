@@ -16,7 +16,7 @@ jobs:
       - name: Extract version from build.zig.zon
         id: version
         run: |
-          VERSION=$(grep -oP 'version = "\K[^"]+' build.zig.zon)
+          VERSION=$(grep -oP '^\s+\.version = "\K[^"]+' build.zig.zon)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create tag
