@@ -277,6 +277,7 @@ fn resolveStyle(
     if (config.style_hook) |hook| {
         if (hook(ctx, kind, text)) |style| return style;
     }
+    if (!config.default_styles) return .{};
     return defaultStyle(kind);
 }
 

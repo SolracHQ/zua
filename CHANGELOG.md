@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.1
+
+### Added
+- `Config.default_styles` field (default `true`) and Lua-facing `repl:set_default_styles(false)` to disable built-in syntax highlighting fallback styles, letting custom hooks/overrides fully control coloring.
+
+### Fixed
+- REPL syntax highlighter now escapes `[` and `\` in token text before embedding in bbcode output. Raw `[` was being misinterpreted by isocline's bbcode parser as a tag delimiter, causing attribute buffer corruption and an assertion crash in `term_set_attr` when typing source with bracket-heavy expressions.
+
 ## 0.12.0
 
 ### Breaking

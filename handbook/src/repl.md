@@ -136,6 +136,17 @@ Return `null` when you want the default style, or a `Style` when you want to ove
 
 The hook receives a `*Context`, the token kind, and the token text. The context gives you access to the Lua state: read or modify globals, query the registry, or retrieve config stored by your host via a registry key. If you want to color your own globals, branch on `.name` and inspect the text.
 
+To take full control, disable built-in fallback styles with `default_styles = false`:
+
+```zig
+try zua.Repl.run(state, .{
+    .style_hook = colorize,
+    .default_styles = false,
+});
+```
+
+When `default_styles` is false, tokens that do not match any override or hook yield no style at all instead of falling back to the built-in defaults. Set it from Lua at runtime with `repl:set_default_styles(false)`.
+
 ## Stack traces
 
 If you want nicer runtime errors during interactive sessions, enable `stack_trace`:
