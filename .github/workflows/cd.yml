@@ -1,4 +1,4 @@
-name: Deploy docs
+name: Post-merge
 
 on:
   push:
@@ -8,10 +8,35 @@ permissions:
   contents: write
 
 jobs:
-  deploy:
+  tag-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Extract version from build.zig.zon
+        id: version
+        run: |
+          VERSION=$(grep -oP 'version = "\K[^"]+' build.zig.zon)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create tag
+        run: |
+          git tag ${{ steps.version.outputs.version }}
+          git push origin ${{ steps.version.outputs.version }}
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.16.0
+
+      - name: Build demo binary with ReleaseSafe
+        run: zig build --release=safe
+
+      - name: Upload demo binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: zua-${{ steps.version.outputs.version }}
+          path: zig-out/bin/zua
 
       - name: Install mdBook
         run: |
