@@ -9,5 +9,4 @@
 - [ ] Handbook updated (`handbook/src/`) if the public API changed
 - [ ] New features include an example (`example/*.zig`)
 - [ ] New example registered in `build.zig` (`setupExamples`) and `Justfile` (`list-examples`)
-- [ ] `just all` passes (tests + examples build cleanly)
 - [ ] Stub output reviewed (`just run docs`) when adding or changing ZUA_META types

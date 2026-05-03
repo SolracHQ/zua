@@ -31,7 +31,7 @@ const Entry = struct {
     pub const ZUA_META = zua.Meta.Object(Entry, .{
         .get = get,
         .set = set,
-    });
+    }, .{});
 
     address: u64,
     value:   f64,

@@ -11,7 +11,7 @@ const TextEntry = struct {
     pub const ZUA_META = zua.Meta.Object(TextEntry, .{
         .label = getLabel,
         .__gc  = cleanup,
-    });
+    }, .{});
 
     label: []const u8,
 
@@ -57,7 +57,7 @@ const Connection = struct {
         .send  = send,
         .close = close,
         .__gc  = cleanup,
-    });
+    }, .{});
 
     // lives inline in userdata, no cleanup
     port: u16,
@@ -91,7 +91,7 @@ Closures created with `Native.closure` use the `.capture` strategy, which also s
 const BufState = struct {
     pub const ZUA_META = zua.Meta.Capture(@This(), .{
         .__gc = cleanup,
-    });
+    }, .{});
     data:      []u8,
     allocator: std.mem.Allocator,
 

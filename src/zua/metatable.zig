@@ -7,7 +7,8 @@
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
 const Native = @import("functions/native.zig");
-const Meta = @import("meta.zig");
+const Meta = @import("meta/meta.zig");
+const helpers = @import("meta/helpers.zig");
 const State = @import("state/state.zig");
 const Context = @import("state/context.zig");
 
@@ -99,12 +100,11 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
 fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
-    // Check if method_fn is a precompiled callback wrapper (has __IsZuaNativeFunction marker)
-    if (comptime @typeInfo(method_fn_type) == .@"struct" and @hasDecl(method_fn_type, "__IsZuaNativeFunction")) {
+    if (comptime helpers.isNativeWrapperType(method_fn_type)) {
         return method_fn_type.trampoline();
     }
 
-    return Native.NativeFn(method_fn, .{}).trampoline();
+    return Native.NativeFn(method_fn, .{}, .{}).trampoline();
 }
 
 /// Generates a combined __index trampoline for types that have both regular

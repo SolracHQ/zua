@@ -8,7 +8,7 @@ const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Table = @import("../handlers/table.zig").Table;
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 const Mapper = @import("../mapper/mapper.zig");
 const Native = @import("../functions/native.zig");
 const Object = @import("../typed/object.zig").Object;
@@ -22,16 +22,24 @@ const Config = @import("config.zig");
 /// session and reused across tab events by updating `_env` and `_ctx`.
 pub const Completer = struct {
     pub const ZUA_META = Meta.Object(Completer, .{
-    .add = Native.new(add, .{}).withDescriptions(&.{
-        .{ .name = "candidate", .description = "Completion candidate string." },
-    }).withDescription("Add a completion candidate."),
-    .addEx = Native.new(addEx, .{}).withDescriptions(&.{
-        .{ .name = "candidate", .description = "Completion candidate string." },
-        .{ .name = "display", .description = "Optional alternate display text." },
-        .{ .name = "help", .description = "Optional help text shown alongside the candidate." },
-    }).withDescription("Add a completion candidate with display and help text."),
-    }).withDescription("Session-scoped completion helper wrapping isocline internals.")
-        .withName("Completer");
+        .add = Native.new(add, .{}, .{
+            .description = "Add a completion candidate.",
+            .args = &.{
+                .{ .name = "candidate", .description = "Completion candidate string." },
+            },
+        }),
+        .addEx = Native.new(addEx, .{}, .{
+            .description = "Add a completion candidate with display and help text.",
+            .args = &.{
+                .{ .name = "candidate", .description = "Completion candidate string." },
+                .{ .name = "display", .description = "Optional alternate display text." },
+                .{ .name = "help", .description = "Optional help text shown alongside the candidate." },
+            },
+        }),
+    }, .{
+        .name = "Completer",
+        .description = "Session-scoped completion helper wrapping isocline internals.",
+    });
 
     _env: ?*isocline.CompletionEnv,
     _ctx: *Context,

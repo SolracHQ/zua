@@ -8,7 +8,7 @@ Declare a struct with `Meta.Capture` and register it with `Native.closure`:
 
 ```zig
 const CounterState = struct {
-    pub const ZUA_META = zua.Meta.Capture(@This(), .{});
+    pub const ZUA_META = zua.Meta.Capture(@This(), .{}, .{});
     count: i32,
     step:  i32,
 };
@@ -77,7 +77,7 @@ If the captured struct owns heap memory or Lua handles, declare `__gc` in the `M
 const BufState = struct {
     pub const ZUA_META = zua.Meta.Capture(@This(), .{
         .__gc = cleanup,
-    });
+    }, .{});
     data:      []u8,
     allocator: std.mem.Allocator,
 
@@ -97,7 +97,7 @@ Closures can capture Lua functions, not just plain data. This lets you implement
 const PartialState = struct {
     pub const ZUA_META = zua.Meta.Capture(@This(), .{
         .__gc = release,
-    });
+    }, .{});
 
     f:     zua.Fn(.{i32, i32}, i32),
     first: i32,
@@ -111,7 +111,7 @@ fn partialCall(ctx: *zua.Context, s: *PartialState, n: i32) !i32 {
     return s.f.call(ctx, .{ s.first, n });
 }
 
-const PartialClosure = zua.Native.Closure(partialCall, .{});
+const PartialClosure = zua.Native.Closure(partialCall, .{}, .{});
 
 fn alwaysWith(
     ctx: *zua.Context,

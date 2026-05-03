@@ -26,7 +26,7 @@ When the caller passes wrong argument types, zua raises a Lua error before your 
 ```zig
 globals.set(&ctx, "add", zua.Native.new(add, .{
     .parse_err_fmt = "add expects (i32, i32): {s}",
-}));
+}, .{}));
 ```
 
 The `{s}` placeholder is filled with the decode failure description, for example `"expected i32, got string"`. `Native.new` is optional; use it only when the default message is not informative enough.

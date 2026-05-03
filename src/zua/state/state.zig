@@ -131,6 +131,13 @@ pub fn getOrCreateMetatable(self: *State, comptime T: type) void {
     self.metatable_cache.put(key, ref) catch @panic("out of memory storing metatable ref");
 }
 
+/// Returns a borrowed handle to the Lua globals table.
+///
+/// The returned `Table` points to `LUA_RIDX_GLOBALS` in the registry and is
+/// valid as long as the Lua state is alive. Use `addGlobals` to write into it.
+///
+/// Returns:
+/// - Table: A borrowed handle to `_G`.
 pub fn globals(self: *State) Table {
     _ = lua.getIndex(self.luaState, lua.REGISTRY_INDEX, lua.RIDX_GLOBALS);
     return Table.fromStack(self, -1);

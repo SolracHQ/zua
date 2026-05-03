@@ -31,7 +31,7 @@ pub const Decoder = Mapper.Decoder;
 pub const VarArgs = Mapper.Decoder.VarArgs;
 
 // MetaData System for behavior customization
-pub const Meta = @import("zua/meta.zig");
+pub const Meta = @import("zua/meta/meta.zig");
 
 // Final Execution utilities
 pub const Executor = @import("zua/exec/executor.zig");

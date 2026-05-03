@@ -110,7 +110,7 @@ const Handler = struct {
         .set = setCallback,
         .run = runCallback,
         .__gc = cleanup,
-    });
+    }, .{});
 
     cb: ?zua.Fn(i32, i32) = null,
 

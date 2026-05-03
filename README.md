@@ -90,7 +90,7 @@ const Counter = struct {
         .increment = increment,
         .value = getValue,
         .__tostring = toString,
-    });
+    }, .{});
 
     count: i32 = 0,
 

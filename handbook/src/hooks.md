@@ -15,7 +15,7 @@ const Status = enum(u8) {
     running = 1,
     stopped = 2,
 
-    pub const ZUA_META = zua.Meta.Table(Status, .{})
+    pub const ZUA_META = zua.Meta.Table(Status, .{}, .{})
         .withEncode([]const u8, encodeAsString);
 
     fn encodeAsString(_: *zua.Context, status: Status) !?[]const u8 {
@@ -38,7 +38,7 @@ A decode hook lets a type accept multiple Lua value types. The hook receives a `
 const Address = struct {
     pub const ZUA_META = zua.Meta.Object(Address, .{
         .value = getValue,
-    }).withDecode(decodeHook);
+    }, .{}).withDecode(decodeHook);
 
     inner: u64,
 
@@ -75,7 +75,7 @@ For enums where Lua should see string names rather than integers, `Meta.strEnum`
 ```zig
 const Direction = enum { north, east, south, west };
 
-pub const ZUA_META = zua.Meta.strEnum(Direction, .{});
+pub const ZUA_META = zua.Meta.strEnum(Direction, .{}, .{});
 ```
 
 ```lua

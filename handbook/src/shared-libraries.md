@@ -103,9 +103,10 @@ fn docs(ctx: *zua.Context) ![]const u8 {
     return zua.Docs.generateModule(ctx.arena(), module, "vecmath");
 }
 
-const docs_fn = zua.Native.new(docs, .{})
-    .withName("docs")
-    .withDescription("Generate editor stubs for the vecmath module.");
+const docs_fn = zua.Native.new(docs, .{}, .{
+    .name = "docs",
+    .description = "Generate editor stubs for the vecmath module.",
+});
 
 const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn, .docs = docs_fn };
 ```

@@ -7,51 +7,19 @@ run *ARGS:
     zig build run -- {{ARGS}}
 
 test:
-    zig build test
+    ./scripts/ci.sh test
 
 examples:
-    zig build examples
+    ./scripts/ci.sh examples
 
 all:
-    just test
-    just examples
-
-list-examples:
-    @printf '%s\n' \
-        docs \
-        guided-tour \
-        introduction \
-        functions \
-        data-structures \
-        custom-types \
-        object-slices \
-        nested-handle-ownership \
-        custom-hooks \
-        repl \
-        iterable \
-        dylib
+    ./scripts/ci.sh
 
 run-example name:
-    zig build "run-example-{{name}}"
-
-dylib:
-    @zig build vecmath --release=safe
-    @mkdir -p example/dylib
-    @cp zig-out/lib/*vecmath* example/dylib/vecmath.so
-    @cd example/dylib && lua use_it.lua
+    ./scripts/run-example.sh {{name}}
 
 example:
-    @fzf_args=(--prompt='zua example> ' --height=40% --reverse); \
-    if [[ -n "${FZF_FILTER:-}" ]]; then \
-        fzf_args+=(--filter "$FZF_FILTER"); \
-    fi; \
-    selection="$(just list-examples | fzf "${fzf_args[@]}")"; \
-    [[ -n "${selection:-}" ]]; \
-    if [[ "$selection" == "dylib" ]]; then \
-        just dylib; \
-    else \
-        just run-example "${selection}"; \
-    fi
+    ./scripts/example.sh
 
 docs:
-    @cd handbook && mdbook build && rm -rf ../docs && mv book ../docs
+    @cd handbook && mdbook serve --open

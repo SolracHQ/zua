@@ -26,7 +26,7 @@ const Vector2 = struct {
         .length = length,
         .normalize = normalize,
         .translate = translate,
-    });
+    }, .{});
 
     x: f64,
     y: f64,
@@ -54,7 +54,7 @@ const Counter = struct {
         .value = getValue,
         .increment = increment,
         .__tostring = toString,
-    });
+    }, .{});
 
     count: i32,
 
@@ -116,9 +116,9 @@ pub fn main(init: std.process.Init) !void {
         .add = add,
         .multiply = multiply,
         .Counter = makeCounter,
-        .Vector = zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }),
-        .map_with_callback = zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }),
-        .filter_and_sum = zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }),
+        .Vector = zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }, .{}),
+        .map_with_callback = zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }, .{}),
+        .filter_and_sum = zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }, .{}),
         .multi_return_example = multiReturnExample,
     });
 

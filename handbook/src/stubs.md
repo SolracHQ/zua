@@ -58,7 +58,7 @@ pub fn main(init: std.process.Init) !void {
 
 `add` accepts three kinds of input:
 
-- a plain Zig function, which is documented as if it were wrapped with `zua.Native.new(function, .{})`
+- a plain Zig function, which is documented as if it were wrapped with `zua.Native.new(function, .{}, .{})`
 - a native wrapper value created with `zua.Native.new(...)`
 - a Zig type with `ZUA_META`
 
@@ -71,9 +71,10 @@ The generator uses the wrapper's `name` field for top-level functions. That matt
 This is common with constructors. In Zig you might write a function called `newCounter`, but expose it to Lua as `new_counter` or `Counter`. The type name and the function name are different concepts, so set them explicitly on the wrapper you pass to `Docs.add`.
 
 ```zig
-const new_counter = zua.Native.new(newCounter, .{})
-    .withName("new_counter")
-    .withDescription("Construct a new Counter object.");
+const new_counter = zua.Native.new(newCounter, .{}, .{
+    .name = "new_counter",
+    .description = "Construct a new Counter object.",
+});
 
 try generator.add(new_counter);
 try generator.add(Counter);
@@ -81,13 +82,17 @@ try generator.add(Counter);
 
 ## Adding parameter descriptions
 
-For functions, parameter names and descriptions come from `withDescriptions`.
+For functions, parameter names and descriptions come from the `args` field in `DocOptions`.
 
 ```zig
-const make_vector = zua.Native.new(makeVector, .{}).withDescriptions(&.{
-    .{ .name = "x", .description = "Initial horizontal coordinate." },
-    .{ .name = "y", .description = "Initial vertical coordinate." },
-}).withName("make_vector").withDescription("Construct a new Vector2 value.");
+const make_vector = zua.Native.new(makeVector, .{}, .{
+    .name = "make_vector",
+    .description = "Construct a new Vector2 value.",
+    .args = &.{
+        .{ .name = "x", .description = "Initial horizontal coordinate." },
+        .{ .name = "y", .description = "Initial vertical coordinate." },
+    },
+});
 ```
 
 Each entry provides `name` (displayed as the parameter name in the stub) and an optional `description` (appears as a trailing comment in the generated `---@param` line).
@@ -96,21 +101,24 @@ This is necessary because Zig's function type info does not carry parameter name
 
 ## Adding field descriptions
 
-For `.table` types, field descriptions come from `withAttribDescriptions` on `ZUA_META`:
+For `.table` types, field descriptions come from the `field_descriptions` field in `MetaOptions`:
 
 ```zig
 const Vector2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vector2, .{
-        .scale = zua.Native.new(scale, .{}).withDescriptions(&.{
-            .{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
+        .scale = zua.Native.new(scale, .{}, .{
+            .args = &.{
+                .{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
+            },
         }),
-    })
-        .withDescription("Simple table-backed 2D vector.")
-        .withAttribDescriptions(.{
+    }, .{
+        .name = "Vector2",
+        .description = "Simple table-backed 2D vector.",
+        .field_descriptions = .{
             .x = "Horizontal coordinate.",
             .y = "Vertical coordinate.",
-        })
-        .withName("Vector2");
+        },
+    });
 
     x: f64,
     y: f64,
@@ -149,7 +157,71 @@ Optional types appear as `TYPE?` in the generated output. A function parameter o
 
 `VarArgs` parameters are emitted as `---@param ... any`. If you supply an `ArgInfo` entry with the name `"..."`, the description is included on that line as well.
 
-Tagged unions and string-backed enums generate `---@alias` declarations instead of class stubs. For a tagged union `Condition` with variants `eq` and `in_range`, the generator emits an alias listing each variant shape. For a `strEnum` type, the alias lists the string literals directly:
+## Tagged union variants
+
+Tagged unions generate `---@alias` declarations instead of class stubs. Each variant becomes either an inline shape or its own class, depending on whether a `.name` is provided.
+
+### Simple variants (no name)
+
+When a variant has only a `.description` and no `.name`, the type is inlined directly in the alias:
+
+```zig
+const Condition = union(enum) {
+    eq: i32,
+    in_range: struct { min: i32, max: i32 },
+
+    pub const ZUA_META = zua.Meta.Table(@This(), .{}, .{
+        .name = "Condition",
+        .description = "Tagged union selector.",
+        .variants = .{
+            .eq = .{
+                .description = "Exact match against a single value.",
+            },
+            .in_range = .{
+                .name = "ConditionRange",
+                .description = "Match values within a range.",
+                .field_descriptions = .{
+                    .min = "Minimum bound of the range.",
+                    .max = "Maximum bound of the range.",
+                },
+            },
+        },
+    });
+};
+```
+
+The `eq` variant has no `.name`, so its type is inlined. The `in_range` variant has `.name = "ConditionRange"`, so it becomes a separate class and the alias points to it:
+
+```lua
+---@class ConditionRange
+---@field min integer # Minimum bound of the range.
+---@field max integer # Maximum bound of the range.
+-- Match values within a range.
+local ConditionRange = {}
+
+---@alias Condition
+---| { eq = integer } # Exact match against a single value.
+---| { in_range = ConditionRange } # Match values within a range.
+```
+
+### Per-variant field descriptions
+
+When a variant's type is a struct (either a named type or inline), its fields can be documented with `.field_descriptions` inside the variant's info block. The descriptions appear on the variant class's `---@field` lines:
+
+```zig
+.in_range = .{
+    .name = "ConditionRange",
+    .description = "Match values within a range.",
+    .field_descriptions = .{
+        .min = "Minimum bound of the range.",
+        .max = "Maximum bound of the range.",
+    },
+},
+```
+
+### String-backed enums
+
+For `strEnum` types, the alias lists the string literals directly:
 
 ```lua
 ---@alias Priority "low" | "normal" | "high"

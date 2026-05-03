@@ -6,7 +6,7 @@
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const Context = @import("../state/context.zig");
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 const MetaTable = @import("../metatable.zig");
 const State = @import("../state/state.zig");
 const UserData = @import("../handlers/userdata.zig");
@@ -29,7 +29,7 @@ pub fn Object(comptime T: type) type {
     }
 
     return struct {
-        pub const ZUA_META = Meta.Table(@This(), .{}).withDecode(decode).withEncode(UserData, encode);
+        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(UserData, encode);
         pub const __ZUA_USERDATA_TYPE = T;
 
         /// Underlying raw userdata handle.

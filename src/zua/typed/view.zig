@@ -13,7 +13,7 @@ const Decoder = @import("../mapper/decode.zig").Decoder;
 const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
 const Mapper = @import("../mapper/mapper.zig");
 const Table = @import("../handlers/table.zig").Table;
-const Meta = @import("../meta.zig");
+const Meta = @import("../meta/meta.zig");
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
 ///
@@ -22,7 +22,7 @@ const Meta = @import("../meta.zig");
 /// and either return the view or call `sync()` to flush changes back into Lua.
 pub fn TableView(comptime T: type) type {
     return struct {
-        pub const ZUA_META = Meta.Table(@This(), .{}).withDecode(decode).withEncode(Table, encode);
+        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
         pub const __ZUA_TABLE_VIEW = @This();
 
         /// Underlying raw Lua table handle.

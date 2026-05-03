@@ -7,7 +7,7 @@ const Process = struct {
     pub const ZUA_META = zua.Meta.Object(Self, .{
         .getPid = getPid,
         .getName = getName,
-    });
+    }, .{});
 
     pid: i32,
     name: []const u8,
@@ -40,7 +40,7 @@ pub fn main(init: std.process.Init) !void {
     try state.addGlobals(&ctx, .{
         .list_processes = zua.Native.new(listProcesses, .{
             .parse_err_fmt = "list_processes expects no arguments: {s}",
-        }),
+        }, .{}),
     });
 
     try executor.execute(&ctx, .{ .code = .{ .string =

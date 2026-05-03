@@ -41,7 +41,7 @@ fn readFile(ctx: *zua.Context, path: []const u8) ![]const u8 {
 globals.set(&ctx, "read_file", zua.Native.new(readFile, .{
     .parse_err_fmt = "read_file expects (string): {s}",
     .zig_err_fmt   = "read_file failed: {s}",
-}));
+}, .{}));
 ```
 
 The `{s}` in `zig_err_fmt` is filled with the Zig error name, for example `FileNotFound`.
@@ -60,7 +60,7 @@ fn describeError(ctx: *zua.Context, err: anyerror) void {
 globals.set(&ctx, "read_file", zua.Native.new(readFile, .{
     .parse_err_fmt = "read_file expects (string): {s}",
     .zig_err_hook  = describeError,
-}));
+}, .{}));
 ```
 
 The hook sets `ctx.err`. If it allocates, use `ctx.arena()` so zua owns and frees the string after raising the error.
