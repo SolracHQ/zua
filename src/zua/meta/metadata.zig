@@ -18,15 +18,15 @@ const helpers = @import("helpers.zig");
 /// expose.
 ///
 /// The returned type has these public members:
-/// - `Strategy` — the `MappingStrategy` for translation.
-/// - `Proxy` — the proxy type used by encode hooks.
-/// - `Methods` — the method table exposed to Lua.
-/// - `EncodeHook` — a hook converting `T` to `ProxyType`, or a no-op default.
-/// - `DecodeHook` — a hook converting a Lua primitive to `T`, or a no-op default.
-/// - `Name` — the documentation name (explicit or `@typeName`).
-/// - `Description` — the documentation description string.
-/// - `AttributeDescriptions` — per-field documentation.
-/// - `VariantDescriptions` — per-variant documentation for tagged unions.
+/// - `Strategy`: the `MappingStrategy` for translation.
+/// - `Proxy`: the proxy type used by encode hooks.
+/// - `Methods`: the method table exposed to Lua.
+/// - `EncodeHook`: a hook converting `T` to `ProxyType`, or a no-op default.
+/// - `DecodeHook`: a hook converting a Lua primitive to `T`, or a no-op default.
+/// - `Name`: the documentation name (explicit or `@typeName`).
+/// - `Description`: the documentation description string.
+/// - `AttributeDescriptions`: per-field documentation.
+/// - `VariantDescriptions`: per-variant documentation for tagged unions.
 ///
 /// Arguments:
 /// - Type: The original Zig type the metadata describes.
@@ -58,6 +58,7 @@ pub fn MetaData(
     comptime decode_hook: ?meta.DecodeHookType(Type),
     comptime methods: anytype,
     comptime options: anytype,
+    comptime docs_hook: ?meta.DocsHookType(Type),
 ) type {
     if (comptime !@hasDecl(Type, "ZUA_META") and !@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) {
         @compileError(@typeName(Type) ++ " has no visible ZUA_META: is it misspelled or declared outside the type?");
@@ -77,9 +78,14 @@ pub fn MetaData(
         pub const EncodeHook: meta.EncodeHookType(T, ProxyType) = encode_hook orelse default_encode;
         pub const DecodeHook: meta.DecodeHookType(T) = decode_hook orelse default_decode;
         pub const Description: []const u8 = opts_description orelse "";
-        pub const Name: []const u8 = opts_name orelse @typeName(T);
+        pub const Name: []const u8 = opts_name orelse blk: {
+            const full: []const u8 = @typeName(T);
+            const dot = std.mem.lastIndexOfScalar(u8, full, '.');
+            break :blk if (dot) |d| full[d + 1 ..] else full;
+        };
         pub const AttributeDescriptions = if (@typeInfo(@TypeOf(opts_field_descriptions)) != .@"struct") .{} else opts_field_descriptions;
         pub const VariantDescriptions = if (@typeInfo(@TypeOf(opts_variants)) != .@"struct") .{} else opts_variants;
+        pub const DocsHook: ?meta.DocsHookType(T) = docs_hook;
 
         fn default_encode(_: *Context, _: T) anyerror!?ProxyType {
             return null;
@@ -98,7 +104,7 @@ pub fn MetaData(
         ) type {
             if (comptime strategy == .capture)
                 @compileError("capture strategy type " ++ @typeName(T) ++ " do not support encode hook");
-            return comptime MetaData(T, NewProxyType, strategy, handler, decode_hook, methods, options);
+            return comptime MetaData(T, NewProxyType, strategy, handler, decode_hook, methods, options, null);
         }
 
         /// Attach a custom decode hook.
@@ -110,7 +116,22 @@ pub fn MetaData(
             if (comptime strategy == .capture)
                 @compileError("capture strategy type " ++ @typeName(T) ++ " do not support decode hook");
 
-            return comptime MetaData(T, ProxyType, strategy, encode_hook, handler, methods, options);
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, handler, methods, options, null);
+        }
+
+        /// Attach a custom docs hook that generates a complete `Doc` entry,
+        /// bypassing the default field/method/alias collection.
+        ///
+        /// The hook receives the `*Docs` generator and returns a fully
+        /// populated `Doc` (Alias, Table, Object, etc.) that replaces the
+        /// auto-collected entry.
+        pub inline fn withDocs(
+            comptime handler: meta.DocsHookType(T),
+        ) type {
+            if (comptime strategy == .capture)
+                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support docs hook");
+
+            return comptime MetaData(T, ProxyType, strategy, encode_hook, decode_hook, methods, options, handler);
         }
     };
 }
@@ -155,8 +176,8 @@ pub inline fn getMeta(comptime T: type) type {
     }
     const info = @typeInfo(T);
     if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
-    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), void, .object, null, null, null, .{});
-    return MetaData(DefaultGuard(T), void, .table, null, null, null, .{});
+    if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), void, .object, null, null, null, .{}, null);
+    return MetaData(DefaultGuard(T), void, .table, null, null, null, .{}, null);
 }
 
 /// Returns the translation strategy declared for `T`.

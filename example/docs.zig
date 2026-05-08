@@ -84,6 +84,86 @@ const Priority = enum(u8) {
     });
 };
 
+const Color = enum(u8) { red, green, blue };
+const Mode = enum { idle, running, stopped };
+
+const ConcreteOs = enum {
+    windows,
+    linux,
+    macos,
+    bsd,
+};
+
+const OsFamily = enum {
+    unix_like,
+    bsd_based,
+};
+
+const Os = union(enum) {
+    Concrete: ConcreteOs,
+    Family: OsFamily,
+
+    pub const ZUA_META = zua.Meta.Table(Os, .{}, .{
+        .name = "Os",
+        .description = "Operating system selector. Accepted as strings like \"linux\", \"macos\", \"unix-like\", or \"bsd-based\".",
+    }).withDecode(decode).withDocs(osDocs);
+
+    fn decode(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Os {
+        return switch (prim) {
+            .string => |s| {
+                if (std.mem.eql(u8, s, "windows")) return .{ .Concrete = .windows };
+                if (std.mem.eql(u8, s, "linux")) return .{ .Concrete = .linux };
+                if (std.mem.eql(u8, s, "macos")) return .{ .Concrete = .macos };
+                if (std.mem.eql(u8, s, "bsd")) return .{ .Concrete = .bsd };
+                if (std.mem.eql(u8, s, "unix-like")) return .{ .Family = .unix_like };
+                if (std.mem.eql(u8, s, "bsd-based")) return .{ .Family = .bsd_based };
+                return ctx.failTyped(?Os, "unknown os: {s}", .{s});
+            },
+            else => return null,
+        };
+    }
+
+    fn osDocs(self: *zua.Docs) !void {
+        var alias = zua.Docs.Alias{
+            .name = try self.arena.allocator().dupe(u8, "Os"),
+            .description = try self.arena.allocator().dupe(u8, "Operating system selector."),
+            .values = .empty,
+        };
+        for ([_][]const u8{ "windows", "linux", "macos", "bsd", "unix-like", "bsd-based" }) |name| {
+            try alias.values.append(self.arena.allocator(), .{
+                .type = try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{name}),
+                .description = "",
+            });
+        }
+        try self.aliases.append(self.arena.allocator(), alias);
+    }
+};
+
+fn getStatus() []const u8 {
+    return "active";
+}
+
+const get_status = zua.Native.new(getStatus, .{}, .{
+    .name = "status",
+    .description = "Get the current status string.",
+});
+
+const Logger = struct {
+    pub const ZUA_META = zua.Meta.Table(Logger, .{}, .{
+        .name = "Logger",
+        .description = "Logging utility with a shared status function.",
+    });
+    status: @TypeOf(get_status) = get_status,
+};
+
+const Analytics = struct {
+    pub const ZUA_META = zua.Meta.Table(Analytics, .{}, .{
+        .name = "Analytics",
+        .description = "Analytics tracker with a shared status function.",
+    });
+    status: @TypeOf(get_status) = get_status,
+};
+
 fn makeVector(x: f64, y: f64) Vector2 {
     return .{ .x = x, .y = y };
 }
@@ -147,15 +227,17 @@ pub fn main(init: std.process.Init) !void {
         },
     });
 
-    const module = .{
-        .make_vector = make_vector,
-        .new_counter = new_counter,
-        .maybe_increment = maybe_increment,
-        .sum_all = sum_all,
-        .testVector2 = Vector2{ .x = 1, .y = 2 },
-    };
-
-    const stubs = try zua.Docs.generateModule(init.gpa, module, "zua");
-    defer init.gpa.free(stubs);
+    try generator.add(Os);
+    try generator.add(Priority);
+    try generator.add(Color);
+    try generator.add(Mode);
+    try generator.add(make_vector);
+    try generator.add(new_counter);
+    try generator.add(maybe_increment);
+    try generator.add(sum_all);
+    try generator.add(Vector2);
+    try generator.add(Logger);
+    try generator.add(Analytics);
+    const stubs = try generator.generate();
     std.debug.print("{s}", .{stubs});
 }

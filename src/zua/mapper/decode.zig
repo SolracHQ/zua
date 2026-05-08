@@ -239,7 +239,7 @@ pub fn decodeAt(ctx: *Context, index: lua.StackIndex, comptime T: type) !T {
 ///
 /// This is the primitive-based entry point used by custom decode hooks,
 /// `VarArgs` inspection, and any code that already holds a `Primitive`.
-/// Does not handle optional types — use `decodeAt` when working with an
+/// Does not handle optional types. Use `decodeAt` when working with an
 /// index and optional targets.
 ///
 /// Resolution order:

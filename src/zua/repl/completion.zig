@@ -90,7 +90,7 @@ pub const CompletionHook = ?*const fn (
 /// This state carries the shared config, the per-cycle Context, and a
 /// session-scoped `Completer` handle allocated as a zua Object.
 pub const CompletionState = struct {
-    config: *Config,
+    config: *const Config,
     ctx: *Context,
     completer: Object(Completer),
 };

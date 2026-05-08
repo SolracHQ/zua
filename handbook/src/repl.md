@@ -15,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
     const state = try zua.State.init(init.gpa, init.io);
     defer state.deinit();
 
-    try zua.Repl.run(state, .{});
+    try zua.Repl.run(state, &.{});
 }
 ```
 
@@ -34,15 +34,15 @@ try state.addGlobals(&ctx, .{
     .greet = zua.Native.new(greet, .{}),
 });
 
-try zua.Repl.run(state, .{});
+try zua.Repl.run(state, &.{});
 ```
 
 ## Configuration
 
-`zua.Repl.run` takes a `Config` struct. Every field is optional; defaults give you a working shell out of the box.
+`zua.Repl.run` takes a `*const Config` struct. Pass with `&.{}`. Every field is optional; defaults give you a working shell out of the box.
 
 ```zig
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .prompt          = "myapp",
     .welcome_message = "Welcome! Type 'help' for hints.\n",
     .history_path    = "myapp_history.txt",
@@ -68,7 +68,7 @@ fn complete(completer: *zua.Repl.Completer, prefix: []const u8) void {
     }
 }
 
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .completion_hook = complete,
 });
 ```
@@ -84,7 +84,7 @@ When `runtime_completion` is enabled (default: true), the REPL uses the live Lua
 This works alongside `completion_hook`: runtime completion is performed first, and then your custom hook is invoked so it can augment or override the results.
 
 ```zig
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .completion_hook = complete,
     .runtime_completion = true,
 });
@@ -127,7 +127,7 @@ fn colorize(ctx: *zua.Context, kind: zua.Repl.highlight.TokenKind, text: []const
     };
 }
 
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .style_hook = colorize,
 });
 ```
@@ -139,7 +139,7 @@ The hook receives a `*Context`, the token kind, and the token text. The context 
 To take full control, disable built-in fallback styles with `default_styles = false`:
 
 ```zig
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .style_hook = colorize,
     .default_styles = false,
 });
@@ -152,7 +152,7 @@ When `default_styles` is false, tokens that do not match any override or hook yi
 If you want nicer runtime errors during interactive sessions, enable `stack_trace`:
 
 ```zig
-try zua.Repl.run(state, .{
+try zua.Repl.run(state, &.{
     .stack_trace = true,
 });
 ```
@@ -194,7 +194,7 @@ pub fn main(init: std.process.Init) !void {
         .custom_magic = example,
     });
 
-    try zua.Repl.run(state, .{
+    try zua.Repl.run(state, &.{
         .welcome_message = "Welcome to the zua REPL!\n",
         .history_path = "zua_repl_history.txt",
         .completion_hook = completionCallback,

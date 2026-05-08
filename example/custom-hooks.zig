@@ -37,7 +37,7 @@ const Priority = enum(u8) {
 };
 
 // Address is an object-strategy type with full userdata identity and methods.
-// Its decode hook fires whenever Address is decoded as a value (T) — this includes
+// Its decode hook fires whenever Address is decoded as a value (T). This includes
 // standalone functions and methods with a `self: Address` receiver. Methods with
 // `self: *Address` extract the raw userdata pointer directly and skip the hook,
 // so those still only accept the Lua handle.

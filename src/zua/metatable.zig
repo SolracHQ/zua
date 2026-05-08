@@ -63,7 +63,7 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
     }
 
     inline for (@typeInfo(methods_type).@"struct".fields) |field| {
-        // Skip __index —since it is handled separately below.
+        // Skip __index (handled separately below).
         if (comptime std.mem.eql(u8, field.name, "__index")) continue;
 
         const method_fn = @field(methods, field.name);

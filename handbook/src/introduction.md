@@ -56,7 +56,7 @@ borrowed, stack-owned, registry-owned, what each means in practice.
 ### VarArgs and Primitive
 variadic functions, inspecting raw Lua values, `decodeValue`.
 
-### Stub generation
+### Docs generation
 `zua.Docs`, `generateModule`, editor stubs for script authors.
 
 ### Shared libraries
