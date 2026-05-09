@@ -295,7 +295,7 @@ pub fn release(self: Table) void {
 
 // Pushes the table onto the stack and returns its absolute index.
 // Caller must call lua.pop(state.luaState, 1) when done.
-fn pushForAccess(self: Table) lua.StackIndex {
+pub fn pushForAccess(self: Table) lua.StackIndex {
     switch (self.handle) {
         .borrowed, .stack_owned => |idx| {
             lua.pushValue(self.state.luaState, idx);

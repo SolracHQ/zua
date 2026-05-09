@@ -298,6 +298,7 @@ pub fn decodeValue(ctx: *Context, prim: Primitive, comptime T: type) !T {
         .int => {
             return switch (prim) {
                 .integer => |i| std.math.cast(T, i) orelse ctx.failTyped(T, "integer out of range"),
+                .string => |s| if (s.len == 1) @intCast(s[0]) else ctx.failWithFmtTyped(T, "expected integer for {s} but got string of length {d}", .{ @typeName(T), s.len }),
                 else => ctx.failWithFmtTyped(T, "expected integer for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
             };
         },
@@ -365,6 +366,13 @@ fn decodePointer(
     if (comptime Mapper.isStringValueType(T)) {
         return switch (prim) {
             .string => |s| s,
+            .table => |t| {
+                const children = try decodeSlice([]const u8, ctx, t);
+                if (comptime T == [:0]const u8) {
+                    return try ctx.arena().dupeZ(u8, children);
+                }
+                return children;
+            },
             else => ctx.failWithFmtTyped(T, "expected string for {s} but got {s}", .{ @typeName(T), @tagName(prim) }),
         };
     }
@@ -507,9 +515,8 @@ pub fn decodeUnion(ctx: *Context, table: Table, comptime T: type) !T {
 /// - `error.Failed`: When the table cannot be decoded into the target slice type.
 fn decodeSlice(comptime T: type, ctx: *Context, table: Table) !T {
     const Element = @typeInfo(T).pointer.child;
-    const index = switch (table.handle) {
-        inline else => |idx| idx,
-    };
+    const index = table.pushForAccess();
+    defer lua.pop(ctx.state.luaState, 1);
     const len = lua.rawLen(ctx.state.luaState, index);
     const slice = try ctx.arena().alloc(Element, @intCast(len));
     errdefer ctx.arena().free(slice);

@@ -10,6 +10,8 @@
 - `Table` and `Object` no longer have `methods: ArrayList(Function)` (moved to per-function `method_of` in the functions HashMap).
 
 ### Added
+- Single-character Lua strings can be decoded as `u8` (the ASCII value).
+- `[]const u8` and `[:0]const u8` can now be decoded from Lua tables of integers (byte arrays) in addition to strings.
 - `DocsHookType` type for custom docs hooks that push directly into the generator's lists.
 - `Docs.addBinding(name, value)` for explicit global bindings.
 - `RefKind` and `Ref` types for typed binding references.
@@ -27,6 +29,9 @@
 
 ### Removed
 - `Doc` union and `DocKind` enum (replaced by per-variant storage).
+
+### Fixed
+- `decodeSlice` now uses `pushForAccess` to handle registry-owned table handles instead of assuming the raw index is valid.
 
 ## 0.12.1
 
