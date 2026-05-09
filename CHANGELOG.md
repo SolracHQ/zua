@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.13.0
+
+### Breaking
+- Dropped `Doc` union and `DocKind` enum from the public type exports.
+
+- `Binding.type_name` is now `Binding.ref: Ref` with a `RefKind` discriminator (class, alias, function).
+- `Function` now has `method_of` and `field_of: ArrayList(FieldOf)`.
+- `Table` and `Object` no longer have `methods: ArrayList(Function)` (moved to per-function `method_of` in the functions HashMap).
+
+### Added
+- Single-character Lua strings can be decoded as `u8` (the ASCII value).
+- `[]const u8` and `[:0]const u8` can now be decoded from Lua tables of integers (byte arrays) in addition to strings.
+- `DocsHookType` type for custom docs hooks that push directly into the generator's lists.
+- `Docs.addBinding(name, value)` for explicit global bindings.
+- `RefKind` and `Ref` types for typed binding references.
+- `FieldOf` type for recording per-owner field name associations.
+- `---@operator` annotation emission for table and object stubs with metamethod entries.
+
+### Changed
+- Reworked `Docs.generateModule`: no longer adds values as globals, produces proper `---@meta name` stubs with `return TypeName`.
+- Moved functions from the `Doc` union cache to their own `StringHashMap(Function)`.
+- `collectTableFields` now spots `NativeFn` wrapper fields and turns them into `field_of` function entries with full signatures instead of opaque `---@field` annotations.
+- `Meta.nameOf(T)` now strips `@typeName(T)` to the last segment after the final `.`.
+- `emitFunctionStub` signature changed from `(allocator, out, doc, owner_name)` to `(allocator, out, doc, use_local)`.
+- Updated example docs to use `add()` for functions and `addBinding` only for globals.
+- Rewrote the Vecmath example as a named type with `ZUA_META.Table` and default field values.
+
+### Removed
+- `Doc` union and `DocKind` enum (replaced by per-variant storage).
+
+### Fixed
+- `decodeSlice` now uses `pushForAccess` to handle registry-owned table handles instead of assuming the raw index is valid.
+
 ## 0.12.1
 
 ### Added

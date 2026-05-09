@@ -15,6 +15,6 @@
 - [Object handles](./object-handles.md)
 - [Closures](./closures.md)
 - [VarArgs and Primitive](./varargs.md)
-- [Stub generation](./stubs.md)
+- [Docs generation](./docs.md)
 - [Shared libraries](./shared-libraries.md)
 - [REPL](./repl.md)

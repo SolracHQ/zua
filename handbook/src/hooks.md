@@ -64,9 +64,83 @@ Now any function that takes `Address` by value accepts integers, hex strings, an
 > [!IMPORTANT]
 > The decode hook fires when the type is decoded as a plain value `T`. It does not fire for `*T` receivers in `.object` methods; those extract the raw userdata pointer directly. So `fn method(self: *Address)` always receives the Lua userdata handle, while `fn f(addr: Address)` goes through the hook and accepts all the forms the hook handles.
 
+### Docs hooks
+
+A decode hook changes what values a type accepts from Lua. The stub generator does not know about your decode hook. It walks the Zig type layout and generates annotations based on struct fields and union variants. When those do not match the string values or table shapes your decode hook accepts, the generated stubs lie to the language server.
+
+That is where a docs hook comes in. It is the documentation counterpart of a decode hook. You attach it with `.withDocs(handler)` on the same `ZUA_META` that has the decode hook, and it replaces the default stub output with entries you push into the generator's lists.
+
+The classic case is a tagged union that decodes from strings but would otherwise spill its internal variants:
+
+```zig
+const ConcreteOs = enum { windows, linux, macos, bsd };
+const OsFamily = enum { unix_like, bsd_based };
+
+const Os = union(enum) {
+    Concrete: ConcreteOs,
+    Family: OsFamily,
+
+    pub const ZUA_META = zua.Meta.Table(Os, .{}, .{
+        .name = "Os",
+        .description = "Operating system selector.",
+    }).withDecode(decode).withDocs(osDocs);
+
+    fn decode(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Os {
+        return switch (prim) {
+            .string => |s| {
+                if (std.mem.eql(u8, s, "windows")) return .{ .Concrete = .windows };
+                if (std.mem.eql(u8, s, "linux")) return .{ .Concrete = .linux };
+                if (std.mem.eql(u8, s, "macos")) return .{ .Concrete = .macos };
+                if (std.mem.eql(u8, s, "bsd")) return .{ .Concrete = .bsd };
+                if (std.mem.eql(u8, s, "unix-like")) return .{ .Family = .unix_like };
+                if (std.mem.eql(u8, s, "bsd-based")) return .{ .Family = .bsd_based };
+                return ctx.failTyped(?Os, "unknown os: {s}", .{s});
+            },
+            else => return null,
+        };
+    }
+
+    fn osDocs(self: *zua.Docs) !void {
+        var alias = zua.Docs.Alias{
+            .name = try self.arena.allocator().dupe(u8, "Os"),
+            .description = try self.arena.allocator().dupe(u8, "Operating system selector."),
+            .values = .empty,
+        };
+        for ([_][]const u8{ "windows", "linux", "macos", "bsd", "unix-like", "bsd-based" }) |name| {
+            try alias.values.append(self.arena.allocator(), .{
+                .type = try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{name}),
+                .description = "",
+            });
+        }
+        try self.aliases.append(self.arena.allocator(), alias);
+    }
+};
+```
+
+Without the docs hook the stub exposes `ConcreteOs` and `OsFamily`. With the hook it shows exactly what strings Lua can pass:
+
+```lua
+---@alias Os
+---| 'windows'
+---| 'linux'
+---| 'macos'
+---| 'bsd'
+---| 'unix-like'
+---| 'bsd-based'
+```
+
+The hook receives the `*Docs` generator and pushes entries directly into its class, alias, or table lists. It replaces the automatic collection entirely, so internal types referenced by the Zig definition are not pulled into the output.
+
+> [!IMPORTANT]
+> You can push whatever you want into the docs lists inside the hook, but make sure you add at least one alias or class with the same name you set in `ZUA_META`. Other types that reference this one will look it up by that name.
+
+Docs hooks do not have a fallback path. If you attach one, it always runs. There is no `null` return to skip it and use the defaults. If you only need to add descriptions or customize names, use `MetaOptions` fields like `.description`, `.field_descriptions`, or `.variants` instead.
+
+The docs hook is not limited to aliases. A table-strategy type with internal fields you want to hide from Lua tooling can push an object or table entry into the class list instead. The [Docs chapter](./docs.md#docs-hooks) shows more context around stub generation.
+
 ## Hooks are independent
 
-Encode and decode are separate concerns. A type can encode as a string but still decode from an integer. This asymmetry is intentional; you get exactly the behavior you declare and nothing more.
+Encode and decode do not need to mirror each other. Push as a string, accept as an integer. Or the other way around. You get exactly what you wire up.
 
 ## strEnum
 

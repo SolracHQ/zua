@@ -30,7 +30,7 @@ pub const Config = @import("config.zig");
 /// The REPL supports optional history persistence, syntax highlighting, and
 /// tab completion. Each entered line is evaluated in a fresh `Context`, which
 /// ensures temporary allocations are reclaimed between commands.
-pub fn run(state: *State, config: *Config) !void {
+pub fn run(state: *State, config: *const Config) !void {
     if (config.history_path) |path| {
         isocline.setHistory(path, config.history_max);
     }
@@ -84,7 +84,7 @@ pub fn run(state: *State, config: *Config) !void {
 // Evaluation
 
 /// Evaluate a single REPL source line.
-fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *Config) !void {
+fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *const Config) !void {
     const previous_top = lua.getTop(state.luaState);
     defer lua.setTop(state.luaState, previous_top);
 

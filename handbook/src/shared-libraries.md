@@ -17,17 +17,17 @@ const lua = zua.lua;
 
 // Your API types and functions go here.
 
-const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn };
+const Vecmath = struct {
+    pub const ZUA_META = zua.Meta.Table(Vecmath, .{}, .{
+        .name = "vecmath",
+    });
+    vec2: @TypeOf(vec2_fn) = vec2_fn,
+    lerp: @TypeOf(lerp_fn) = lerp_fn,
+};
 
 export fn luaopen_vecmath(L: *lua.State) c_int {
-    var threaded: std.Io.Threaded = .init(std.heap.c_allocator, .{});
-    const io = threaded.io();
-
-    const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
-    var ctx = zua.Context.init(state);
-    defer ctx.deinit();
-
-    zua.Mapper.Encoder.pushValue(&ctx, module) catch return 0;
+    ...
+    zua.Mapper.Encoder.pushValue(&ctx, Vecmath{}) catch return 0;
     return 1;
 }
 ```
@@ -57,7 +57,7 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    zua.Mapper.Encoder.pushValue(&ctx, module) catch return 0;
+    zua.Mapper.Encoder.pushValue(&ctx, Vecmath{ .vec2 = .{}, .lerp = .{} }) catch return 0;
     return 1;
 }
 ```
@@ -100,15 +100,35 @@ A common pattern is to include a `docs()` function in the module that returns th
 
 ```zig
 fn docs(ctx: *zua.Context) ![]const u8 {
-    return zua.Docs.generateModule(ctx.arena(), module, "vecmath");
+    return zua.Docs.generateModule(ctx.arena(), Vecmath{}, "vecmath");
 }
 
-const docs_fn = zua.Native.new(docs, .{}, .{
-    .name = "docs",
-    .description = "Generate editor stubs for the vecmath module.",
+const vec2_fn = zua.Native.new(vec2, .{}, .{
+    .name = "vec2",
+    .description = "Construct a new Vec2 value.",
+    .args = &.{
+        .{ .name = "x", .description = "Horizontal component." },
+        .{ .name = "y", .description = "Vertical component." },
+    },
 });
 
-const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn, .docs = docs_fn };
+const lerp_fn = zua.Native.new(lerp, .{}, .{
+    .name = "lerp",
+    .description = "Linearly interpolate between two Vec2 values.",
+    .args = &.{
+        .{ .name = "a", .description = "Starting vector." },
+        .{ .name = "b", .description = "Ending vector." },
+        .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+    },
+});
+
+const Vecmath = struct {
+    pub const ZUA_META = zua.Meta.Table(Vecmath, .{}, .{
+        .name = "vecmath",
+    });
+    vec2: @TypeOf(vec2_fn),
+    lerp: @TypeOf(lerp_fn),
+};
 ```
 
 ```lua
@@ -117,10 +137,7 @@ local vecmath = require("vecmath")
 print(vecmath.docs())
 ```
 
-> [!WARNING]
-> If you want to generate docs, every reachable public API function and type must have a name set. It defaults to `typeName`, but function type names are illegible and illegal in Lua docs output. Functions stored as table fields are fine, and methods are fine because they use the method name. Top-level functions added with `add` will fail miserably otherwise. Types are not better here either, because names like `module.path.Name` can confuse `luaS`.
-
-The stub is generated at runtime from the same metadata the encoder uses, so it always reflects the current API. See [Stub generation](./stubs.md) for the full description of what gets emitted.
+See [Docs generation](./docs.md) for the full API description.
 
 ## Error handling in luaopen
 
@@ -139,7 +156,7 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
     };
     var ctx = zua.Context.init(state);
 
-    zua.Mapper.Encoder.pushValue(&ctx, module) catch {
+    zua.Mapper.Encoder.pushValue(&ctx, Vecmath{}) catch {
         ctx.deinit();
         lua.pushString(L, "vecmath: failed to encode module");
         return lua.error_(L);

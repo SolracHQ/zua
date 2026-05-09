@@ -220,7 +220,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 /// Generates a concrete set of list method values for registration in
 /// `ZUA_META`. Delegates to `generatedListMethods` and extracts the four
 /// standard list methods (`get`, `__index`, `__len`, `iter`) into a
-/// comptime struct literal.
+/// comptime struct literal, wrapping public-facing methods with documentation.
 ///
 /// Arguments:
 /// - L: The userdata type that owns the list.
@@ -228,17 +228,37 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 ///
 /// Returns:
 /// - A struct value with `get`, `__index`, `__len`, and `iter` fields.
-pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(.{
-    .get = generatedListMethods(L, getElements).get,
-    .__index = generatedListMethods(L, getElements).__index,
-    .__len = generatedListMethods(L, getElements).__len,
-    .iter = generatedListMethods(L, getElements).iter,
+pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
+    const Gen = generatedListMethods(L, getElements);
+    const Native = @import("../functions/native.zig");
+    break :blk .{
+        .get = Native.new(Gen.get, .{}, .{
+            .description = "Returns the element at the given 1-based index.",
+            .args = &.{
+                .{ .name = "index", .description = "1-based index." },
+            },
+        }),
+        .__index = Gen.__index,
+        .__len = Gen.__len,
+        .iter = Native.new(Gen.iter, .{}, .{
+            .description = "Returns an iterator compatible with Lua for..in syntax.",
+        }),
+    };
 }) {
+    const Gen = generatedListMethods(L, getElements);
+    const Native = @import("../functions/native.zig");
     return .{
-        .get = generatedListMethods(L, getElements).get,
-        .__index = generatedListMethods(L, getElements).__index,
-        .__len = generatedListMethods(L, getElements).__len,
-        .iter = generatedListMethods(L, getElements).iter,
+        .get = Native.new(Gen.get, .{}, .{
+            .description = "Returns the element at the given 1-based index.",
+            .args = &.{
+                .{ .name = "index", .description = "1-based index." },
+            },
+        }),
+        .__index = Gen.__index,
+        .__len = Gen.__len,
+        .iter = Native.new(Gen.iter, .{}, .{
+            .description = "Returns an iterator compatible with Lua for..in syntax.",
+        }),
     };
 }
 
@@ -302,7 +322,7 @@ pub fn typeListAt(comptime spec: anytype, comptime index: usize) type {
     const SpecType = @TypeOf(spec);
     if (SpecType == type) {
         const info = @typeInfo(spec);
-        if (info == .@"struct" and info.@"struct".is_tuple) return spec[index];
+        if (info == .@"struct" and info.@"struct".is_tuple) return info.@"struct".fields[index].type;
         if (index == 0) return spec;
         @compileError("typeListAt index out of bounds for non-tuple type " ++ @typeName(spec));
     }

@@ -24,7 +24,7 @@ const helpers = @import("helpers.zig");
 /// ```
 pub inline fn Object(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .object)) type {
     comptime helpers.assertContainerType(T);
-    return comptime metadata.MetaData(T, void, .object, null, null, methods, options);
+    return comptime metadata.MetaData(T, void, .object, null, null, methods, options, null);
 }
 
 /// Declare `T` as a `.table` translation strategy.
@@ -49,7 +49,7 @@ pub inline fn Object(comptime T: type, comptime methods: anytype, comptime optio
 pub inline fn Table(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .table)) type {
     comptime helpers.assertContainerType(T);
     comptime helpers.assertTaggedIfUnion(T);
-    return comptime metadata.MetaData(T, void, .table, null, null, methods, options);
+    return comptime metadata.MetaData(T, void, .table, null, null, methods, options, null);
 }
 
 /// Declare `T` as a `.ptr` translation strategy.
@@ -59,7 +59,7 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime option
 /// not inspect or mutate.
 pub inline fn Ptr(comptime T: type, comptime options: meta.MetaOptions(T, .ptr)) type {
     comptime helpers.assertContainerType(T);
-    return comptime metadata.MetaData(T, void, .ptr, null, null, null, options);
+    return comptime metadata.MetaData(T, void, .ptr, null, null, null, options, null);
 }
 
 /// Declare `T` as a `.capture` translation strategy.
@@ -97,7 +97,7 @@ pub inline fn Ptr(comptime T: type, comptime options: meta.MetaOptions(T, .ptr))
 /// ```
 pub inline fn Capture(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .capture)) type {
     comptime helpers.assertContainerType(T);
-    return comptime metadata.MetaData(T, void, .capture, null, null, methods, options);
+    return comptime metadata.MetaData(T, void, .capture, null, null, methods, options, null);
 }
 
 /// Declare `T` as a string-backed enum with automatic string conversion.
@@ -107,7 +107,7 @@ pub inline fn Capture(comptime T: type, comptime methods: anytype, comptime opti
 pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .table)) type {
     if (comptime @typeInfo(T) != .@"enum")
         @compileError("strEnum requires an enum type, got " ++ @typeName(T));
-    return comptime metadata.MetaData(T, []const u8, .table, helpers.strEnumEncode(T), helpers.strEnumDecode(T), methods, options);
+    return comptime metadata.MetaData(T, []const u8, .table, helpers.strEnumEncode(T), helpers.strEnumDecode(T), methods, options, null);
 }
 
 /// Declare `T` as a list-type `.object` translation strategy.
@@ -142,7 +142,7 @@ pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime opti
 pub inline fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype, comptime options: meta.MetaOptions(T, .object)) type {
     comptime helpers.assertContainerType(T);
     comptime helpers.assertNoListCollisions(methods);
-    return comptime metadata.MetaData(T, void, .object, null, null, helpers.mergeMethodSets(helpers.generateListMethodsSet(T, getElements), methods), options);
+    return comptime metadata.MetaData(T, void, .object, null, null, helpers.mergeMethodSets(helpers.generateListMethodsSet(T, getElements), methods), options, null);
 }
 
 test {

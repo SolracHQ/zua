@@ -1,4 +1,4 @@
-# Stub generation
+# Docs generation
 
 When you expose a Zig API to Lua script writers, the runtime experience is good immediately, but the editor experience is not. The language server does not know what globals exist, what methods they have, or what parameter types they expect. The `zua.Docs` generator solves that by emitting Lua stub files you can point your Lua LSP at.
 
@@ -157,6 +157,10 @@ Optional types appear as `TYPE?` in the generated output. A function parameter o
 
 `VarArgs` parameters are emitted as `---@param ... any`. If you supply an `ArgInfo` entry with the name `"..."`, the description is included on that line as well.
 
+## Operator annotations
+
+When a type declares metamethods like `__add`, `__tostring`, or `__call` in its `ZUA_META`, the generator emits `---@operator` lines on the class stub. These tell the language server what operators the type supports. The operator name, parameter type, and return type are all pulled from the metamethod's signature, so there is nothing extra to wire up.
+
 ## Tagged union variants
 
 Tagged unions generate `---@alias` declarations instead of class stubs. Each variant becomes either an inline shape or its own class, depending on whether a `.name` is provided.
@@ -227,31 +231,140 @@ For `strEnum` types, the alias lists the string literals directly:
 ---@alias Priority "low" | "normal" | "high"
 ```
 
-## Module shorthand
+## Docs hooks
 
-When your API is already grouped into a module-like struct literal, you can skip the `Docs` builder entirely and call `generateModule` directly:
+Tagged unions always generate an `---@alias` based on their Zig variant layout. When the same union is decoded from strings at runtime (via a decode hook), the generated alias exposes internal variant types instead of the actual string values Lua accepts.
+
+To fix that, attach a docs hook with `.withDocs(handler)`. The hook receives the `*Docs` generator and pushes entries directly into its lists, replacing the default collection:
 
 ```zig
-const stubs = try zua.Docs.generateModule(allocator, module, "mymod");
+const ConcreteOs = enum { windows, linux, macos, bsd };
+const OsFamily = enum { unix_like, bsd_based };
+
+const Os = union(enum) {
+    Concrete: ConcreteOs,
+    Family: OsFamily,
+
+    pub const ZUA_META = zua.Meta.Table(Os, .{}, .{
+        .name = "Os",
+        .description = "Operating system selector. Accepted as strings like \"linux\", \"unix-like\", or \"bsd-based\".",
+    }).withDecode(decode).withDocs(osDocs);
+
+    fn decode(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Os {
+        return switch (prim) {
+            .string => |s| {
+                if (std.mem.eql(u8, s, "windows")) return .{ .Concrete = .windows };
+                if (std.mem.eql(u8, s, "linux")) return .{ .Concrete = .linux };
+                if (std.mem.eql(u8, s, "macos")) return .{ .Concrete = .macos };
+                if (std.mem.eql(u8, s, "bsd")) return .{ .Concrete = .bsd };
+                if (std.mem.eql(u8, s, "unix-like")) return .{ .Family = .unix_like };
+                if (std.mem.eql(u8, s, "bsd-based")) return .{ .Family = .bsd_based };
+                return ctx.failTyped(?Os, "unknown os: {s}", .{s});
+            },
+            else => return null,
+        };
+    }
+
+    fn osDocs(self: *zua.Docs) !void {
+        var alias = zua.Docs.Alias{
+            .name = try self.arena.allocator().dupe(u8, "Os"),
+            .description = try self.arena.allocator().dupe(u8, "Operating system selector."),
+            .values = .empty,
+        };
+        for ([_][]const u8{ "windows", "linux", "macos", "bsd", "unix-like", "bsd-based" }) |name| {
+            try alias.values.append(self.arena.allocator(), .{
+                .type = try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{name}),
+                .description = "",
+            });
+        }
+        try self.aliases.append(self.arena.allocator(), alias);
+    }
+};
 ```
 
-The first argument is a plain allocator, not the call arena. The second is the module struct. The third is the module name, which appears in the `---@meta` header:
+Now the stub shows clean string literals instead of the internal union layout:
 
 ```lua
----@meta mymod
+---@alias Os
+---| 'windows'
+---| 'linux'
+---| 'macos'
+---| 'bsd'
+---| 'unix-like'
+---| 'bsd-based'
 ```
 
-Pass `null` for the name to emit `---@meta _` instead.
+The hook replaces the automatic collection entirely. Internal Zig types referenced by the union variants are not pulled into the output. If you attach a docs hook, it always runs; there is no fallback to the default.
 
-Inside a Lua callback, use `ctx.arena()` as the allocator if the stub string only needs to live for the duration of that call:
+See the [Hooks chapter](./hooks.md#docs-hooks) for the full API reference and more examples.
+
+## Module shorthand
+
+Most modules expose a single value that the encoder pushes. For these, `generateModule` is the quickest path to a working stub file:
 
 ```zig
-fn docs(ctx: *zua.Context) ![]const u8 {
-    return zua.Docs.generateModule(ctx.arena(), module, "mymod");
-}
+const stubs = try zua.Docs.generateModule(allocator, MyModule{}, "my_module");
 ```
 
-This is the pattern used in the `vecmath` shared library example: a `docs` function exposed to Lua generates and returns the stub text on demand.
+The output has `---@meta my_module` at the top, the type and function stubs in the middle, and `return MyModule` at the end. LuaLS sees that header and knows this file describes what `require("my_module")` returns.
+
+```lua
+---@meta my_module
+
+---@class MyModule
+local MyModule = {}
+
+return MyModule
+```
+
+When the module bundles function-valued fields under a single type name, the same function works. The fields get full `---@param` signatures instead of hiding behind opaque `---@field name function` lines:
+
+```zig
+const Vecmath = struct {
+    pub const ZUA_META = zua.Meta.Table(Vecmath, .{}, .{
+        .name = "vecmath",
+    });
+    vec2: @TypeOf(vec2_fn) = vec2_fn,
+    lerp: @TypeOf(lerp_fn) = lerp_fn,
+};
+
+const stubs = try zua.Docs.generateModule(allocator, Vecmath{}, "vecmath");
+```
+
+```lua
+---@meta vecmath
+
+---@class vecmath
+local vecmath = {}
+
+---@return Vec2
+function vecmath.vec2(x, y) end
+
+---@return Vec2
+function vecmath.lerp(a, b, t) end
+
+return vecmath
+```
+
+For the REPL and script-executor case where the API is a single global, call `generate()` after registering the global as a binding:
+
+```zig
+var docs = zua.Docs.init(allocator);
+defer docs.deinit();
+try docs.addBinding("my_api", MyApi{});
+const stubs = try docs.generate();
+```
+
+```lua
+---@meta _
+
+---@class MyApi
+local MyApi = {}
+
+my_api = MyApi
+```
+
+The `---@meta _` header makes all types and functions visible workspace-wide. The runtime already has the global registered, so no `require` call is needed. The stub file just tells the editor what that global looks like.
 
 ## Writing the stub file
 

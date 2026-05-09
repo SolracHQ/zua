@@ -210,7 +210,7 @@ pub const ColorHook = ?*const fn (ctx: *Context, kind: TokenKind, text: []const 
 /// Highlight state forwarded through isocline opaque arg pointers.
 pub const HighlightState = struct {
     ctx: *Context,
-    config: *Config,
+    config: *const Config,
 };
 
 /// C callback wrapper for isocline syntax highlighting.
@@ -267,7 +267,7 @@ fn resolveStyle(
     kind: TokenKind,
     text: []const u8,
     style_overrides: *const std.EnumArray(TokenKind, ?Style),
-    config: *Config,
+    config: *const Config,
     ctx: *Context,
 ) Style {
     if (style_overrides.get(kind)) |style| return style;
@@ -305,7 +305,7 @@ pub fn process(
     ctx: *Context,
     source: []const u8,
     style_overrides: *const std.EnumArray(TokenKind, ?Style),
-    config: *Config,
+    config: *const Config,
 ) ?[]const u8 {
     const arena = ctx.arena();
     var tokens = lexer.lex(arena, source) catch return null;

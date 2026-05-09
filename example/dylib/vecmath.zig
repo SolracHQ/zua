@@ -52,10 +52,6 @@ fn lerp(a: Vec2, b: Vec2, t: f64) Vec2 {
     return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
 }
 
-fn docs(ctx: *zua.Context) ![]const u8 {
-    return zua.Docs.generateModule(ctx.arena(), module, "vecmath");
-}
-
 const vec2_fn = zua.Native.new(vec2, .{}, .{
     .name = "vec2",
     .description = "Construct a new Vec2 value.",
@@ -75,12 +71,23 @@ const lerp_fn = zua.Native.new(lerp, .{}, .{
     },
 });
 
+fn docs(ctx: *zua.Context) ![]const u8 {
+    return zua.Docs.generateModule(ctx.arena(), Vecmath{}, "vecmath");
+}
+
 const docs_fn = zua.Native.new(docs, .{}, .{
     .name = "docs",
     .description = "Generate editor stubs for the vecmath module.",
 });
 
-const module = .{ .vec2 = vec2_fn, .lerp = lerp_fn, .docs = docs_fn };
+const Vecmath = struct {
+    pub const ZUA_META = zua.Meta.Table(Vecmath, .{}, .{
+        .name = "vecmath",
+    });
+    vec2: @TypeOf(vec2_fn) = vec2_fn,
+    lerp: @TypeOf(lerp_fn) = lerp_fn,
+    docs: @TypeOf(docs_fn) = docs_fn,
+};
 
 export fn luaopen_vecmath(L: *lua.State) c_int {
     var threaded: std.Io.Threaded = .init(std.heap.c_allocator, .{});
@@ -89,6 +96,6 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
     const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
-    zua.Mapper.Encoder.pushValue(&ctx, module) catch return 0;
+    zua.Mapper.Encoder.pushValue(&ctx, Vecmath{}) catch return 0;
     return 1;
 }

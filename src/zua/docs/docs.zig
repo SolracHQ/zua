@@ -14,8 +14,6 @@
 //! const stubs = try d.generate();
 //! ```
 
-pub const Docs = @This();
-
 const std = @import("std");
 const Context = @import("../state/context.zig");
 const Native = @import("../functions/native.zig");
@@ -30,70 +28,77 @@ const types = @import("types.zig");
 const collect = @import("collect.zig");
 const emit = @import("emit.zig");
 
-pub const Doc = types.Doc;
+pub const Table = types.Table;
+pub const Function = types.Function;
+pub const Object = types.Object;
+pub const Alias = types.Alias;
+pub const Binding = types.Binding;
+pub const Operator = types.Operator;
+pub const Ref = types.Ref;
+pub const RefKind = types.RefKind;
+pub const structToAliasShape = helpers.structToAliasShape;
 
-/// Internal cache that maps `@typeName` keys to collected `Doc` entries.
-cache: std.StringHashMap(Doc),
-/// Arena that owns all doc strings and intermediate allocations.
-arena: std.heap.ArenaAllocator,
-/// Persistent allocator used for the cache hash map.
-heap: std.mem.Allocator,
-
-/// Creates a new stub generator using `allocator` for its cache and arena.
+/// Lua stub generator for editor and language-server support.
 ///
-/// Generated strings and intermediate docs are stored in the internal arena
-/// and released together in `deinit`.
+/// Walks the same metadata and wrapper surface used by the runtime encoder and produces
+/// Lua annotation stubs for exposed functions, table-strategy types, and object methods.
 ///
-/// Arguments:
-/// - allocator: An allocator that must live at least as long as the generator.
-///
-/// Returns:
-/// - Docs: A new generator with an empty cache and initialized arena.
-///
-/// Example:
+/// Usage:
 /// ```zig
 /// var d = Docs.init(allocator);
 /// defer d.deinit();
+/// try d.add(MyType);
+/// try d.add(myFunction);
+/// const stubs = try d.generate();
 /// ```
+pub const Docs = @This();
+
+classes: std.ArrayList(Table),
+objects: std.ArrayList(Object),
+aliases: std.ArrayList(Alias),
+functions: std.StringHashMap(Function),
+bindings: std.ArrayList(Binding),
+class_map: std.StringHashMap(void),
+object_map: std.StringHashMap(void),
+alias_map: std.StringHashMap(void),
+arena: std.heap.ArenaAllocator,
+heap: std.mem.Allocator,
+
+/// Creates a new stub generator. Generated strings are stored in the internal arena
+/// and released together in `deinit`.
 pub fn init(allocator: std.mem.Allocator) Docs {
     return Docs{
-        .cache = std.StringHashMap(Doc).init(allocator),
+        .classes = std.ArrayList(Table).empty,
+        .objects = std.ArrayList(Object).empty,
+        .aliases = std.ArrayList(Alias).empty,
+        .functions = std.StringHashMap(Function).init(allocator),
+        .bindings = std.ArrayList(Binding).empty,
+        .class_map = std.StringHashMap(void).init(allocator),
+        .object_map = std.StringHashMap(void).init(allocator),
+        .alias_map = std.StringHashMap(void).init(allocator),
         .arena = std.heap.ArenaAllocator.init(allocator),
         .heap = allocator,
     };
 }
 
-/// Releases all memory owned by the generator.
-///
-/// After calling `deinit`, the generator and any slices obtained from it
-/// become invalid.
-///
-/// Example:
-/// ```zig
-/// var d = Docs.init(allocator);
-/// defer d.deinit();
-/// ```
+/// Releases all memory owned by the generator. After calling `deinit`, the generator
+/// and any slices obtained from it become invalid.
 pub fn deinit(self: *Docs) void {
-    self.cache.deinit();
+    self.class_map.deinit();
+    self.object_map.deinit();
+    self.alias_map.deinit();
+    self.functions.deinit();
     self.arena.deinit();
 }
 
-/// Adds a type, native wrapper, or plain Zig function to the docs cache.
+/// Adds a type, native wrapper, or plain Zig function to the docs generator.
 ///
 /// Plain Zig functions are documented as `NativeFn(function, .{}, .{})`, mirroring
-/// the encoder behavior when they are pushed into Lua.
-///
-/// Repeated additions of the same type or function are ignored after the first
-/// cached entry is created.
+/// the encoder behavior when they are pushed into Lua. Repeated additions of the same
+/// type are ignored after the first entry is created.
 ///
 /// Arguments:
 /// - item: A Zig type, a `NativeFn` / `Closure` wrapper, or a plain Zig function.
-///
-/// Example:
-/// ```zig
-/// try d.add(MyZuaType);
-/// try d.add(myZigFunction);
-/// ```
 pub fn add(self: *Docs, item: anytype) !void {
     const ItemType = @TypeOf(item);
 
@@ -118,111 +123,118 @@ pub fn add(self: *Docs, item: anytype) !void {
     return collect.addType(self, helpers.normalizeRootType(ItemType), true);
 }
 
-/// Generates Lua stub text for all collected docs.
+/// Adds a named binding to the output.
 ///
-/// The output is prefixed with `---@meta _` and contains the full set of
-/// `---@class`, `---@alias`, `---@param`, `---@return`, and `function`
-/// annotations for every cached entry.
-///
-/// Returns:
-/// - []const u8: Arena-backed slice of generated Lua annotation text.
-///   Remains valid until the generator is deinitialized.
-///
-/// Example:
-/// ```zig
-/// const stubs = try d.generate();
-/// ```
-pub fn generate(self: *Docs) ![]const u8 {
-    return self.generateImpl(null);
-}
-
-/// Generates Lua stub text directly from a module-like struct literal.
-///
-/// The output is prefixed with `---@meta {module_name}`.
-/// If `module_name` is null, the prefix is `---@meta _`.
-///
-/// This is a convenience entry point that creates a temporary generator,
-/// populates it from the struct fields, emits the stubs, and returns the
-/// result via the caller's allocator.
+/// The value determines the binding kind:
+/// - NativeFn wrappers are stored as functions and referenced by their display name.
+/// - Named types (struct, union, enum, opaque) are stored as table/object/alias stubs
+///   and referenced by their `ZUA_META.name`.
 ///
 /// Arguments:
-/// - allocator: Allocator used for the generated output.
-/// - module: A struct literal whose fields are types or functions to document.
-/// - module_name: Optional name for the `---@meta` annotation.
-///
-/// Returns:
-/// - []const u8: Allocator-owned slice of generated Lua annotation text.
-///   The caller is responsible for freeing it.
-///
-/// Example:
-/// ```zig
-/// const stubs = try Docs.generateModule(allocator, .{
-///     myOpenFunction,
-///     myCloseFunction,
-/// }, "mymodule");
-/// // Result: stubs contains ---@meta mymodule with function stubs
-/// // for myOpenFunction and myCloseFunction.
-/// ```
-pub fn generateModule(
-    allocator: std.mem.Allocator,
-    module: anytype,
-    module_name: ?[]const u8,
-) ![]const u8 {
-    var generator = Docs.init(allocator);
-    defer generator.deinit();
-    try generator.addModuleValues(module);
-    const generated = try generator.generateImpl(module_name);
-    return allocator.dupe(u8, generated);
-}
+/// - name: The Lua variable name for the binding.
+/// - value: A value instance or NativeFn wrapper.
+pub fn addBinding(self: *Docs, name: []const u8, value: anytype) !void {
+    const T = @TypeOf(value);
 
-/// Iterates over the fields of a struct literal and adds each value to the
-/// docs cache.
-fn addModuleValues(self: *Docs, module: anytype) anyerror!void {
-    try collect.addModuleValues(self, module);
-}
-
-/// Internal implementation shared by `generate` and `generateModule`.
-///
-/// Walks the cache entries in insertion order and delegates to the appropriate
-/// emitter function for each `Doc` variant.
-fn generateImpl(self: *Docs, module: ?[]const u8) ![]const u8 {
-    var out = std.ArrayList(u8).empty;
-    var it = self.cache.iterator();
-    var first = true;
-
-    const module_name = if (module) |name|
-        try std.fmt.allocPrint(self.arena.allocator(), "---@meta {s}\n\n", .{name})
-    else
-        "---@meta _\n\n";
-    try out.appendSlice(self.arena.allocator(), module_name);
-
-    while (it.next()) |entry| {
-        switch (entry.value_ptr.*) {
-            .PlaceHolder => continue,
-            .Table => |doc| {
-                if (!first) try out.appendSlice(self.arena.allocator(), "\n");
-                first = false;
-                try emit.emitTableStub(self.arena.allocator(), &out, doc);
-            },
-            .Function => |doc| {
-                if (!first) try out.appendSlice(self.arena.allocator(), "\n");
-                first = false;
-                try emit.emitFunctionStub(self.arena.allocator(), &out, doc, null);
-            },
-            .Object => |doc| {
-                if (!first) try out.appendSlice(self.arena.allocator(), "\n");
-                first = false;
-                try emit.emitObjectStub(self.arena.allocator(), &out, doc);
-            },
-            .Alias => |doc| {
-                if (!first) try out.appendSlice(self.arena.allocator(), "\n");
-                first = false;
-                try emit.emitAliasStub(self.arena.allocator(), &out, doc);
-            },
-        }
+    if (comptime helpers.isNativeWrapperType(T)) {
+        try collect.addWrappedFunction(self, value, false, null, name, name);
+    } else {
+        try collect.addType(self, helpers.normalizeRootType(T), true);
     }
 
+    const ref: Ref = if (comptime helpers.isNativeWrapperType(T))
+        .{ .kind = .function, .key = try helpers.persist(self, name) }
+    else
+        .{ .kind = if (comptime helpers.shouldEmitAlias(helpers.normalizeRootType(T))) .alias else .class, .key = try helpers.persist(self, Meta.nameOf(helpers.normalizeRootType(T))) };
+
+    try self.bindings.append(self.arena.allocator(), .{
+        .var_name = try helpers.persist(self, name),
+        .ref = ref,
+    });
+}
+
+/// Generates Lua stub text for all collected docs prefixed with `---@meta _`.
+///
+/// Types in the output are available workspace-wide without require.
+/// Returns an arena-backed slice valid until the generator is deinitialized.
+pub fn generate(self: *Docs) ![]const u8 {
+    var out = std.ArrayList(u8).empty;
+    try out.appendSlice(self.arena.allocator(), "---@meta _\n\n");
+    try emitAll(self, &out, false, true);
     return out.toOwnedSlice(self.arena.allocator());
+}
+
+fn emitAll(self: *Docs, out: *std.ArrayList(u8), use_local: bool, emit_bindings: bool) !void {
+    var first = true;
+    for (self.classes.items) |doc| {
+        if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+        first = false;
+        try emit.emitTableStub(self.arena.allocator(), out, doc);
+    }
+    for (self.objects.items) |doc| {
+        if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+        first = false;
+        try emit.emitObjectStub(self.arena.allocator(), out, doc);
+    }
+    for (self.aliases.items) |doc| {
+        if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+        first = false;
+        try emit.emitAliasStub(self.arena.allocator(), out, doc);
+    }
+    {
+        var it = self.functions.iterator();
+        while (it.next()) |entry| {
+            if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+            first = false;
+            try emit.emitFunctionStub(self.arena.allocator(), out, entry.value_ptr.*, use_local);
+        }
+    }
+    if (emit_bindings) {
+        for (self.bindings.items) |binding| {
+            if (!first) try out.appendSlice(self.arena.allocator(), "\n");
+            first = false;
+            try emit.appendFmt(self.arena.allocator(), out, "{s} = {s}", .{ binding.var_name, binding.ref.key });
+        }
+    }
+}
+
+/// Generates Lua stub text for a single value as a require-able module.
+///
+/// The value is treated as a normal table/object/alias type. Struct literal fields
+/// become opaque `---@field` annotations. The output has `---@meta <module_name>`
+/// and ends with `return TypeName`.
+///
+/// Arguments:
+/// - allocator: Allocator for the returned slice. The returned slice is heap-allocated
+///   and owned by the caller.
+/// - value: The value instance or NativeFn wrapper to document.
+/// - module_name: The module name for the `---@meta` header and `require()` association.
+///
+/// Returns a caller-owned slice that must be freed with `allocator.free`.
+pub fn generateModule(allocator: std.mem.Allocator, comptime value: anytype, module_name: []const u8) ![]const u8 {
+    var self = Docs.init(allocator);
+    defer self.deinit();
+
+    const T = @TypeOf(value);
+    const type_name: []const u8 = comptime if (helpers.isNativeWrapperType(T))
+        module_name
+    else
+        Meta.nameOf(helpers.normalizeRootType(T));
+
+    if (comptime helpers.isNativeWrapperType(T)) {
+        try collect.addWrappedFunction(&self, value, false, null, module_name, module_name);
+    } else {
+        try collect.addType(&self, helpers.normalizeRootType(T), true);
+    }
+
+    var out = std.ArrayList(u8).empty;
+    try emit.appendFmt(self.arena.allocator(), &out, "---@meta {s}\n\n", .{module_name});
+    try emitAll(&self, &out, true, false);
+
+    try out.appendSlice(self.arena.allocator(), "\nreturn ");
+    try out.appendSlice(self.arena.allocator(), type_name);
+
+    return try allocator.dupe(u8, out.items);
 }
 
 test {

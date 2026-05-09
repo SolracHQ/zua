@@ -42,8 +42,7 @@ pub fn main(init: std.process.Init) !void {
         \\               Play with the `repl` global to see how the runtime
         \\               Lua-facing controls work in real time.
         \\
-        \\  docs         Print Lua editor stubs for the REPL config types,
-        \\               completers, token kinds, and style types.
+        \\  docs         Print Lua editor stubs for the REPL global.
         \\
         \\  run <file>   Execute a Lua source file.
         \\
@@ -105,14 +104,10 @@ fn evalExpr(init: std.process.Init, source: []const u8) !void {
 }
 
 fn generateDocs(init: std.process.Init) !void {
-    const stubs = try zua.Docs.generateModule(init.gpa, .{
-        zua.Repl.Config,
-        zua.Repl.Completer,
-        zua.Repl.highlight.TokenKind,
-        zua.Repl.highlight.Color,
-        zua.Repl.highlight.Style,
-    }, "zua");
-    defer init.gpa.free(stubs);
+    var generator = zua.Docs.init(init.gpa);
+    defer generator.deinit();
+    try generator.addBinding("repl", zua.Repl.Config{});
+    const stubs = try generator.generate();
     std.debug.print("{s}", .{stubs});
 }
 

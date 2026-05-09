@@ -57,6 +57,7 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
     if (Normalized == RawTable) return persist(self, "table");
     if (Normalized == RawFunction) return persist(self, "function");
     if (Normalized == RawUserdata) return persist(self, "userdata");
+    if (Normalized == Mapper.Decoder.Primitive) return persist(self, "any");
     if (Normalized == Mapper.Decoder.VarArgs) return persist(self, "any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
@@ -129,30 +130,6 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
     return out.toOwnedSlice(self.arena.allocator());
 }
 
-/// Inserts a placeholder doc into the cache if the key is not already present.
-///
-/// Returns `true` if the placeholder was inserted (caller should proceed with
-/// full collection), or `false` if the entry already exists (caller should
-/// skip).
-///
-/// Arguments:
-/// - self: The docs generator.
-/// - key: The cache key (typically `@typeName` or a function name).
-/// - display_name: The Lua display name for the placeholder.
-/// - description: The description text for the placeholder.
-///
-/// Returns:
-/// - bool: `true` if the placeholder was newly inserted.
-pub fn insertPlaceholderIfNeeded(self: *Docs, key: []const u8, display_name: []const u8, description: []const u8) !bool {
-    if (self.cache.get(key) != null) return false;
-
-    try self.cache.put(try persist(self, key), .{ .PlaceHolder = .{
-        .name = try persist(self, display_name),
-        .description = try persist(self, description),
-    } });
-    return true;
-}
-
 /// Duplicates `text` into the generator's arena.
 ///
 /// This is the primary persistence mechanism: all doc strings live in the
@@ -213,7 +190,7 @@ pub fn shouldEmitAlias(comptime T: type) bool {
     if (Meta.strategyOf(T) != .table) return false;
     return switch (@typeInfo(T)) {
         .@"union" => |info| info.tag_type != null,
-        .@"enum" => Meta.proxyTypeOf(T) == []const u8,
+        .@"enum" => true,
         else => false,
     };
 }
@@ -292,7 +269,7 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns:
 /// - bool: `true` if the type should be ignored.
 pub fn isIgnoredDocType(comptime T: type) bool {
-    return T == *Context or T == Context or T == Mapper.Decoder.Primitive or T == Handlers.Handle;
+    return T == *Context or T == Context or T == Mapper.Decoder.Primitive or T == Handlers.Handle or T == Handlers.Userdata or T == Handlers.Function;
 }
 
 /// Looks up a field description from a `ZUA_META` attribute descriptions
@@ -358,4 +335,33 @@ pub fn isSelfParam(comptime ParamType: type, comptime OwnerType: type) bool {
     }
 
     return false;
+}
+
+/// Generates an inline alias shape string from a struct type.
+///
+/// Produces `"{ field: type, field2: type?, ... }"` suitable for use as
+/// an AliasValue type in a docs hook. Each field's type is rendered using
+/// `displayTypeName`, so optionals become `type?`, plain strings become
+/// `string`, etc.
+///
+/// Arguments:
+/// - self: The docs generator (for arena allocation).
+/// - T: The struct type to render.
+///
+/// Returns:
+/// - []const u8: Arena-allocated shape string like `"{ name: string?, pid: integer? }"`.
+pub fn structToAliasShape(self: *Docs, comptime T: type) ![]const u8 {
+    const info = @typeInfo(T);
+    if (comptime info != .@"struct") @compileError("structToAliasShape requires a struct type, got " ++ @typeName(T));
+    const fields = info.@"struct".fields;
+
+    var out = std.ArrayList(u8).empty;
+    try out.appendSlice(self.arena.allocator(), "{ ");
+    inline for (fields, 0..) |field, i| {
+        if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
+        const type_str = try displayTypeName(self, field.type, .field);
+        try emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
+    }
+    try out.appendSlice(self.arena.allocator(), " }");
+    return out.toOwnedSlice(self.arena.allocator());
 }

@@ -9,6 +9,7 @@ const std = @import("std");
 const Mapper = @import("../mapper/mapper.zig");
 const Primitive = Mapper.Decoder.Primitive;
 const Context = @import("../state/context.zig");
+const docs = @import("../docs/docs.zig");
 
 /// The mapping strategy determines how a Zig type is represented in Lua and what methods it supports. The strategy is the primary piece of metadata used by
 /// translation code to implement the correct behavior for a type, and it also informs documentation generation.
@@ -53,6 +54,13 @@ pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
 /// continue with the default path for others can just return null to indicate the default decoding should be used.
 pub fn DecodeHookType(comptime T: type) type {
     return fn (*Context, Primitive) anyerror!?T;
+}
+
+/// A docs hook pushes type documentation directly into the generator's
+/// class or alias list, bypassing the default field/method collection.
+/// The hook receives a pointer to the active `Docs` instance.
+pub fn DocsHookType(comptime _: type) type {
+    return fn (*docs) anyerror!void;
 }
 
 /// Returns a per-variant info struct type that carries `field_descriptions`
