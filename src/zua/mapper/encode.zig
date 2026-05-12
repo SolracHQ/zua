@@ -8,9 +8,9 @@
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 
-const Table = @import("../handlers/table.zig");
-const Function = @import("../handlers/function.zig");
-const Userdata = @import("../handlers/userdata.zig").Userdata;
+const Table = @import("../handlers/any/table.zig");
+const Function = @import("../handlers/any/function.zig");
+const Userdata = @import("../handlers/any/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
 const Meta = @import("../meta/meta.zig");

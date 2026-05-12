@@ -1,6 +1,6 @@
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const Table = @import("../handlers/table.zig").Table;
+const Table = @import("../handlers/any/table.zig").Table;
 const Mapper = @import("../mapper/mapper.zig");
 const Context = @import("context.zig");
 const MetaTable = @import("../metatable.zig");

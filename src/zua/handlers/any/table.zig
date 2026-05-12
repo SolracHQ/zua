@@ -1,11 +1,11 @@
 //! Table handles provide a safe wrapper around Lua table objects.
 //! They support borrowed, stack-owned, and registry-owned lifetimes and centralize conversions between Zig values and Lua tables.
 const std = @import("std");
-const lua = @import("../../lua/lua.zig");
-const Handle = @import("../handlers/handlers.zig").Handle;
-const Mapper = @import("../mapper/mapper.zig");
-const Context = @import("../state/context.zig").Context;
-const State = @import("../state/state.zig");
+const lua = @import("../../../lua/lua.zig");
+const Handle = @import("../handlers.zig").Handle;
+const Mapper = @import("../../mapper/mapper.zig");
+const Context = @import("../../state/context.zig").Context;
+const State = @import("../../state/state.zig");
 const Function = @import("function.zig");
 const Userdata = @import("userdata.zig").Userdata;
 

@@ -20,14 +20,14 @@ fn createConfig(_: *zua.Context, name: []const u8, value: i32, enabled: bool) Co
     return Config{ .name = name, .value = value, .enabled = enabled };
 }
 
-fn getConfigValue(ctx: *zua.Context, config: zua.Table) !?i32 {
+fn getConfigValue(ctx: *zua.Context, config: zua.Handlers.Any.Table) !?i32 {
     if (!config.has(1)) {
         return null;
     }
     return try config.get(ctx, 1, i32);
 }
 
-fn sumNumbers(ctx: *zua.Context, numbers_table: zua.Table) !i32 {
+fn sumNumbers(ctx: *zua.Context, numbers_table: zua.Handlers.Any.Table) !i32 {
     var sum: i32 = 0;
     var i: i32 = 1;
 

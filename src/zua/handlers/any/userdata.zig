@@ -6,9 +6,9 @@
 
 pub const Userdata = @This();
 
-const Handle = @import("handlers.zig").Handle;
-const lua = @import("../../lua/lua.zig");
-const State = @import("../state/state.zig");
+const Handle = @import("../handlers.zig").Handle;
+const lua = @import("../../../lua/lua.zig");
+const State = @import("../../state/state.zig");
 
 state: *State,
 handle: Handle,

@@ -13,7 +13,7 @@ On the Zig side, you export that function, initialize a `State` from the receive
 ```zig
 const std = @import("std");
 const zua = @import("zua");
-const lua = zua.lua;
+const lua = zua.Bindings.lua;
 
 // Your API types and functions go here.
 

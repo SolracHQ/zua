@@ -41,7 +41,7 @@ const Vector2 = struct {
         return Vector2{ .x = self.x / len, .y = self.y / len };
     }
 
-    pub fn translate(ctx: *zua.Context, self: zua.TableView(Vector2), dx: f64, dy: f64) !void {
+    pub fn translate(ctx: *zua.Context, self: zua.Handlers.Typed.TableView(Vector2), dx: f64, dy: f64) !void {
         self.ref.x += dx;
         self.ref.y += dy;
         try self.sync(ctx);
@@ -85,14 +85,14 @@ fn makeVector(x: f64, y: f64) Vector2 {
     return Vector2{ .x = x, .y = y };
 }
 
-fn mapWithCallback(ctx: *zua.Context, callback: zua.Function, numbers: []const i32) !void {
+fn mapWithCallback(ctx: *zua.Context, callback: zua.Handlers.Any.Function, numbers: []const i32) !void {
     for (numbers) |value| {
         const mapped = try callback.call(ctx, .{value}, i32);
         std.debug.print("  Mapped: {d}\n", .{mapped});
     }
 }
 
-fn filterAndSum(ctx: *zua.Context, predicate: zua.Function, numbers: []const i32) !i32 {
+fn filterAndSum(ctx: *zua.Context, predicate: zua.Handlers.Any.Function, numbers: []const i32) !i32 {
     var sum: i32 = 0;
     for (numbers) |value| {
         const is_match = try predicate.call(ctx, .{value}, bool);

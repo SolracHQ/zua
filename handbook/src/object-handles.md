@@ -1,10 +1,10 @@
 # Object handles
 
-When you have `.object` strategy values that need to be passed between functions, stored inside other objects, or kept alive beyond the current callback, you need typed handles. `zua.Object(T)` is the handle type for `.object` strategy values. `zua.Handlers` provides utilities to manage ownership recursively when structs contain multiple nested handles.
+When you have `.object` strategy values that need to be passed between functions, stored inside other objects, or kept alive beyond the current callback, you need typed handles. `zua.Handlers.Typed.Object(T)` is the handle type for `.object` strategy values. `zua.Handlers` provides utilities to manage ownership recursively when structs contain multiple nested handles.
 
-## zua.Object(T)
+## zua.Handlers.Typed.Object(T)
 
-`zua.Object(T)` is a typed handle you use as a parameter or field type when you want to receive or store a reference to an `.object` strategy value. It wraps `zua.Userdata` and exposes `.get()` for typed access:
+`zua.Handlers.Typed.Object(T)` is a typed handle you use as a parameter or field type when you want to receive or store a reference to an `.object` strategy value. It wraps `zua.Handlers.Any.Userdata` and exposes `.get()` for typed access:
 
 ```zig
 const Node = struct {
@@ -21,7 +21,7 @@ const Wrapper = struct {
         .__gc     = cleanup,
     }, .{});
 
-    node: zua.Object(Node),
+    node: zua.Handlers.Typed.Object(Node),
 
     pub fn getNode(self: *Wrapper) i32 {
         return self.node.get().data;
@@ -32,7 +32,7 @@ const Wrapper = struct {
     }
 };
 
-fn makeWrapper(_: *zua.Context, node: zua.Object(Node)) Wrapper {
+fn makeWrapper(_: *zua.Context, node: zua.Handlers.Typed.Object(Node)) Wrapper {
     return Wrapper{ .node = node.takeOwnership() };
 }
 ```
@@ -47,12 +47,12 @@ print(w:get_node())  -- 42
 
 If you need to keep the original handle alive while also creating a registry-owned copy, use `.owned()` instead of `.takeOwnership()`.
 
-`zua.Object(T)` performs compile-time validation: `T` must not be a raw function type, and it must declare `.object` strategy metadata. This catches invalid object-handle declarations before the code compiles.
+`zua.Handlers.Typed.Object(T)` performs compile-time validation: `T` must not be a raw function type, and it must declare `.object` strategy metadata. This catches invalid object-handle declarations before the code compiles.
 
 Key rules:
-- `zua.Object(T)` decoded from a function parameter is a **borrowed** handle. Call `.takeOwnership()` if the value must outlive the current callback.
+- `zua.Handlers.Typed.Object(T)` decoded from a function parameter is a **borrowed** handle. Call `.takeOwnership()` if the value must outlive the current callback.
 - Use `.owned()` only when you explicitly need to keep the original handle alive as well.
-- Do not embed `T` directly in a table-strategy struct. Use `zua.Object(T)` instead.
+- Do not embed `T` directly in a table-strategy struct. Use `zua.Handlers.Typed.Object(T)` instead.
 - Release registry-owned `Object(T)` handles in `__gc` to avoid leaking the Lua reference.
 
 ## Handlers.takeOwnership and Handlers.release
@@ -61,12 +61,12 @@ When a struct contains multiple nested handles, calling `.takeOwnership()` on ea
 
 ```zig
 const Scene = struct {
-    background: zua.Object(Texture),
-    sprites:    []zua.Object(Sprite),
-    on_click:   zua.Function,
+    background: zua.Handlers.Typed.Object(Texture),
+    sprites:    []zua.Handlers.Typed.Object(Sprite),
+    on_click:   zua.Handlers.Any.Function,
 };
 
-fn buildScene(bg: zua.Object(Texture), click: zua.Function) Scene {
+fn buildScene(bg: zua.Handlers.Typed.Object(Texture), click: zua.Handlers.Any.Function) Scene {
     var scene = Scene{
         .background = bg,
         .sprites    = &.{},
@@ -101,7 +101,7 @@ try entry_table.set(&ctx, "get", zua.Native.new(entryGet, .{}));
 Inside the method, retrieve it:
 
 ```zig
-fn entryGet(ctx: *zua.Context, self: zua.Table) !f64 {
+fn entryGet(ctx: *zua.Context, self: zua.Handlers.Any.Table) !f64 {
     const entry = self.getLightUserdata("_ptr", Entry)
         catch return ctx.fail("entry pointer missing");
     return entry.read();

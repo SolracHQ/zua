@@ -20,7 +20,7 @@ No `ZUA_META` declaration means `.table` is used automatically. A function retur
 Use `.table` for data transfer objects: values that carry information back and forth but have no identity and no private internals.
 
 > [!NOTE]
-> Table-strategy structs cannot contain raw `.object` values directly by value, and fields with `.ptr` strategy have no direct table representation. For nested object references, use `zua.Object(T)` handles instead of embedding `T` directly. This is covered in the [Object handles](./object-handles.md) chapter.
+> Table-strategy structs cannot contain raw `.object` values directly by value, and fields with `.ptr` strategy have no direct table representation. For nested object references, use `zua.Handlers.Typed.Object(T)` handles instead of embedding `T` directly. This is covered in the [Object handles](./object-handles.md) chapter.
 
 ## .object
 
@@ -72,7 +72,7 @@ This helper creates `.object` metadata for a container type and automatically ge
 `getElements` must be a comptime function returning a slice of the list's elements:
 
 ```zig
-fn getElements(self: *ProcList) []zua.Object(Process) {
+fn getElements(self: *ProcList) []zua.Handlers.Typed.Object(Process) {
     return self.processes.items;
 }
 ```

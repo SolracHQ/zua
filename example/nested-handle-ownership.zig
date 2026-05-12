@@ -1,7 +1,7 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const Object = zua.Object;
+const Object = zua.Handlers.Typed.Object;
 
 const User = struct {
     pub const ZUA_META = zua.Meta.Object(User, .{
@@ -34,9 +34,9 @@ const UserList = struct {
         .filter = UserList.filter,
     }, .{});
 
-    users: std.ArrayList(zua.Object(User)),
+    users: std.ArrayList(zua.Handlers.Typed.Object(User)),
 
-    pub fn getElements(self: *UserList) []zua.Object(User) {
+    pub fn getElements(self: *UserList) []zua.Handlers.Typed.Object(User) {
         return self.users.items;
     }
 
@@ -45,7 +45,7 @@ const UserList = struct {
     }
 
     pub fn filter(ctx: *zua.Context, self: *UserList, min_id: i32) !UserList {
-        var result = std.ArrayList(zua.Object(User)).empty;
+        var result = std.ArrayList(zua.Handlers.Typed.Object(User)).empty;
         errdefer result.deinit(ctx.heap());
 
         for (self.users.items) |user| {
@@ -66,7 +66,7 @@ const UserList = struct {
 };
 
 pub fn createUserList(ctx: *zua.Context, elements: []const User) !UserList {
-    var list = UserList{ .users = std.ArrayList(zua.Object(User)).empty };
+    var list = UserList{ .users = std.ArrayList(zua.Handlers.Typed.Object(User)).empty };
     errdefer {
         for (list.users.items) |user| {
             user.release();
@@ -75,7 +75,7 @@ pub fn createUserList(ctx: *zua.Context, elements: []const User) !UserList {
     }
 
     for (elements) |user| {
-        try list.users.append(ctx.heap(), zua.Object(User).create(ctx.state, user).takeOwnership());
+        try list.users.append(ctx.heap(), zua.Handlers.Typed.Object(User).create(ctx.state, user).takeOwnership());
     }
     return list;
 }

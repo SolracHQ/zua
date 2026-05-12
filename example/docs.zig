@@ -176,7 +176,7 @@ fn maybeIncrement(value: ?i32) ?i32 {
     return if (value) |n| n + 1 else null;
 }
 
-fn sumAll(_: *zua.Context, condition: Condition, args: zua.VarArgs) i64 {
+fn sumAll(_: *zua.Context, condition: Condition, args: zua.Mapper.Decoder.VarArgs) i64 {
     var total: i64 = 0;
     for (args.args) |prim| switch (prim) {
         .integer => |n| switch (condition) {

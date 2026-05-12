@@ -2,13 +2,13 @@
 //! They support borrowed, stack-owned, and registry-owned lifetimes and
 //! centralize the logic for pushing arguments, calling Lua, and decoding results.
 const std = @import("std");
-const lua = @import("../../lua/lua.zig");
-const Handle = @import("../handlers/handlers.zig").Handle;
-const Mapper = @import("../mapper/mapper.zig");
-const State = @import("../state/state.zig");
-const Context = @import("../state/context.zig").Context;
-const Marker = @import("../marker.zig");
-const MetaTable = @import("../metatable.zig");
+const lua = @import("../../../lua/lua.zig");
+const Handle = @import("../handlers.zig").Handle;
+const Mapper = @import("../../mapper/mapper.zig");
+const State = @import("../../state/state.zig");
+const Context = @import("../../state/context.zig").Context;
+const Marker = @import("../../marker.zig");
+const MetaTable = @import("../../metatable.zig");
 
 /// Errors returned by function calls.
 pub const Error = error{Failed};

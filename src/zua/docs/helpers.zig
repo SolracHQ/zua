@@ -12,14 +12,14 @@ const DisplayContext = types.DisplayContext;
 const Context = @import("../state/context.zig");
 const Native = @import("../functions/native.zig");
 const Handlers = @import("../handlers/handlers.zig");
-const RawFunction = @import("../handlers/function.zig").Function;
-const RawTable = @import("../handlers/table.zig").Table;
-const RawUserdata = @import("../handlers/userdata.zig").Userdata;
+const RawFunction = @import("../handlers/any/function.zig").Function;
+const RawTable = @import("../handlers/any/table.zig").Table;
+const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/mapper.zig");
 const Meta = @import("../meta/meta.zig");
 const Marker = @import("../marker.zig");
-const Object = @import("../typed/object.zig");
-const TableView = @import("../typed/view.zig");
+const Object = @import("../handlers/typed/object.zig");
+const TableView = @import("../handlers/typed/table_view.zig");
 
 
 /// Produces a human-readable Lua type string for a Zig type.
@@ -268,7 +268,7 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns:
 /// - bool: `true` if the type should be ignored.
 pub fn isIgnoredDocType(comptime T: type) bool {
-    return T == *Context or T == Context or T == Mapper.Primitive or T == Handlers.Handle or T == Handlers.Userdata or T == Handlers.Function;
+    return T == *Context or T == Context or T == Mapper.Primitive or T == Handlers.Handle or T == Handlers.Any.Userdata or T == Handlers.Any.Function;
 }
 
 /// Looks up a field description from a `ZUA_META` attribute descriptions

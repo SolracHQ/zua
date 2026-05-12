@@ -1,13 +1,13 @@
 # Table and Function handles
 
-`zua.Table` and `zua.Function` are handles to live Lua values. This chapter covers receiving them as parameters, building and reading tables from Zig, and calling Lua functions from Zig.
+`zua.Handlers.Any.Table` and `zua.Handlers.Any.Function` are handles to live Lua values. This chapter covers receiving them as parameters, building and reading tables from Zig, and calling Lua functions from Zig.
 
-## zua.Table as a parameter
+## zua.Handlers.Any.Table as a parameter
 
-Declare `zua.Table` as a parameter when you want a live handle to the caller's table rather than a decoded snapshot:
+Declare `zua.Handlers.Any.Table` as a parameter when you want a live handle to the caller's table rather than a decoded snapshot:
 
 ```zig
-fn sumValues(ctx: *zua.Context, t: zua.Table) !f64 {
+fn sumValues(ctx: *zua.Context, t: zua.Handlers.Any.Table) !f64 {
     var total: f64 = 0;
     var i: i32 = 1;
     while (t.has(i)) : (i += 1) {
@@ -48,12 +48,12 @@ try t.set(ctx, "result", 42);
 try t.set(ctx, "status", "ok");
 ```
 
-## zua.Function as a parameter
+## zua.Handlers.Any.Function as a parameter
 
-Declare `zua.Function` as a parameter to receive a Lua function and call it from Zig:
+Declare `zua.Handlers.Any.Function` as a parameter to receive a Lua function and call it from Zig:
 
 ```zig
-fn applyTwice(ctx: *zua.Context, cb: zua.Function, value: i32) !i32 {
+fn applyTwice(ctx: *zua.Context, cb: zua.Handlers.Any.Function, value: i32) !i32 {
     const r1 = try cb.call(ctx, .{value}, i32);
     const r2 = try cb.call(ctx, .{r1},    i32);
     return r2;
@@ -71,18 +71,18 @@ const pair = try cb.call(ctx, .{input}, struct { []const u8, i32 });
 ```
 
 > [!NOTE]
-> Raw Zig function signatures cannot be decoded from Lua directly. Use `zua.Function` or the typed wrapper `zua.Fn(ins, outs)` when accepting callbacks from Lua.
+> Raw Zig function signatures cannot be decoded from Lua directly. Use `zua.Handlers.Any.Function` or the typed wrapper `zua.Handlers.Typed.Fn(ins, outs)` when accepting callbacks from Lua.
 >
-> You can also construct a callable Lua function handle from a native Zig callback using `zua.Function.create(state, callback)`. For typed wrappers, `zua.Fn(ins, outs).create(&ctx, callback)` builds the typed wrapper and checks the callback signature at compile time.
+> You can also construct a callable Lua function handle from a native Zig callback using `zua.Handlers.Any.Function.create(state, callback)`. For typed wrappers, `zua.Handlers.Typed.Fn(ins, outs).create(&ctx, callback)` builds the typed wrapper and checks the callback signature at compile time.
 >
 ## Storing a Function for later
 
-A `zua.Function` received as a parameter is borrowed and valid only during the current call. To store it and call it later, take ownership:
+A `zua.Handlers.Any.Function` received as a parameter is borrowed and valid only during the current call. To store it and call it later, take ownership:
 
 ```zig
-var stored: ?zua.Function = null;
+var stored: ?zua.Handlers.Any.Function = null;
 
-fn setCallback(_: *zua.Context, cb: zua.Function) void {
+fn setCallback(_: *zua.Context, cb: zua.Handlers.Any.Function) void {
     if (stored) |old| old.release();
     stored = cb.takeOwnership();
 }
@@ -100,9 +100,9 @@ fn clearCallback() void {
 }
 ```
 
-## zua.Fn: typed function wrappers
+## zua.Handlers.Typed.Fn: typed function wrappers
 
-`zua.Fn(ins, outs)` is a typed wrapper over `zua.Function` that encodes the expected argument and return types. Use it when you want static type safety on the call signature or when storing a callback in a Zig struct field:
+`zua.Handlers.Typed.Fn(ins, outs)` is a typed wrapper over `zua.Handlers.Any.Function` that encodes the expected argument and return types. Use it when you want static type safety on the call signature or when storing a callback in a Zig struct field:
 
 ```zig
 const Handler = struct {
@@ -112,9 +112,9 @@ const Handler = struct {
         .__gc = cleanup,
     }, .{});
 
-    cb: ?zua.Fn(i32, i32) = null,
+    cb: ?zua.Handlers.Typed.Fn(i32, i32) = null,
 
-    pub fn setCallback(self: *Handler, cb: zua.Fn(i32, i32)) void {
+    pub fn setCallback(self: *Handler, cb: zua.Handlers.Typed.Fn(i32, i32)) void {
         if (self.cb) |old| old.release();
         self.cb = cb.takeOwnership();
     }
@@ -130,4 +130,4 @@ const Handler = struct {
 };
 ```
 
-`zua.Fn` values are decoded from Lua functions, participate in the same ownership model as `zua.Function`, and must be released in `__gc` if they are stored on an object.
+`zua.Handlers.Typed.Fn` values are decoded from Lua functions, participate in the same ownership model as `zua.Handlers.Any.Function`, and must be released in `__gc` if they are stored on an object.

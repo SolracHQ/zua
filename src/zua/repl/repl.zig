@@ -9,7 +9,7 @@ const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
-const Object = @import("../typed/object.zig").Object;
+const Object = @import("../handlers/typed/object.zig").Object;
 
 pub const highlight = @import("highlight.zig");
 pub const completion = @import("completion.zig");

@@ -4,14 +4,14 @@
 //! handle. It preserves Lua stack and registry ownership semantics while
 //! exposing a typed accessor for values stored in full userdata.
 const std = @import("std");
-const lua = @import("../../lua/lua.zig");
-const Context = @import("../state/context.zig");
-const Meta = @import("../meta/meta.zig");
-const MetaTable = @import("../metatable.zig");
-const State = @import("../state/state.zig");
-const UserData = @import("../handlers/userdata.zig");
-const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
-const Marker = @import("../marker.zig");
+const lua = @import("../../../lua/lua.zig");
+const Context = @import("../../state/context.zig");
+const Meta = @import("../../meta/meta.zig");
+const MetaTable = @import("../../metatable.zig");
+const State = @import("../../state/state.zig");
+const UserData = @import("../any/userdata.zig");
+const Primitive = @import("../../mapper/mapper.zig").Decoder.Primitive;
+const Marker = @import("../../marker.zig");
 
 /// Typed object handle for Lua full userdata values.
 ///

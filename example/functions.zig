@@ -20,7 +20,7 @@ fn safeDivide(ctx: *zua.Context, a: f64, b: f64) !f64 {
     return a / b;
 }
 
-fn applyTwice(ctx: *zua.Context, callback: zua.Function, initial: i32) !i32 {
+fn applyTwice(ctx: *zua.Context, callback: zua.Handlers.Any.Function, initial: i32) !i32 {
     var current = initial;
     current = try callback.call(ctx, .{current}, i32);
     current = try callback.call(ctx, .{current}, i32);
@@ -46,7 +46,7 @@ const CounterState = struct {
 // --- VarArgs ---
 
 /// Sums all Lua number arguments passed in. Demonstrates VarArgs.
-fn sumAll(ctx: *zua.Context, args: zua.VarArgs) !i64 {
+fn sumAll(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) !i64 {
     var total: i64 = 0;
     for (args.args) |prim| {
         switch (prim) {
@@ -59,7 +59,7 @@ fn sumAll(ctx: *zua.Context, args: zua.VarArgs) !i64 {
 }
 
 /// Describes the Lua type of each argument passed in.
-fn describeArgs(ctx: *zua.Context, args: zua.VarArgs) ![]const u8 {
+fn describeArgs(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
         if (i > 0) try buf.appendSlice(ctx.arena(), ", ");
@@ -84,10 +84,10 @@ const CallbackRegistry = struct {
     }, .{});
 
     // Stores owned callback, null if not set
-    stored: ?zua.Fn(i32, i32) = null,
+    stored: ?zua.Handlers.Typed.Fn(i32, i32) = null,
 
     /// Store a callback by taking ownership
-    pub fn setCallback(self: *CallbackRegistry, callback: zua.Fn(i32, i32)) void {
+    pub fn setCallback(self: *CallbackRegistry, callback: zua.Handlers.Typed.Fn(i32, i32)) void {
         // Release previous callback if it exists
         if (self.stored) |prev| {
             prev.release();
@@ -128,11 +128,11 @@ pub fn main(init: std.process.Init) !void {
     }
     defer ctx.deinit();
 
-    var increment_handle = zua.Function.create(state, increment);
+    var increment_handle = zua.Handlers.Any.Function.create(state, increment);
     const owned_increment = increment_handle.takeOwnership();
     defer owned_increment.release();
 
-    var typed_increment = zua.Fn(.{i32}, i32).create(&ctx, increment);
+    var typed_increment = zua.Handlers.Typed.Fn(.{i32}, i32).create(&ctx, increment);
     const owned_typed_increment = typed_increment.takeOwnership();
     defer owned_typed_increment.release();
 

@@ -3,10 +3,10 @@ const std = @import("std");
 const completion = @import("completion.zig");
 const highlight = @import("highlight.zig");
 
-const Fn = @import("../typed/fn.zig").Fn;
+const Fn = @import("../handlers/typed/fn.zig").Fn;
 const Meta = @import("../meta/meta.zig");
 const Native = @import("../functions/native.zig");
-const Object = @import("../typed/object.zig").Object;
+const Object = @import("../handlers/typed/object.zig").Object;
 
 const Completer = completion.Completer;
 const CompletionHook = completion.CompletionHook;

@@ -7,6 +7,9 @@
 - `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
 - `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
 
+### Breaking
+- Overhauled the public API namespace structure. `lua` and `isocline` moved under `Bindings` (`zua.Bindings.lua`). `Encoder`, `Decoder`, and `VarArgs` moved under `Mapper` (`zua.Mapper.Decoder`). `Fn`, `Object`, and `TableView` moved under `Handlers.Typed` (`zua.Handlers.Typed.Fn`). `Table`, `Function`, and `Userdata` moved under `Handlers.Any` (`zua.Handlers.Any.Table`). `Prelude` added as a flat re-export that preserves the old flat access for users that want it.
+
 ### Changed
 - Consolidated all `__ZUA_*` boolean markers into `__ZUA_MARKER`:
   - `view.zig`: `__ZUA_TABLE_VIEW = @This()` to `__ZUA_MARKER = .table_view`
@@ -15,7 +18,10 @@
   - `metadata.zig` `DefaultGuard`: added `__ZUA_MARKER = .default_guard`
 - `selectTrampoline` in `metatable.zig` now takes a `name` parameter so it produces a clear compile error (```method `name` is not a function```) instead of a confusing `NativeFn` failure.
 - `__ZUA_USERDATA_TYPE` and `__ZUA_TABLE_VIEW_TYPE` made private; external access uses the new `userdataInnerType`/`tableViewInnerType` helpers.
-- `__ZuaNativeReturnType` and `__ZuaFnTypeInfo` in trampoline wrappers made private; external access uses `trampoline.nativeReturnType(T)` and `trampoline.fnTypeInfo(T)` which check `Marker.isNativeFunction(T)` internally and produce a clear compile error on misuse.
+- `__ZuaNativeReturnType` and `__ZuaFnTypeInfo` in trampoline wrappers made private; external access uses `trampoline.nativeReturnType(T)` and `trampoline.fnTypeInfo(T)`.
+- Split `meta/helpers.zig` into `introspect.zig` (type introspection: `isTuple`, `isErrorUnion`, `typeListCount`, etc.) and `meta/internal.zig` (metadata strategy internals). The old file was removed.
+- Each strategy function (`Object`, `Table`, `Capture`, `strEnum`, `List`) now validates that `methods` is a struct and gives a clear compile error instead of failing deep in `MetaData`.
+- The old `typed/` directory was removed and its files moved to `handlers/typed/`.
 
 ### Removed
 - `isNativeWrapperType` helper. Replaced by `Marker.isNativeFunction(T)` from the new Marker API.

@@ -8,13 +8,13 @@
 //! The view is intended for use with table-strategy types where the table itself
 //! is the Lua representation and a typed copy is convenient for mutation.
 
-const Context = @import("../state/context.zig");
-const Decoder = @import("../mapper/decode.zig").Decoder;
-const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
-const Mapper = @import("../mapper/mapper.zig");
-const Table = @import("../handlers/table.zig").Table;
-const Meta = @import("../meta/meta.zig");
-const Marker = @import("../marker.zig");
+const Context = @import("../../state/context.zig");
+const Decoder = @import("../../mapper/decode.zig").Decoder;
+const Primitive = @import("../../mapper/mapper.zig").Decoder.Primitive;
+const Mapper = @import("../../mapper/mapper.zig");
+const Table = @import("../any/table.zig").Table;
+const Meta = @import("../../meta/meta.zig");
+const Marker = @import("../../marker.zig");
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
 ///

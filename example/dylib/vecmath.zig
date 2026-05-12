@@ -1,6 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
-const lua = zua.lua;
+const lua = zua.Bindings.lua;
 
 const Vec2 = struct {
     pub const ZUA_META = zua.Meta.Table(Vec2, .{

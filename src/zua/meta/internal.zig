@@ -214,9 +214,9 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
             return .{ next, elem };
         }
 
-        pub fn iter(self: Handlers.Userdata) struct {
+        pub fn iter(self: Handlers.Any.Userdata) struct {
             Native.NativeFn(iget, .{}, .{}),
-            Handlers.Userdata,
+            Handlers.Any.Userdata,
             ?usize,
         } {
             return .{ .{}, self, 0 };

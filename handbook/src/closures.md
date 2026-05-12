@@ -99,7 +99,7 @@ const PartialState = struct {
         .__gc = release,
     }, .{});
 
-    f:     zua.Fn(.{i32, i32}, i32),
+    f:     zua.Handlers.Typed.Fn(.{i32, i32}, i32),
     first: i32,
 
     fn release(self: *PartialState) void {
@@ -116,7 +116,7 @@ const PartialClosure = zua.Native.Closure(partialCall, .{}, .{});
 fn alwaysWith(
     ctx: *zua.Context,
     first: i32,
-    f:    zua.Fn(.{i32, i32}, i32),
+    f:    zua.Handlers.Typed.Fn(.{i32, i32}, i32),
 ) PartialClosure {
     _ = ctx;
     return zua.Native.closure(partialCall, PartialState{
@@ -136,4 +136,4 @@ print(add5(10))  -- 15
 `alwaysWith` receives `first` and `f` from Lua, takes ownership of `f` so it survives past the call, and returns a new closure that bundles both. The `__gc` on `PartialState` releases the owned `Fn` handle when Lua collects the closure. Without it the Lua function would leak in the registry.
 
 > [!NOTE]
-> `zua.Fn(ins, outs)` gives static type safety on the call signature. If you do not know the arity ahead of time, `zua.Function` works the same way; call it with `.call(ctx, .{...}, ReturnType)` instead.
+> `zua.Handlers.Typed.Fn(ins, outs)` gives static type safety on the call signature. If you do not know the arity ahead of time, `zua.Handlers.Any.Function` works the same way; call it with `.call(ctx, .{...}, ReturnType)` instead.

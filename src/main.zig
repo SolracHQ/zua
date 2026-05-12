@@ -61,7 +61,7 @@ fn runRepl(init: std.process.Init) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    var conf: zua.Object(zua.Repl.Config) = .create(state, .{ .history_path = "zua_repl_history.txt" });
+    var conf: zua.Handlers.Typed.Object(zua.Repl.Config) = .create(state, .{ .history_path = "zua_repl_history.txt" });
     defer conf.release();
 
     try state.addGlobals(&ctx, .{ .repl = conf });
@@ -91,8 +91,8 @@ fn evalExpr(init: std.process.Init, source: []const u8) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const previous_top = zua.lua.getTop(state.luaState);
-    defer zua.lua.setTop(state.luaState, previous_top);
+    const previous_top = zua.Bindings.lua.getTop(state.luaState);
+    defer zua.Bindings.lua.setTop(state.luaState, previous_top);
 
     var executor: zua.Executor = .{};
     executor.eval_untyped(&ctx, .{ .code = .{ .string = source } }) catch {
@@ -111,23 +111,23 @@ fn generateDocs(init: std.process.Init) !void {
     std.debug.print("{s}", .{stubs});
 }
 
-fn printResults(state: *zua.State, previous_top: zua.lua.StackIndex) !void {
+fn printResults(state: *zua.State, previous_top: zua.Bindings.lua.StackIndex) !void {
     var stdout_buffer: [4096]u8 = undefined;
     var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
-    const top = zua.lua.getTop(state.luaState);
+    const top = zua.Bindings.lua.getTop(state.luaState);
     if (top == previous_top) return;
 
     var first = true;
-    var index: zua.lua.StackIndex = previous_top + 1;
+    var index: zua.Bindings.lua.StackIndex = previous_top + 1;
     while (index <= top) : (index += 1) {
         if (!first) try writer.interface.print(", ", .{});
         first = false;
 
-        const abs = zua.lua.absIndex(state.luaState, index);
-        if (zua.lua.toDisplayString(state.luaState, abs)) |v| {
+        const abs = zua.Bindings.lua.absIndex(state.luaState, index);
+        if (zua.Bindings.lua.toDisplayString(state.luaState, abs)) |v| {
             try writer.interface.print("{s}", .{v});
         } else {
-            try writer.interface.print("{s}", .{zua.lua.typeName(state.luaState, zua.lua.valueType(state.luaState, abs))});
+            try writer.interface.print("{s}", .{zua.Bindings.lua.typeName(state.luaState, zua.Bindings.lua.valueType(state.luaState, abs))});
         }
     }
     try writer.interface.print("\n", .{});

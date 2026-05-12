@@ -94,7 +94,7 @@ If you only want custom candidates and not live runtime completion, set `runtime
 
 ### Lua-side completion hook
 
-When the `Config` is exposed as a Lua object via `zua.Object(zua.Repl.Config)`, you can set a completion hook from Lua at runtime with `repl:set_completion_hook(hook)`. The hook receives the session `Completer` handle and the input prefix:
+When the `Config` is exposed as a Lua object via `zua.Handlers.Typed.Object(zua.Repl.Config)`, you can set a completion hook from Lua at runtime with `repl:set_completion_hook(hook)`. The hook receives the session `Completer` handle and the input prefix:
 
 ```lua
 repl:set_completion_hook(function(completer, prefix)

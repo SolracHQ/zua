@@ -39,7 +39,7 @@ fn makeEntry(ctx: *zua.Context, label: []const u8) !TextEntry {
 
 Fields that point to external memory, `[]const u8`, `*T`, or any other pointer, point to memory outside the userdata block that Lua does not know about. Those must be freed in `__gc`.
 
-Fields that hold Lua handles, `zua.Function`, `zua.Table`, `zua.Object(T)`, anchor Lua values in the registry. Those must be released in `__gc` to avoid leaking Lua references. The [Object handles](./object-handles.md) chapter covers this in detail.
+Fields that hold Lua handles, `zua.Handlers.Any.Function`, `zua.Handlers.Any.Table`, `zua.Handlers.Typed.Object(T)`, anchor Lua values in the registry. Those must be released in `__gc` to avoid leaking Lua references. The [Object handles](./object-handles.md) chapter covers this in detail.
 
 > **Warning:** `.object` values are owned by Lua's garbage collector. If you need to create an additional reference to the same object inside a method, use `.owned()` on the handle instead of copying the typed struct value by assignment. A shallow copy duplicates the payload pointers and can lead to double-free bugs when Lua collects both objects.
 
@@ -49,7 +49,7 @@ When a function creates an `.object` value, zua allocates the userdata in Lua's 
 
 - Scalar fields like `i32` and `f64` live inside the userdata, no cleanup needed.
 - Pointer fields like `[]const u8` point outside the userdata, must be freed in `__gc`.
-- Handle fields like `zua.Function` anchor registry references, must be released in `__gc`.
+- Handle fields like `zua.Handlers.Any.Function` anchor registry references, must be released in `__gc`.
 
 ```zig
 const Connection = struct {
@@ -66,7 +66,7 @@ const Connection = struct {
     host: []const u8,
 
     // anchors a registry reference, must release in __gc
-    on_data: ?zua.Function,
+    on_data: ?zua.Handlers.Any.Function,
 
     pub fn send(ctx: *zua.Context, self: *Connection, msg: []const u8) !void {
         _ = ctx; _ = self; _ = msg;

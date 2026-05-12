@@ -62,7 +62,7 @@ pub fn main(init: std.process.Init) !void {
 - a native wrapper value created with `zua.Native.new(...)`
 - a Zig type with `ZUA_META`
 
-The generator walks the same kind of type information the encoder uses. Table strategy types expand into fields and methods. Object strategy types stay opaque and only expose methods. Typed wrappers such as `zua.Object(T)` and `zua.TableView(T)` are treated as transparent references to `T`.
+The generator walks the same kind of type information the encoder uses. Table strategy types expand into fields and methods. Object strategy types stay opaque and only expose methods. Typed wrappers such as `zua.Handlers.Typed.Object(T)` and `zua.Handlers.Typed.TableView(T)` are treated as transparent references to `T`.
 
 ## Naming exported functions
 

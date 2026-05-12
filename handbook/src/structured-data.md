@@ -132,10 +132,10 @@ const guide = try zua.Mapper.Decoder.decodeStruct(&ctx, guide_table, struct {
 
 ## Returning a table from a callback
 
-Return `zua.Table` directly from a function. The trampoline takes ownership and passes it to Lua; you do not call `.release()` yourself in this case:
+Return `zua.Handlers.Any.Table` directly from a function. The trampoline takes ownership and passes it to Lua; you do not call `.release()` yourself in this case:
 
 ```zig
-fn makeEntry(ctx: *zua.Context, address: []const u8) zua.Table {
+fn makeEntry(ctx: *zua.Context, address: []const u8) zua.Handlers.Any.Table {
     const t = Table.create(state, 0, 2);
     t.set(ctx, "address", address);
     t.set(ctx, "type",    "f32");
@@ -145,10 +145,10 @@ fn makeEntry(ctx: *zua.Context, address: []const u8) zua.Table {
 
 ## Typed table views
 
-When a Lua value is already a table and you want a typed mutable view of it, use `zua.TableView(T)`. This decodes the table into a typed copy of `T` while keeping the raw `Table` handle so changes can be flushed back into the original Lua table.
+When a Lua value is already a table and you want a typed mutable view of it, use `zua.Handlers.Typed.TableView(T)`. This decodes the table into a typed copy of `T` while keeping the raw `Table` handle so changes can be flushed back into the original Lua table.
 
 ```zig
-pub fn translate(ctx: *zua.Context, self: zua.TableView(Vector2), dx: f64, dy: f64) void {
+pub fn translate(ctx: *zua.Context, self: zua.Handlers.Typed.TableView(Vector2), dx: f64, dy: f64) void {
     self.ref.x += dx;
     self.ref.y += dy;
     self.sync(ctx);

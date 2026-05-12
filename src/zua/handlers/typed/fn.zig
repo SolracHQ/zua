@@ -4,16 +4,16 @@
 //! `Function` handle. It can be stored in Zig values and passed through the Lua
 //! API while preserving the expected argument and return shapes.
 
-const Function = @import("../handlers/function.zig");
-const Native = @import("../functions/native.zig");
-const Context = @import("../state/context.zig");
-const Mapper = @import("../mapper/mapper.zig");
-const Meta = @import("../meta/meta.zig");
-const introspect = @import("../introspect.zig");
-const Marker = @import("../marker.zig");
+const Function = @import("../any/function.zig");
+const Native = @import("../../functions/native.zig");
+const Context = @import("../../state/context.zig");
+const Mapper = @import("../../mapper/mapper.zig");
+const Meta = @import("../../meta/meta.zig");
+const introspect = @import("../../introspect.zig");
+const Marker = @import("../../marker.zig");
 
 const std = @import("std");
-const trampoline = @import("../functions/trampoline.zig");
+const trampoline = @import("../../functions/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
 ///

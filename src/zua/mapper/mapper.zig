@@ -23,10 +23,10 @@ pub const Primitive =
         integer: i64,
         float: f64,
         string: [:0]const u8,
-        table: Handlers.Table,
-        function: Handlers.Function,
+        table: Handlers.Any.Table,
+        function: Handlers.Any.Function,
         light_userdata: *anyopaque,
-        userdata: Handlers.Userdata,
+        userdata: Handlers.Any.Userdata,
 
         /// Decodes this primitive into a Zig value of type `T`.
         ///

@@ -36,12 +36,12 @@ The keys in the method list become the Lua method names. The values are Zig func
 
 ## Self types for .table methods
 
-For `.table` methods, `self` can be either the struct type or a `zua.Table` handle:
+For `.table` methods, `self` can be either the struct type or a `zua.Handlers.Any.Table` handle:
 
 - `self: T` decodes the current field values from the Lua table into a Zig struct. The method gets a read-only snapshot; mutations to `self` do not affect the Lua table.
-- `self: zua.Table` gives the method a live handle to the table so it can read and write fields directly.
+- `self: zua.Handlers.Any.Table` gives the method a live handle to the table so it can read and write fields directly.
 
-Use `T` when you only need to read, and `zua.Table` when you need to mutate:
+Use `T` when you only need to read, and `zua.Handlers.Any.Table` when you need to mutate:
 
 ```zig
 const Counter = struct {
@@ -56,7 +56,7 @@ const Counter = struct {
         return self.count;
     }
 
-    pub fn increment(ctx: *zua.Context, self: zua.Table, delta: i32) !void {
+    pub fn increment(ctx: *zua.Context, self: zua.Handlers.Any.Table, delta: i32) !void {
         const current = try self.get(ctx, "count", i32);
         try self.set(ctx, "count", current + delta);
     }

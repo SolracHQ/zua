@@ -45,10 +45,10 @@ custom type conversions, `strEnum`, `withEncode`, `withDecode`.
 borrowed, stack-owned, registry-owned, what each means in practice.
 
 ### Table and Function handles
-`zua.Table`, `zua.Function`, when you hold vs borrow.
+`zua.Handlers.Any.Table`, `zua.Handlers.Any.Function`, when you hold vs borrow.
 
 ### Object handles
-`zua.Object(T)`, `zua.Userdata`, `Handlers.takeOwnership`.
+`zua.Handlers.Typed.Object(T)`, `zua.Handlers.Any.Userdata`, `Handlers.takeOwnership`.
 
 ### Closures
 `Meta.Capture`, `Native.closure`, partial application with captured Lua callbacks.

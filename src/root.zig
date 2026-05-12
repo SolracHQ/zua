@@ -1,44 +1,39 @@
 const std = @import("std");
 
-// Low-level Lua API
-pub const lua = @import("lua/lua.zig");
+/// Low-level C binding wrappers. `Bindings.lua` exposes the raw Lua C API,
+/// `Bindings.isocline` exposes the isocline line editor C bindings.
+/// Most users do not need these directly unless writing custom C interop
+/// or embedding Lua in non-standard ways.
+pub const Bindings = struct {
+    /// Raw Lua C API (`lua_State`, `lua_push*`, etc.).
+    pub const lua = @import("lua/lua.zig");
+    /// Isocline line editor C bindings.
+    pub const isocline = @import("isocline/isocline.zig");
+};
 
-// low level isocline bindings
-pub const isocline = @import("isocline/isocline.zig");
-
-// State holders
+// Core state
 pub const Context = @import("zua/state/context.zig");
 pub const State = @import("zua/state/state.zig");
 
-// Handlers
+// Raw Lua value handles (Table, Function, Userdata) and ownership helpers
 pub const Handlers = @import("zua/handlers/handlers.zig");
-pub const Userdata = @import("zua/handlers/userdata.zig");
-pub const Table = @import("zua/handlers/table.zig");
-pub const Function = @import("zua/handlers/function.zig");
 
-// Typed wrappers
-pub const Fn = @import("zua/typed/fn.zig").Fn;
-pub const Object = @import("zua/typed/object.zig").Object;
-pub const TableView = @import("zua/typed/view.zig").TableView;
-
-// Functions
+// Zig callback wrappers
 pub const Native = @import("zua/functions/native.zig");
 
-// Luz-Zig mapping layer
+// Encode/decode pipeline
 pub const Mapper = @import("zua/mapper/mapper.zig");
-pub const Encoder = Mapper.Encoder;
-pub const Decoder = Mapper.Decoder;
-pub const VarArgs = Mapper.Decoder.VarArgs;
 
-// MetaData System for behavior customization
+// Metadata strategies and type customization
 pub const Meta = @import("zua/meta/meta.zig");
 
-// Final Execution utilities
-pub const Executor = @import("zua/exec/executor.zig");
+// REPL, execution, and docs
 pub const Repl = @import("zua/repl/repl.zig");
-
-// Lua Doc generation utilities
+pub const Executor = @import("zua/exec/executor.zig");
 pub const Docs = @import("zua/docs/docs.zig");
+
+// Flat re-export for users that already know the API
+pub const Prelude = @import("prelude.zig");
 
 test {
     std.testing.refAllDecls(@This());

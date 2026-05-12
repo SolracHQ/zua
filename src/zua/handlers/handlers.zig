@@ -109,9 +109,28 @@ pub const Handle = union(enum) {
     }
 };
 
-pub const Table = @import("table.zig");
-pub const Function = @import("function.zig");
-pub const Userdata = @import("userdata.zig");
+/// Unbound Lua value handles. `Any.Table` works with any Lua table, `Any.Function` with any
+/// Lua function, `Any.Userdata` with any Lua userdata. They provide typed operations (get/set/call)
+/// but are not bound to a specific Zig type like the wrappers in `Typed`.
+///
+/// > NOTE: even though `get` and `set` accept any type at the call site, the decode and encode
+/// > paths are comptime-generated from the requested type. There is no runtime dispatch, no boxing,
+/// > and no overhead compared to calling the encoder or decoder directly.
+pub const Any = struct {
+    pub const Table = @import("any/table.zig");
+    pub const Function = @import("any/function.zig");
+    pub const Userdata = @import("any/userdata.zig");
+};
+
+/// Typed wrappers over Lua values that are bound to a specific Zig type.
+/// `Typed.Fn(ins, outs)` wraps a Lua function with typed arguments and returns.
+/// `Typed.Object(T)` wraps a Lua userdata containing a `T` payload.
+/// `Typed.TableView(T)` wraps a Lua table as a typed mutable view of `T`.
+pub const Typed = struct {
+    pub const Fn = @import("typed/fn.zig").Fn;
+    pub const Object = @import("typed/object.zig").Object;
+    pub const TableView = @import("typed/table_view.zig").TableView;
+};
 
 /// Recursively takes ownership of any handler values within `value`.
 ///
@@ -209,7 +228,7 @@ pub fn release(comptime T: type, value: T) void {
 }
 
 fn isHandlerType(comptime T: type) bool {
-    return T == Table or T == Function or T == Userdata or Marker.isTableView(T);
+    return T == Any.Table or T == Any.Function or T == Any.Userdata or Marker.isTableView(T);
 }
 
 const std = @import("std");
