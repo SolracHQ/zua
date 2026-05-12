@@ -18,6 +18,9 @@ const Handlers = @import("../handlers/handlers.zig");
 const Mapper = @import("../mapper/mapper.zig");
 const Meta = @import("../meta/meta.zig");
 const helpers = @import("helpers.zig");
+const introspect = @import("../introspect.zig");
+const trampoline = @import("../functions/trampoline.zig");
+const Marker = @import("../marker.zig");
 const emit = @import("emit.zig");
 
 /// Walks a Zig type and inserts its documentation into the generator's lists.
@@ -125,7 +128,7 @@ pub fn addWrappedFunction(
     cache_key: []const u8,
 ) !void {
     const WrapperType = @TypeOf(wrapper);
-    if (comptime !helpers.isNativeWrapperType(WrapperType)) {
+    if (comptime !Marker.isNativeFunction(WrapperType)) {
         @compileError("Docs.addWrappedFunction expects a NativeFn/Closure wrapper");
     }
 
@@ -137,7 +140,7 @@ pub fn addWrappedFunction(
     };
 
     try collectFunctionParameters(self, &doc, wrapper, is_method, owner_type);
-    try collectFunctionReturns(self, &doc, WrapperType.__ZuaNativeReturnType);
+    try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(WrapperType));
     try self.functions.put(try helpers.persist(self, cache_key), doc);
 
     try recurseFunctionTypes(self, wrapper, is_method, owner_type);
@@ -159,7 +162,7 @@ fn collectTableFields(
             if (info.is_tuple) return;
 
             inline for (info.fields) |field| {
-                if (comptime helpers.isNativeWrapperType(field.type)) {
+                if (comptime Marker.isNativeFunction(field.type)) {
                     const wrapper: field.type = .{};
                     if (self.functions.getPtr(field.name)) |existing| {
                         try existing.field_of.append(self.arena.allocator(), .{
@@ -177,7 +180,7 @@ fn collectTableFields(
                             .field_name = try helpers.persist(self, field.name),
                         });
                         try collectFunctionParameters(self, &func_doc, wrapper, false, null);
-                        try collectFunctionReturns(self, &func_doc, field.type.__ZuaNativeReturnType);
+                        try collectFunctionReturns(self, &func_doc, trampoline.nativeReturnType(field.type));
                         try self.functions.put(try helpers.persist(self, field.name), func_doc);
                     }
                     try maybeRecurseReferencedType(self, field.type, recurse_nested);
@@ -233,7 +236,7 @@ fn collectMethods(
                 .returns = .empty,
             };
             try collectFunctionParameters(self, &tmp, wrapped, true, owner_type);
-            try collectFunctionReturns(self, &tmp, @TypeOf(wrapped).__ZuaNativeReturnType);
+            try collectFunctionReturns(self, &tmp, trampoline.nativeReturnType(@TypeOf(wrapped)));
 
             try operators_out.append(self.arena.allocator(), .{
                 .name = try helpers.persist(self, op_name),
@@ -257,7 +260,7 @@ fn collectMethods(
         };
 
         try collectFunctionParameters(self, &doc, wrapped, true, owner_type);
-        try collectFunctionReturns(self, &doc, @TypeOf(wrapped).__ZuaNativeReturnType);
+        try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(@TypeOf(wrapped)));
         try self.functions.put(method_key, doc);
 
         if (recurse_nested) {
@@ -293,14 +296,14 @@ fn collectFunctionParameters(
     comptime owner_type: ?type,
 ) !void {
     const WrapperType = @TypeOf(wrapper);
-    const fn_info = WrapperType.__ZuaFnTypeInfo;
+    const fn_info = trampoline.fnTypeInfo(WrapperType);
     comptime var arg_index: usize = 0;
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
 
         if (comptime param_type == *Context) continue;
-        if (comptime helpers.isCapturePointer(param_type)) continue;
+        if (comptime introspect.isCapturePointer(param_type)) continue;
 
         if (comptime is_method and owner_type != null and helpers.isSelfParam(param_type, owner_type.?)) continue;
 
@@ -327,9 +330,9 @@ fn collectFunctionParameters(
 /// Populates the return type list of a `Function` doc from the wrapper's return
 /// type tuple.
 fn collectFunctionReturns(self: *Docs, doc: *Function, comptime ReturnType: type) !void {
-    const count = comptime helpers.typeListCount(ReturnType);
+    const count = comptime introspect.typeListCount(ReturnType);
     inline for (0..count) |index| {
-        try doc.returns.append(self.arena.allocator(), try helpers.displayTypeName(self, helpers.typeListAt(ReturnType, index), .return_value));
+        try doc.returns.append(self.arena.allocator(), try helpers.displayTypeName(self, introspect.typeListAt(ReturnType, index), .return_value));
     }
 }
 
@@ -394,19 +397,19 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
 /// and return types.
 fn recurseFunctionTypes(self: *Docs, wrapper: anytype, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
     const WrapperType = @TypeOf(wrapper);
-    const fn_info = WrapperType.__ZuaFnTypeInfo;
+    const fn_info = trampoline.fnTypeInfo(WrapperType);
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
         if (comptime param_type == *Context) continue;
-        if (comptime helpers.isCapturePointer(param_type)) continue;
+        if (comptime introspect.isCapturePointer(param_type)) continue;
         if (comptime is_method and owner_type != null and helpers.isSelfParam(param_type, owner_type.?)) continue;
         try maybeRecurseReferencedType(self, param_type, true);
     }
 
-    const count = comptime helpers.typeListCount(WrapperType.__ZuaNativeReturnType);
+    const count = comptime introspect.typeListCount(trampoline.nativeReturnType(WrapperType));
     inline for (0..count) |index| {
-        try maybeRecurseReferencedType(self, helpers.typeListAt(WrapperType.__ZuaNativeReturnType, index), true);
+        try maybeRecurseReferencedType(self, introspect.typeListAt(trampoline.nativeReturnType(WrapperType), index), true);
     }
 }
 
@@ -428,7 +431,7 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
 
     if (comptime helpers.isIgnoredDocType(T)) return;
     if (comptime helpers.isTypedFunctionHandle(T)) return;
-    if (comptime helpers.isNativeWrapperType(T)) return;
+    if (comptime Marker.isNativeFunction(T)) return;
 
     switch (@typeInfo(T)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {

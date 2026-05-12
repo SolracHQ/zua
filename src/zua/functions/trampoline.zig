@@ -6,9 +6,10 @@
 const std = @import("std");
 pub const lua = @import("../../lua/lua.zig");
 const Mapper = @import("../mapper/mapper.zig");
-const helpers = @import("../meta/helpers.zig");
+const introspect = @import("../introspect.zig");
 const State = @import("../state/state.zig");
 const Context = @import("../state/context.zig");
+const Marker = @import("../marker.zig");
 
 /// Runtime wrapper kind that describes whether the callback accepts
 /// a `*Context` and/or a capture parameter.
@@ -117,7 +118,7 @@ pub fn make(
     const function_info = @typeInfo(FunctionType).@"fn";
     const ReturnType = function_info.return_type orelse
         @compileError("Zig native functions must have an explicit return type (use void if none)");
-    const ActualReturnType = helpers.unwrapErrorUnion(ReturnType);
+    const ActualReturnType = introspect.unwrapErrorUnion(ReturnType);
 
     comptime validateKind(kind, function_info);
     comptime validateVarArgs(function_info);
@@ -128,17 +129,13 @@ pub fn make(
         void;
 
     return struct {
-        /// Marker used by zua internals to identify wrapper types.
-        pub const __IsZuaNativeFunction = true;
+        pub const __ZUA_MARKER: std.EnumSet(Marker.Marker) = if (kind.hasCapture)
+            Marker.new(&.{ .native_function, .native_closure })
+        else
+            Marker.new(&.{.native_function});
 
-        /// Indicates whether this wrapper carries a capture value.
-        pub const __IsZuaClosure: bool = kind.hasCapture;
-
-        /// Raw Zig function type info for the wrapped callback.
-        pub const __ZuaFnTypeInfo = function_info;
-
-        /// The normalized return type of the wrapped callback, with error unions unwrapped.
-        pub const __ZuaNativeReturnType = ActualReturnType;
+        const __ZuaFnTypeInfo = function_info;
+        const __ZuaNativeReturnType = ActualReturnType;
 
         /// The display name of the wrapped function, used for docs and debugging.
         name: []const u8 = doc.name orelse @typeName(FunctionType),
@@ -261,13 +258,13 @@ pub fn make(
             }
 
             const raw = @call(.auto, function, call_args);
-            return             if (comptime helpers.isErrorUnion(ReturnType)) try raw else raw;
+            return             if (comptime introspect.isErrorUnion(ReturnType)) try raw else raw;
         }
 
         fn pushResult(ctx: *Context, result: ActualReturnType) !void {
             if (comptime returnValueCount() == 0) return;
 
-            if (comptime helpers.isTuple(ActualReturnType)) {
+            if (comptime introspect.isTuple(ActualReturnType)) {
                 inline for (result) |val| try Mapper.Encoder.pushValue(ctx, val);
             } else {
                 try Mapper.Encoder.pushValue(ctx, result);
@@ -354,7 +351,7 @@ fn captureParamIndex(comptime info: std.builtin.Type.Fn) ?usize {
     var found: ?usize = null;
     inline for (info.params, 0..) |param, i| {
         const T = param.type orelse continue;
-        if (helpers.isCapturePointer(T)) {
+        if (introspect.isCapturePointer(T)) {
             if (found != null) @compileError(std.fmt.comptimePrint("Closure zig native function cannot have more than one capture parameter, found at positions #{d} and #{d}", .{ found.?, i }));
             found = i;
         }
@@ -390,6 +387,24 @@ pub fn validateCapturePosition(comptime info: std.builtin.Type.Fn) void {
 }
 
 
+
+/// Returns the inner return type of a NativeFn/Closure wrapper.
+/// Fails at compile time if `T` is not a NativeFn/Closure wrapper.
+pub fn nativeReturnType(comptime T: type) type {
+    if (comptime !Marker.isNativeFunction(T)) {
+        @compileError(@typeName(T) ++ " is not a NativeFn/Closure wrapper, cannot query nativeReturnType");
+    }
+    return T.__ZuaNativeReturnType;
+}
+
+/// Returns the raw Zig function type info of a NativeFn/Closure wrapper.
+/// Fails at compile time if `T` is not a NativeFn/Closure wrapper.
+pub fn fnTypeInfo(comptime T: type) std.builtin.Type.Fn {
+    if (comptime !Marker.isNativeFunction(T)) {
+        @compileError(@typeName(T) ++ " is not a NativeFn/Closure wrapper, cannot query fnTypeInfo");
+    }
+    return T.__ZuaFnTypeInfo;
+}
 
 test {
     std.testing.refAllDecls(@This());

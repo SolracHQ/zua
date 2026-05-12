@@ -16,6 +16,7 @@ pub const Handlers = @This();
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig");
 const Mapper = @import("../mapper/mapper.zig");
+const Marker = @import("../marker.zig");
 
 pub const Handle = union(enum) {
     /// The handle references a Lua value on the current stack frame.
@@ -208,11 +209,7 @@ pub fn release(comptime T: type, value: T) void {
 }
 
 fn isHandlerType(comptime T: type) bool {
-    const isHandler = T == Table or T == Function or T == Userdata;
-    if (comptime !isHandler and @typeInfo(T) == .@"struct") {
-        return @hasDecl(T, "__ZUA_TABLE_VIEW");
-    }
-    return isHandler;
+    return T == Table or T == Function or T == Userdata or Marker.isTableView(T);
 }
 
 const std = @import("std");

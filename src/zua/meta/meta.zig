@@ -161,7 +161,6 @@ pub const proxyTypeOf = metadata.proxyTypeOf;
 pub const attributeDescriptionsOf = metadata.attributeDescriptionsOf;
 pub const variantDescriptionsOf = metadata.variantDescriptionsOf;
 
-const helpers = @import("./helpers.zig");
 const metadata = @import("./metadata.zig");
 const strategies = @import("./strategies.zig");
 

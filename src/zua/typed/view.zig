@@ -14,6 +14,7 @@ const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
 const Mapper = @import("../mapper/mapper.zig");
 const Table = @import("../handlers/table.zig").Table;
 const Meta = @import("../meta/meta.zig");
+const Marker = @import("../marker.zig");
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
 ///
@@ -23,7 +24,8 @@ const Meta = @import("../meta/meta.zig");
 pub fn TableView(comptime T: type) type {
     return struct {
         pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
-        pub const __ZUA_TABLE_VIEW = @This();
+        pub const __ZUA_MARKER = Marker.Marker.table_view;
+        const __ZUA_TABLE_VIEW_TYPE = T;
 
         /// Underlying raw Lua table handle.
         handle: Table,
@@ -103,6 +105,12 @@ pub fn TableView(comptime T: type) type {
 }
 
 const std = @import("std");
+
+/// Returns the inner type `T` if `Wrapper` is a `TableView(T)`, otherwise `null`.
+pub fn tableViewInnerType(comptime Wrapper: type) ?type {
+    if (comptime Marker.isTableView(Wrapper)) return Wrapper.__ZUA_TABLE_VIEW_TYPE;
+    return null;
+}
 
 test {
     std.testing.refAllDecls(@This());

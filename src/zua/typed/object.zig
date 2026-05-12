@@ -11,6 +11,7 @@ const MetaTable = @import("../metatable.zig");
 const State = @import("../state/state.zig");
 const UserData = @import("../handlers/userdata.zig");
 const Primitive = @import("../mapper/mapper.zig").Decoder.Primitive;
+const Marker = @import("../marker.zig");
 
 /// Typed object handle for Lua full userdata values.
 ///
@@ -30,7 +31,8 @@ pub fn Object(comptime T: type) type {
 
     return struct {
         pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(UserData, encode);
-        pub const __ZUA_USERDATA_TYPE = T;
+        pub const __ZUA_MARKER = Marker.Marker.userdata_wrapper;
+        const __ZUA_USERDATA_TYPE = T;
 
         /// Underlying raw userdata handle.
         handle: UserData,
@@ -93,6 +95,12 @@ pub fn Object(comptime T: type) type {
             self.handle.release();
         }
     };
+}
+
+/// Returns the inner type `T` if `Wrapper` is an `Object(T)`, otherwise `null`.
+pub fn userdataInnerType(comptime Wrapper: type) ?type {
+    if (comptime Marker.isUserdataWrapper(Wrapper)) return Wrapper.__ZUA_USERDATA_TYPE;
+    return null;
 }
 
 test {

@@ -2,7 +2,7 @@
 //!
 //! This module provides comptime introspection helpers used by the collection
 //! phase to normalize types, extract metadata, and build display strings for
-//! Lua annotations. It re-exports several helpers from `meta/helpers.zig`.
+//! Lua annotations.
 
 const std = @import("std");
 const Docs = @import("./docs.zig");
@@ -17,11 +17,10 @@ const RawTable = @import("../handlers/table.zig").Table;
 const RawUserdata = @import("../handlers/userdata.zig").Userdata;
 const Mapper = @import("../mapper/mapper.zig");
 const Meta = @import("../meta/meta.zig");
-pub const isNativeWrapperType = @import("../meta/helpers.zig").isNativeWrapperType;
-pub const hasStructDecl = @import("../meta/helpers.zig").hasStructDecl;
-pub const isCapturePointer = @import("../meta/helpers.zig").isCapturePointer;
-pub const typeListCount = @import("../meta/helpers.zig").typeListCount;
-pub const typeListAt = @import("../meta/helpers.zig").typeListAt;
+const Marker = @import("../marker.zig");
+const Object = @import("../typed/object.zig");
+const TableView = @import("../typed/view.zig");
+
 
 /// Produces a human-readable Lua type string for a Zig type.
 ///
@@ -61,7 +60,7 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
     if (Normalized == Mapper.Decoder.VarArgs) return persist(self, "any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
-    if (comptime isNativeWrapperType(Normalized)) return persist(self, "function");
+    if (comptime Marker.isNativeFunction(Normalized)) return persist(self, "function");
     if (comptime Mapper.isStringValueType(Normalized)) return persist(self, "string");
 
     return switch (@typeInfo(Normalized)) {
@@ -159,7 +158,7 @@ pub fn persist(self: *Docs, text: []const u8) ![]const u8 {
 pub fn wrapMethod(comptime method_value: anytype) @TypeOf(if (@typeInfo(@TypeOf(method_value)) == .@"fn") Native.new(method_value, .{}, .{}) else method_value) {
     const T = @TypeOf(method_value);
     if (comptime @typeInfo(T) == .@"fn") return Native.new(method_value, .{}, .{});
-    if (comptime isNativeWrapperType(T)) return method_value;
+    if (comptime Marker.isNativeFunction(T)) return method_value;
     @compileError("method docs only support Zig functions or NativeFn/Closure wrappers");
 }
 
@@ -219,8 +218,8 @@ pub fn normalizeReferencedType(comptime T: type) type {
     };
 }
 
-/// Unwraps transparent typed wrappers (`__ZUA_USERDATA_TYPE` or
-/// `__ZUA_TABLE_VIEW`) to reveal the underlying Zua type.
+/// Unwraps transparent typed wrappers (userdata wrapper or table view)
+/// to reveal the underlying Zua type.
 ///
 /// Arguments:
 /// - T: The wrapper type.
@@ -228,8 +227,8 @@ pub fn normalizeReferencedType(comptime T: type) type {
 /// Returns:
 /// - type: The underlying Zua type.
 pub fn unwrapTransparentTypedWrapper(comptime T: type) type {
-    if (comptime hasStructDecl(T, "__ZUA_USERDATA_TYPE")) return T.__ZUA_USERDATA_TYPE;
-    if (comptime hasStructDecl(T, "__ZUA_TABLE_VIEW")) return @typeInfo(@TypeOf(@as(T, undefined).ref)).pointer.child;
+    if (comptime Object.userdataInnerType(T)) |inner| return inner;
+    if (comptime TableView.tableViewInnerType(T)) |inner| return inner;
     return T;
 }
 
@@ -240,9 +239,9 @@ pub fn unwrapTransparentTypedWrapper(comptime T: type) type {
 /// - T: The type to check.
 ///
 /// Returns:
-/// - bool: `true` if the type has `__ZUA_USERDATA_TYPE` or `__ZUA_TABLE_VIEW`.
+/// - bool: `true` if the type is a typed wrapper.
 pub fn isTransparentTypedWrapper(comptime T: type) bool {
-    return hasStructDecl(T, "__ZUA_USERDATA_TYPE") or hasStructDecl(T, "__ZUA_TABLE_VIEW");
+    return Marker.any(T, &.{ .table_view, .userdata_wrapper });
 }
 
 /// Returns `true` if `T` is a typed function handle (has `Args`, `Result`, and
@@ -260,7 +259,7 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns `true` if `T` is a type that should be skipped during doc
 /// collection.
 ///
-/// Ignored types are: `*Context`, `Context`, `Mapper.Decoder.Primitive`, and
+/// Ignored types are: `*Context`, `Context`, `Mapper.Primitive`, and
 /// `Handlers.Handle`.
 ///
 /// Arguments:
@@ -269,7 +268,7 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns:
 /// - bool: `true` if the type should be ignored.
 pub fn isIgnoredDocType(comptime T: type) bool {
-    return T == *Context or T == Context or T == Mapper.Decoder.Primitive or T == Handlers.Handle or T == Handlers.Userdata or T == Handlers.Function;
+    return T == *Context or T == Context or T == Mapper.Primitive or T == Handlers.Handle or T == Handlers.Userdata or T == Handlers.Function;
 }
 
 /// Looks up a field description from a `ZUA_META` attribute descriptions

@@ -7,7 +7,7 @@ const Handle = @import("../handlers/handlers.zig").Handle;
 const Mapper = @import("../mapper/mapper.zig");
 const State = @import("../state/state.zig");
 const Context = @import("../state/context.zig").Context;
-const helpers = @import("../meta/helpers.zig");
+const Marker = @import("../marker.zig");
 const MetaTable = @import("../metatable.zig");
 
 /// Errors returned by function calls.
@@ -86,7 +86,7 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
 pub fn create(state: *State, callback: anytype) Function {
     const CallbackType = @TypeOf(callback);
 
-    if (comptime @typeInfo(CallbackType) == .@"fn" or helpers.isNativeWrapperType(CallbackType)) {
+    if (comptime @typeInfo(CallbackType) == .@"fn" or Marker.isNativeFunction(CallbackType)) {
         var ctx = Context.init(state);
         defer ctx.deinit();
         Mapper.Encoder.pushValue(&ctx, callback) catch @panic("This must never happen, push a function to lua cannot fail in the zig sense, lua will just panic, so if you see this, please report a bug");

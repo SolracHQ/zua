@@ -8,7 +8,7 @@ const std = @import("std");
 const lua = @import("../lua/lua.zig");
 const Native = @import("functions/native.zig");
 const Meta = @import("meta/meta.zig");
-const helpers = @import("meta/helpers.zig");
+const Marker = @import("marker.zig");
 const State = @import("state/state.zig");
 const Context = @import("state/context.zig");
 
@@ -49,9 +49,9 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
     const methods = comptime Meta.methodsOf(T);
     if (methodCount(T) == 0) return;
 
-    const has_custom_index = comptime @hasField(@TypeOf(methods), "__index");
-    const regular_count = comptime regularMethodCount(T);
     const methods_type = @TypeOf(methods);
+    const has_custom_index = comptime @hasField(methods_type, "__index");
+    const regular_count = comptime regularMethodCount(T);
 
     // Build the methods table (for regular named methods) when needed.
     // When a custom __index also exists, we generate a combined __index
@@ -67,7 +67,7 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
         if (comptime std.mem.eql(u8, field.name, "__index")) continue;
 
         const method_fn = @field(methods, field.name);
-        lua.pushFunction(state.luaState, selectTrampoline(method_fn));
+        lua.pushFunction(state.luaState, selectTrampoline(method_fn, field.name));
 
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
             lua.setField(state.luaState, mt_index, field.name);
@@ -87,7 +87,7 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
         lua.setField(state.luaState, mt_index, "__index");
     } else if (has_custom_index) {
         // Only a custom __index, no named methods.
-        lua.pushFunction(state.luaState, selectTrampoline(@field(methods, "__index")));
+        lua.pushFunction(state.luaState, selectTrampoline(@field(methods, "__index"), "__index"));
         lua.setField(state.luaState, mt_index, "__index");
     }
 }
@@ -97,11 +97,19 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
 /// If the method is already a compiled callback wrapper, its trampoline is returned
 /// directly. Otherwise the method function is wrapped in a new `NativeFn` so it can
 /// be exposed to Lua with the standard decode/execute semantics.
-fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
+///
+/// Arguments:
+/// - method_fn: The method value (NativeFn/Closure wrapper or a Zig function).
+/// - name: The method name, used for clear error messages.
+fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
-    if (comptime helpers.isNativeWrapperType(method_fn_type)) {
+    if (comptime Marker.isNativeFunction(method_fn_type)) {
         return method_fn_type.trampoline();
+    }
+
+    if (comptime @typeInfo(method_fn_type) != .@"fn") {
+        @compileError("method `" ++ name ++ "` is not a function");
     }
 
     return Native.NativeFn(method_fn, .{}, .{}).trampoline();
@@ -115,7 +123,7 @@ fn selectTrampoline(comptime method_fn: anytype) lua.CFunction {
 fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
     const methods = comptime Meta.methodsOf(T);
     const methods_type = comptime @TypeOf(methods);
-    const custom_trampoline = comptime selectTrampoline(@field(methods, "__index")).?;
+    const custom_trampoline = comptime selectTrampoline(@field(methods, "__index"), "__index").?;
 
     return struct {
         fn index(L: ?*lua.State) callconv(.c) c_int {
@@ -137,7 +145,7 @@ fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
                     if (comptime !std.mem.startsWith(u8, field.name, "__")) {
                         if (std.mem.eql(u8, key, field.name)) {
                             const method_fn = comptime @field(methods, field.name);
-                            lua.pushFunction(L.?, comptime selectTrampoline(method_fn));
+                            lua.pushFunction(L.?, comptime selectTrampoline(method_fn, field.name));
                             return 1;
                         }
                     }

@@ -3,7 +3,8 @@ const meta = @import("./meta.zig");
 const Mapper = @import("../mapper/mapper.zig");
 const Primitive = Mapper.Decoder.Primitive;
 const Context = @import("../state/context.zig");
-const helpers = @import("helpers.zig");
+const helpers = @import("internal.zig");
+const Marker = @import("../marker.zig");
 
 /// Constructs the compile-time metadata type for `ZUA_META`.
 ///
@@ -60,11 +61,11 @@ pub fn MetaData(
     comptime options: anytype,
     comptime docs_hook: ?meta.DocsHookType(Type),
 ) type {
-    if (comptime !@hasDecl(Type, "ZUA_META") and !@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) {
+    if (comptime !@hasDecl(Type, "ZUA_META") and !Marker.isDefaultGuard(Type)) {
         @compileError(@typeName(Type) ++ " has no visible ZUA_META: is it misspelled or declared outside the type?");
     }
 
-    const T = if (@hasDecl(Type, "__DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__DEFAULT_GUARD_ORIGINAL_TYPE else Type;
+    const T = if (@hasDecl(Type, "__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE else Type;
 
     const opts_name = if (@hasField(@TypeOf(options), "name")) options.name else null;
     const opts_description = if (@hasField(@TypeOf(options), "description")) options.description else null;
@@ -141,7 +142,7 @@ pub fn MetaData(
 ///
 /// When `getMeta` falls back to the default strategy (`.table` for structs,
 /// `.object` for untagged unions) it wraps the original type in `DefaultGuard`.
-/// The guard's `__DEFAULT_GUARD_ORIGINAL_TYPE` field lets internal code recover
+/// The guard's `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` field lets internal code recover
 /// the original type while `MetaData`'s compile-time guard (`@hasDecl(Type,
 /// "ZUA_META")`) correctly identifies these as having no explicit metadata.
 ///
@@ -149,10 +150,11 @@ pub fn MetaData(
 /// - T: The original type to wrap.
 ///
 /// Returns:
-/// - type: A struct type with a single `__DEFAULT_GUARD_ORIGINAL_TYPE` constant.
+/// - type: A struct type with a single `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` constant.
 pub fn DefaultGuard(comptime T: type) type {
     return struct {
-        pub const __DEFAULT_GUARD_ORIGINAL_TYPE = T;
+        pub const __ZUA_MARKER = Marker.Marker.default_guard;
+        const __ZUA_DEFAULT_GUARD_ORIGINAL_TYPE = T;
     };
 }
 

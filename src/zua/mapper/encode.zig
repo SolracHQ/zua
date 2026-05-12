@@ -14,10 +14,10 @@ const Userdata = @import("../handlers/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
 const Meta = @import("../meta/meta.zig");
-const helpers = @import("../meta/helpers.zig");
 const MetaTable = @import("../metatable.zig");
 const Native = @import("../functions/native.zig");
 const Mapper = @import("mapper.zig");
+const Marker = @import("../marker.zig");
 
 pub const Encoder = @This();
 
@@ -56,8 +56,8 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return pushLuaPrimitive(ctx, value);
     }
 
-    if (comptime helpers.isNativeWrapperType(T)) {
-        if (comptime T.__IsZuaClosure) {
+    if (comptime Marker.isNativeFunction(T)) {
+        if (comptime Marker.isNativeClosure(T)) {
             // Closure: push initial capture as userdata (upvalue 1), then pushcclosure.
             const CaptureType = @TypeOf(value.initial);
             const ptr: *CaptureType = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(CaptureType))));

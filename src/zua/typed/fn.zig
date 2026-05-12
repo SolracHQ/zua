@@ -9,9 +9,11 @@ const Native = @import("../functions/native.zig");
 const Context = @import("../state/context.zig");
 const Mapper = @import("../mapper/mapper.zig");
 const Meta = @import("../meta/meta.zig");
-const helpers = @import("../meta/helpers.zig");
+const introspect = @import("../introspect.zig");
+const Marker = @import("../marker.zig");
 
 const std = @import("std");
+const trampoline = @import("../functions/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
 ///
@@ -88,7 +90,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         pub fn create(ctx: *Context, callback: anytype) @This() {
             comptime {
                 const callback_type = @TypeOf(callback);
-                if (@typeInfo(callback_type) == .@"fn" or helpers.isNativeWrapperType(callback_type))
+                if (@typeInfo(callback_type) == .@"fn" or Marker.isNativeFunction(callback_type))
                 {
                     checkCallbackSignature(callback, ins, outs);
                 }
@@ -128,7 +130,7 @@ fn callbackWrapperType(comptime callback: anytype) type {
     if (comptime @typeInfo(callback_type) == .@"fn") {
         return @TypeOf(Native.new(callback, .{}, .{}));
     }
-    if (comptime helpers.isNativeWrapperType(callback_type)) {
+    if (comptime Marker.isNativeFunction(callback_type)) {
         return callback_type;
     }
     @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
@@ -138,25 +140,25 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
     const wrapper_type = callbackWrapperType(callback);
     const actual_args = wrapper_type.decodedParameterTypes();
     const expected_args = ins;
-    const actual_count = helpers.typeListCount(actual_args);
-    const expected_count = helpers.typeListCount(expected_args);
+    const actual_count = introspect.typeListCount(actual_args);
+    const expected_count = introspect.typeListCount(expected_args);
     if (comptime actual_count != expected_count) @compileError("Fn.create: callback argument count mismatch: expected " ++ @typeName(expected_count) ++ " args, got " ++ @typeName(actual_count));
     inline for (0..actual_count) |i| {
-        const actual = helpers.typeListAt(actual_args, i);
-        const expected = helpers.typeListAt(expected_args, i);
+        const actual = introspect.typeListAt(actual_args, i);
+        const expected = introspect.typeListAt(expected_args, i);
         if (comptime actual != expected) @compileError("Fn.create: callback argument #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));
     }
 
-    const actual_return = wrapper_type.__ZuaNativeReturnType;
+    const actual_return = trampoline.nativeReturnType(wrapper_type);
     const expected_return = outs;
-    const actual_return_count = helpers.typeListCount(actual_return);
-    const expected_return_count = helpers.typeListCount(expected_return);
+    const actual_return_count = introspect.typeListCount(actual_return);
+    const expected_return_count = introspect.typeListCount(expected_return);
     if (comptime actual_return_count != expected_return_count) @compileError("Fn.create: callback return count mismatch: expected " ++ @typeName(expected_return_count) ++ " return values, got " ++ @typeName(actual_return_count));
     inline for (0..actual_return_count) |i| {
-        const actual = helpers.typeListAt(actual_return, i);
-        const expected = helpers.typeListAt(expected_return, i);
+        const actual = introspect.typeListAt(actual_return, i);
+        const expected = introspect.typeListAt(expected_return, i);
         if (comptime actual != expected) @compileError("Fn.create: callback return #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));

@@ -26,6 +26,7 @@ const Meta = @import("../meta/meta.zig");
 const helpers = @import("helpers.zig");
 const types = @import("types.zig");
 const collect = @import("collect.zig");
+const Marker = @import("../marker.zig");
 const emit = @import("emit.zig");
 
 pub const Table = types.Table;
@@ -104,7 +105,7 @@ pub fn add(self: *Docs, item: anytype) !void {
 
     if (ItemType == type) {
         const T = helpers.normalizeRootType(item);
-        if (comptime helpers.isNativeWrapperType(T)) {
+        if (comptime Marker.isNativeFunction(T)) {
             return collect.addWrappedFunction(self, T{}, false, null, T.name, T.name);
         }
         if (comptime helpers.isTypedFunctionHandle(T)) return;
@@ -116,7 +117,7 @@ pub fn add(self: *Docs, item: anytype) !void {
         return collect.addWrappedFunction(self, wrapped, false, null, wrapped.name, wrapped.name);
     }
 
-    if (comptime helpers.isNativeWrapperType(ItemType)) {
+    if (comptime Marker.isNativeFunction(ItemType)) {
         return collect.addWrappedFunction(self, item, false, null, item.name, item.name);
     }
 
@@ -136,13 +137,13 @@ pub fn add(self: *Docs, item: anytype) !void {
 pub fn addBinding(self: *Docs, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
-    if (comptime helpers.isNativeWrapperType(T)) {
+    if (comptime Marker.isNativeFunction(T)) {
         try collect.addWrappedFunction(self, value, false, null, name, name);
     } else {
         try collect.addType(self, helpers.normalizeRootType(T), true);
     }
 
-    const ref: Ref = if (comptime helpers.isNativeWrapperType(T))
+    const ref: Ref = if (comptime Marker.isNativeFunction(T))
         .{ .kind = .function, .key = try helpers.persist(self, name) }
     else
         .{ .kind = if (comptime helpers.shouldEmitAlias(helpers.normalizeRootType(T))) .alias else .class, .key = try helpers.persist(self, Meta.nameOf(helpers.normalizeRootType(T))) };
@@ -216,12 +217,12 @@ pub fn generateModule(allocator: std.mem.Allocator, comptime value: anytype, mod
     defer self.deinit();
 
     const T = @TypeOf(value);
-    const type_name: []const u8 = comptime if (helpers.isNativeWrapperType(T))
+    const type_name: []const u8 = comptime if (Marker.isNativeFunction(T))
         module_name
     else
         Meta.nameOf(helpers.normalizeRootType(T));
 
-    if (comptime helpers.isNativeWrapperType(T)) {
+    if (comptime Marker.isNativeFunction(T)) {
         try collect.addWrappedFunction(&self, value, false, null, module_name, module_name);
     } else {
         try collect.addType(&self, helpers.normalizeRootType(T), true);
