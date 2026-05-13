@@ -1,18 +1,23 @@
 const std = @import("std");
-const meta = @import("./meta.zig");
+const meta = @import("./shape.zig");
 const metadata = @import("metadata.zig");
-const internal = @import("internal.zig");
+const internal = @import("./internal.zig");
+const FnOpts = @import("fn.zig").FnOptions;
+const ArgInfo = @import("fn.zig").ArgInfo;
+const trampoline = @import("trampoline.zig");
+const Context = @import("../state/context.zig");
+const Mapper = @import("../mapper/mapper.zig");
 
-/// Declare `T` as an `.object` translation strategy.
+/// Declare `T` as an `.object` shape.
 ///
-/// Object strategy types are represented as full userdata in Lua and
-/// expose methods through a metatable. Use this for Zig values that need
+/// Object types are represented as full userdata in Lua and expose
+/// methods through a metatable. Use this for Zig values that need
 /// identity, mutability, and controlled behavior from Lua.
 ///
 /// Example:
 /// ```zig
 /// const Process = struct {
-///     pub const ZUA_META = zua.Meta.Object(Process, .{
+///     pub const ZUA_SHAPE = zua.Shape.Object(Process, .{
 ///         .__gc = cleanup,
 ///         .__tostring = display,
 ///         .getParentPid = getParentPid,
@@ -28,15 +33,15 @@ pub inline fn Object(comptime T: type, comptime methods: anytype, comptime optio
     return comptime metadata.MetaData(T, void, .object, null, null, methods, options, null);
 }
 
-/// Declare `T` as a `.table` translation strategy.
+/// Declare `T` as a `.table` shape.
 ///
-/// Table strategy types are represented as Lua tables with fields mapped from
-/// Zig struct members or union variants. This is the default strategy.
+/// Table types are represented as Lua tables with fields mapped from
+/// Zig struct members or union variants. This is the default shape.
 ///
 /// Example:
 /// ```zig
 /// const Point = struct {
-///     pub const ZUA_META = zua.Meta.Table(Point, .{}, .{
+///     pub const ZUA_SHAPE = zua.Shape.Table(Point, .{}, .{
 ///         .name = "Point",
 ///         .field_descriptions = .{
 ///             .x = "Horizontal coordinate",
@@ -54,58 +59,67 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime option
     return comptime metadata.MetaData(T, void, .table, null, null, methods, options, null);
 }
 
-/// Declare `T` as a `.ptr` translation strategy.
+/// Declare `T` as a `.ptr` shape.
 ///
-/// Pointer strategy types are represented as Lua light userdata, with no
-/// metatable or field access. Use this for opaque handles that Lua should
-/// not inspect or mutate.
+/// Ptr types are represented as Lua light userdata, with no metatable or
+/// field access. Use this for opaque handles that Lua should not inspect.
 pub inline fn Ptr(comptime T: type, comptime options: meta.MetaOptions(T, .ptr)) type {
     comptime internal.assertContainerType(T);
     return comptime metadata.MetaData(T, void, .ptr, null, null, null, options, null);
 }
 
-/// Declare `T` as a `.capture` translation strategy.
+/// Declare `T` as a callable closure shape.
 ///
-/// Capture strategy types are stored as userdata in upvalue 1 of a Lua
-/// C closure created by `Native.closure`. The struct is allocated once when
-/// the closure is pushed and a `*T` pointer is injected into every call through
-/// the capture parameter.
-///
-/// Methods are supported and follow the same rules as `.object`. Use `__gc` to
-/// release any owned resources when Lua collects the closure. Encode and decode
-/// hooks are not allowed on capture strategy types.
+/// The struct is stored as the closure's captured state. Each call from
+/// Lua invokes `callback` with `*T` as the first parameter (or second
+/// if `*Context` comes first). Remaining parameters are decoded from Lua.
 ///
 /// Arguments:
-/// - T: The struct type to use as the closure's captured state.
-/// - methods: A comptime struct of method name–function pairs.
-/// - options: Optional documentation metadata.
-///
-/// Returns:
-/// - `type`: The metadata type to assign to `pub const ZUA_META`.
-///
-/// Example:
-/// ```zig
-/// const CounterState = struct {
-///     pub const ZUA_META = zua.Meta.Capture(@This(), .{
-///         .__gc = cleanup,
-///     }, .{});
-///     count: i32,
-///     step: i32,
-///
-///     fn cleanup(self: *CounterState) void {
-///         _ = self; // release owned resources here
-///     }
-/// };
-/// ```
-pub inline fn Capture(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .capture)) type {
+/// - T: The struct type that holds the closure state.
+/// - callback: A function `fn (*T, args...)` or `fn (*Context, *T, args...)`.
+/// - gc: Optional cleanup. Pass `null` or `void` for none, or a
+///       `fn (*Context, *T) void` that follows the normal method path.
+/// - options: `FnOptions` with optional `description`, `args`.
+pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc: anytype, comptime options: FnOpts) type {
     comptime internal.assertContainerType(T);
-    comptime internal.assertMethodsIsStruct(methods);
-    return comptime metadata.MetaData(T, void, .capture, null, null, methods, options, null);
+    if (comptime @typeInfo(T) != .@"struct")
+        @compileError("Closure requires a struct type, got " ++ @typeName(T));
+
+    const gc_methods = if (gc == null or gc == void) .{} else .{ .__gc = gc };
+
+    const trampoline_type = comptime trampoline.makeClosure(T, callback, .{ .args = options.args, .description = options.description });
+
+    return struct {
+        pub const Strategy = metadata.MappingStrategy.closure;
+        pub const Proxy = void;
+        pub const EncodeHook: meta.EncodeHookType(T, void) = struct {
+            fn hook(_: *Context, _: T) anyerror!?void {
+                return null;
+            }
+        }.hook;
+        pub const DecodeHook: meta.DecodeHookType(T) = struct {
+            fn hook(_: *Context, _: Mapper.Primitive) anyerror!?T {
+                return null;
+            }
+        }.hook;
+        pub const Methods = gc_methods;
+        pub const Description: []const u8 = options.description;
+        pub const Name: []const u8 = blk: {
+            const full: []const u8 = @typeName(T);
+            const dot = std.mem.lastIndexOfScalar(u8, full, '.');
+            break :blk if (dot) |d| full[d + 1 ..] else full;
+        };
+        pub const AttributeDescriptions = .{};
+        pub const VariantDescriptions = .{};
+        pub const DocsHook: ?meta.DocsHookType(T) = null;
+
+        pub const __ZUA_CLOSURE_TRAMPOLINE = trampoline_type;
+    };
 }
 
-/// Declare `T` as a string-backed enum with automatic string conversion.
+/// Declare `T` as a string-backed enum shape.
 ///
-/// This sets up `T` as a `.table` type and derives encode/decode hooks so the
+/// Sets up `T` as a `.table` type and derives encode/decode hooks so the
 /// enum is pushed as a string and parsed from string values.
 pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .table)) type {
     if (comptime @typeInfo(T) != .@"enum")
@@ -114,7 +128,7 @@ pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime opti
     return comptime metadata.MetaData(T, []const u8, .table, internal.strEnumEncode(T), internal.strEnumDecode(T), methods, options, null);
 }
 
-/// Declare `T` as a list-type `.object` translation strategy.
+/// Declare `T` as a list-type `.object` shape.
 ///
 /// This builds a userdata-backed list object that supports Lua indexing,
 /// length queries, and iterator semantics. The `getElements` accessor is
@@ -131,7 +145,7 @@ pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime opti
 /// ```zig
 /// const Process = struct { /* ... */ };
 /// const ProcList = struct {
-///     pub const ZUA_META = zua.Meta.List(ProcList, getElements, .{
+///     pub const ZUA_SHAPE = zua.Shape.List(ProcList, getElements, .{
 ///         .__gc = deinit,
 ///         .__tostring = display,
 ///     }, .{ .name = "ProcList" });

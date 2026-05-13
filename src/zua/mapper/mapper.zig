@@ -31,7 +31,7 @@ pub const Primitive =
         /// Decodes this primitive into a Zig value of type `T`.
         ///
         /// Delegates to `Decoder.decodeValue`, which performs type dispatch
-        /// using `T`'s `ZUA_META` strategy. The returned value is owned by the
+        /// using `T`'s `ZUA_SHAPE` strategy. The returned value is owned by the
         /// caller.
         ///
         /// Arguments:

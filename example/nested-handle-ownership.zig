@@ -4,7 +4,7 @@ const zua = @import("zua");
 const Object = zua.Handlers.Typed.Object;
 
 const User = struct {
-    pub const ZUA_META = zua.Meta.Object(User, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(User, .{
         .getId = getId,
         .getName = getName,
         .__gc = cleanup,
@@ -28,7 +28,7 @@ const User = struct {
 };
 
 const UserList = struct {
-    pub const ZUA_META = zua.Meta.List(UserList, UserList.getElements, .{
+    pub const ZUA_SHAPE = zua.Shape.List(UserList, UserList.getElements, .{
         .__gc = UserList.cleanup,
         .__tostring = UserList.display,
         .filter = UserList.filter,
@@ -104,7 +104,7 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .make_users = zua.Native.new(makeUsers, .{ .parse_err_fmt = "make_users expects no arguments: {s}" }, .{}),
+        .make_users = zua.Shape.Fn(makeUsers, .{}),
     });
 
     executor.execute(&ctx, .{ .code = .{ .string =

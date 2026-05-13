@@ -6,8 +6,8 @@
 
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
-const Native = @import("functions/native.zig");
-const Meta = @import("meta/meta.zig");
+const Meta = @import("shape/metadata.zig");
+const Shape = @import("shape/shape.zig");
 const Marker = @import("marker.zig");
 const State = @import("state/state.zig");
 const Context = @import("state/context.zig");
@@ -108,11 +108,15 @@ fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.
         return method_fn_type.trampoline();
     }
 
+    if (comptime @typeInfo(method_fn_type) == .type and Marker.isNativeFunction(method_fn)) {
+        return method_fn.trampoline();
+    }
+
     if (comptime @typeInfo(method_fn_type) != .@"fn") {
         @compileError("method `" ++ name ++ "` is not a function");
     }
 
-    return Native.NativeFn(method_fn, .{}, .{}).trampoline();
+    return Shape.Fn(method_fn, .{}).trampoline();
 }
 
 /// Generates a combined __index trampoline for types that have both regular

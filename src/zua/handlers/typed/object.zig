@@ -6,11 +6,12 @@
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Context = @import("../../state/context.zig");
-const Meta = @import("../../meta/meta.zig");
+const Shape = @import("../../shape/shape.zig");
+const Meta = @import("../../shape/metadata.zig");
 const MetaTable = @import("../../metatable.zig");
 const State = @import("../../state/state.zig");
 const UserData = @import("../any/userdata.zig");
-const Primitive = @import("../../mapper/mapper.zig").Decoder.Primitive;
+const Primitive = @import("../../mapper/mapper.zig").Primitive;
 const Marker = @import("../../marker.zig");
 
 /// Typed object handle for Lua full userdata values.
@@ -30,7 +31,7 @@ pub fn Object(comptime T: type) type {
     }
 
     return struct {
-        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(UserData, encode);
+        pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withDecode(decode).withEncode(UserData, encode);
         pub const __ZUA_MARKER = Marker.Marker.userdata_wrapper;
         const __ZUA_USERDATA_TYPE = T;
 

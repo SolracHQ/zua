@@ -2,9 +2,9 @@ const std = @import("std");
 const zua = @import("zua");
 
 const Counter = struct {
-    pub const ZUA_META = zua.Meta.Object(Counter, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Counter, .{
         .value = getValue,
-        .increment = zua.Native.new(increment, .{ .parse_err_fmt = "increment expects an integer amount: {s}" }, .{}),
+        .increment = zua.Shape.Fn(increment, .{}),
         .reset = reset,
         .__tostring = toString,
     }, .{});
@@ -41,7 +41,7 @@ const Condition = union(enum) {
     eq: f64,
     in_range: Range,
 
-    pub const ZUA_META = zua.Meta.Table(Condition, .{}, .{});
+    pub const ZUA_SHAPE = zua.Shape.Table(Condition, .{}, .{});
 };
 
 fn makeEqCondition(value: f64) Condition {
@@ -59,7 +59,7 @@ fn describeCondition(ctx: *zua.Context, cond: Condition) ![]const u8 {
     } catch try ctx.failTyped([]const u8, "out of memory");
 }
 
-fn makeCounter(_: *zua.Context) Counter {
+fn makeCounter() Counter {
     return Counter{};
 }
 

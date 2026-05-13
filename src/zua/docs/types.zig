@@ -27,7 +27,7 @@ pub const Field = struct {
     type: []const u8,
 };
 
-/// Doc node for a table-strategy type. Emitted as an `---@class` with `---@field` lines.
+/// Doc node for a table-shaped type. Emitted as an `---@class` with `---@field` lines.
 pub const Table = struct {
     name: []const u8,
     description: []const u8,
@@ -58,7 +58,7 @@ pub const Function = struct {
     field_of: std.ArrayList(FieldOf) = .empty,
 };
 
-/// Records that a function is a `.`-field of a type. Used when a table-strategy type
+/// Records that a function is a `.`-field of a type. Used when a table type
 /// has a function-valued attribute. The `field_name` is the attribute name,
 /// which may differ from the function's `name`.
 pub const FieldOf = struct {
@@ -79,7 +79,7 @@ pub const Alias = struct {
     values: std.ArrayList(AliasValue),
 };
 
-/// Doc node for a type with object or pointer strategy. Opaque from Lua's perspective.
+/// Doc node for an object or pointer type. Opaque from Lua's perspective.
 pub const Object = struct {
     name: []const u8,
     description: []const u8,

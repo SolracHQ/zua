@@ -1,10 +1,9 @@
 const std = @import("std");
-const meta = @import("./meta.zig");
+const meta = @import("./shape.zig");
 const Mapper = @import("../mapper/mapper.zig");
-const Primitive = Mapper.Decoder.Primitive;
+const Primitive = Mapper.Primitive;
 const Context = @import("../state/context.zig");
 const Handlers = @import("../handlers/handlers.zig");
-const Native = @import("../functions/native.zig");
 
 /// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
 ///
@@ -36,13 +35,13 @@ pub fn assertMethodsIsStruct(comptime methods: anytype) void {
 /// - T: The type to validate.
 pub fn assertTaggedIfUnion(comptime T: type) void {
     if (comptime @typeInfo(T) == .@"union" and @typeInfo(T).@"union".tag_type == null) {
-        @compileError(@typeName(T) ++ " is an untagged union, use meta.Object or meta.Ptr instead");
+        @compileError(@typeName(T) ++ " is an untagged union, use Shape.Object or Shape.Ptr instead");
     }
 }
 
 /// Builds an encode hook that converts an enum value to its `@tagName` string.
 ///
-/// The returned function pointer is used by `Meta.strEnum` to push enum
+/// The returned function pointer is used by `Shape.strEnum` to push enum
 /// values as Lua strings.
 ///
 /// Arguments:
@@ -215,7 +214,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
         }
 
         pub fn iter(self: Handlers.Any.Userdata) struct {
-            Native.NativeFn(iget, .{}, .{}),
+            meta.Fn(iget, .{}),
             Handlers.Any.Userdata,
             ?usize,
         } {
@@ -225,7 +224,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 }
 
 /// Generates a concrete set of list method values for registration in
-/// `ZUA_META`. Delegates to `generatedListMethods` and extracts the four
+/// `ZUA_SHAPE`. Delegates to `generatedListMethods` and extracts the four
 /// standard list methods (`get`, `__index`, `__len`, `iter`) into a
 /// comptime struct literal, wrapping public-facing methods with documentation.
 ///
@@ -238,32 +237,32 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
     const Gen = generatedListMethods(L, getElements);
     break :blk .{
-        .get = Native.new(Gen.get, .{}, .{
+        .get = meta.Fn(Gen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
-        }),
+        }){},
         .__index = Gen.__index,
         .__len = Gen.__len,
-        .iter = Native.new(Gen.iter, .{}, .{
+        .iter = meta.Fn(Gen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
-        }),
+        }){},
     };
 }) {
     const Gen = generatedListMethods(L, getElements);
     return .{
-        .get = Native.new(Gen.get, .{}, .{
+        .get = meta.Fn(Gen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
-        }),
+        }){},
         .__index = Gen.__index,
         .__len = Gen.__len,
-        .iter = Native.new(Gen.iter, .{}, .{
+        .iter = meta.Fn(Gen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
-        }),
+        }){},
     };
 }
 

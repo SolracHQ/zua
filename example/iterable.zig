@@ -1,30 +1,30 @@
 const std = @import("std");
 const zua = @import("zua");
 
-const IteratorState = struct {
-    pub const ZUA_META = zua.Meta.Capture(@This(), .{}, .{});
+const RangeIter = struct {
+    pub const ZUA_SHAPE = zua.Shape.Closure(@This(), next, null, .{});
     start: usize,
     end: usize,
     step: usize,
+
+    fn next(state: *RangeIter, unknown: ?void, prev: ?usize) ?usize {
+        _ = unknown;
+        _ = prev;
+        if (state.start >= state.end) {
+            return null;
+        }
+        const current = state.start;
+        state.start += state.step;
+        return current;
+    }
 };
 
-pub fn closure(state: *IteratorState, unknown: ?void, prev: ?usize) ?usize {
-    _ = unknown;
-    _ = prev;
-    if (state.start >= state.end) {
-        return null;
-    }
-    const current = state.start;
-    state.start += state.step;
-    return current;
-}
-
-fn range(start: usize, end: usize, step: usize) zua.Native.Closure(closure, .{}, .{}) {
-    return .{ .initial = .{
+fn range(start: usize, end: usize, step: usize) RangeIter {
+    return .{
         .start = start,
         .end = end,
         .step = step,
-    } };
+    };
 }
 
 pub fn main(init: std.process.Init) !void {

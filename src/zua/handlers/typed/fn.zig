@@ -5,23 +5,22 @@
 //! API while preserving the expected argument and return shapes.
 
 const Function = @import("../any/function.zig");
-const Native = @import("../../functions/native.zig");
 const Context = @import("../../state/context.zig");
 const Mapper = @import("../../mapper/mapper.zig");
-const Meta = @import("../../meta/meta.zig");
+const Shape = @import("../../shape/shape.zig");
 const introspect = @import("../../introspect.zig");
 const Marker = @import("../../marker.zig");
 
 const std = @import("std");
-const trampoline = @import("../../functions/trampoline.zig");
+const trampoline = @import("../../shape/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
 ///
-/// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while preserving the expected argument and return shapes. The wrapper implements `ZUA_META` so it can be encoded to and decoded from Lua values using the normal metadata pipeline.
+/// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while preserving the expected argument and return shapes. The wrapper implements `ZUA_SHAPE` so it can be encoded to and decoded from Lua values using the normal metadata pipeline.
 pub fn Fn(comptime ins: anytype, outs: anytype) type {
     return struct {
         /// Metadata used to encode and decode this typed function wrapper.
-        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withEncode(Function, encode).withDecode(decode);
+        pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withEncode(Function, encode).withDecode(decode);
         pub const Args = Mapper.Decoder.ParseResult(ins);
         pub const Result = Mapper.Decoder.ParseResult(outs);
 
@@ -40,7 +39,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         ///
         /// The hook path is intentionally minimal: only actual Lua functions are
         /// accepted, and any other Lua value fails with `expected function`.
-        fn decode(ctx: *Context, prim: Mapper.Decoder.Primitive) !?@This() {
+        fn decode(ctx: *Context, prim: Mapper.Primitive) !?@This() {
             return switch (prim) {
                 .function => |f| @This().from(f),
                 else => ctx.failTyped(?@This(), "expected function"),
@@ -90,8 +89,10 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
         pub fn create(ctx: *Context, callback: anytype) @This() {
             comptime {
                 const callback_type = @TypeOf(callback);
-                if (@typeInfo(callback_type) == .@"fn" or Marker.isNativeFunction(callback_type))
-                {
+                const is_native = @typeInfo(callback_type) == .@"fn" or
+                    Marker.isNativeFunction(callback_type) or
+                    (@typeInfo(callback_type) == .type and Marker.isNativeFunction(callback));
+                if (is_native) {
                     checkCallbackSignature(callback, ins, outs);
                 }
             }
@@ -125,20 +126,23 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
     };
 }
 
-fn callbackWrapperType(comptime callback: anytype) type {
+fn callbackWrapper(comptime callback: anytype) type {
     const callback_type = @TypeOf(callback);
     if (comptime @typeInfo(callback_type) == .@"fn") {
-        return @TypeOf(Native.new(callback, .{}, .{}));
+        return Shape.Fn(callback, .{});
     }
     if (comptime Marker.isNativeFunction(callback_type)) {
         return callback_type;
+    }
+    if (comptime @typeInfo(callback_type) == .type and Marker.isNativeFunction(callback)) {
+        return callback;
     }
     @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
 }
 
 fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, comptime outs: anytype) void {
-    const wrapper_type = callbackWrapperType(callback);
-    const actual_args = wrapper_type.decodedParameterTypes();
+    const wrapper_t = callbackWrapper(callback);
+    const actual_args = wrapper_t.decodedParameterTypes();
     const expected_args = ins;
     const actual_count = introspect.typeListCount(actual_args);
     const expected_count = introspect.typeListCount(expected_args);
@@ -151,7 +155,7 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
             ", got " ++ @typeName(actual));
     }
 
-    const actual_return = trampoline.nativeReturnType(wrapper_type);
+    const actual_return = trampoline.nativeReturnType(wrapper_t);
     const expected_return = outs;
     const actual_return_count = introspect.typeListCount(actual_return);
     const expected_return_count = introspect.typeListCount(expected_return);

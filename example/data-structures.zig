@@ -12,11 +12,11 @@ const Config = struct {
     enabled: bool,
 };
 
-fn printPoint(_: *zua.Context, p: Point) void {
+fn printPoint(p: Point) void {
     std.debug.print("Point({d}, {d})\n", .{ p.x, p.y });
 }
 
-fn createConfig(_: *zua.Context, name: []const u8, value: i32, enabled: bool) Config {
+fn createConfig(name: []const u8, value: i32, enabled: bool) Config {
     return Config{ .name = name, .value = value, .enabled = enabled };
 }
 
@@ -52,10 +52,10 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .print_point = zua.Native.new(printPoint, .{ .parse_err_fmt = "print_point expects (table): {s}" }, .{}),
-        .create_config = zua.Native.new(createConfig, .{ .parse_err_fmt = "create_config expects (string, number, boolean): {s}" }, .{}),
-        .get_config_value = zua.Native.new(getConfigValue, .{ .parse_err_fmt = "get_config_value expects (table): {s}" }, .{}),
-        .sum_numbers = zua.Native.new(sumNumbers, .{ .parse_err_fmt = "sum_numbers expects (table): {s}" }, .{}),
+        .print_point = zua.Shape.Fn(printPoint, .{}),
+        .create_config = zua.Shape.Fn(createConfig, .{}),
+        .get_config_value = zua.Shape.Fn(getConfigValue, .{}),
+        .sum_numbers = zua.Shape.Fn(sumNumbers, .{}),
     });
 
     try executor.execute(&ctx, .{ .code = .{ .string =

@@ -13,7 +13,7 @@ const Function = @import("../handlers/any/function.zig");
 const Userdata = @import("../handlers/any/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
-const Meta = @import("../meta/meta.zig");
+const Meta = @import("../shape/metadata.zig");
 
 const Fn = @import("../handlers/typed/fn.zig").Fn;
 const Object = @import("../handlers/typed/object.zig").Object;
@@ -22,7 +22,7 @@ const Mapper = @import("mapper.zig");
 
 pub const Decoder = @This();
 
-pub const Primitive = Mapper.Primitive;
+const Primitive = Mapper.Primitive;
 
 /// Variadic Lua arguments captured as a slice of primitives.
 ///
@@ -203,12 +203,15 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
     const strategy = comptime Meta.strategyOf(Pointee);
 
     switch (strategy) {
-        .object => {
+        .object, .closure => {
             const raw = switch (prim) {
                 .userdata => |p| p,
                 else => return ctx.failWithFmtTyped(T, "expected userdata but got {s}", .{@tagName(prim)}),
             };
-            return Object(Pointee).from(raw).get();
+            if (comptime strategy == .object) {
+                return Object(Pointee).from(raw).get();
+            }
+            return @ptrCast(@alignCast(raw));
         },
         .ptr => {
             const raw = switch (prim) {
@@ -217,7 +220,7 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
             };
             return @ptrCast(@alignCast(raw));
         },
-        else => return ctx.failTyped(T, "expected object or pointer strategy"),
+        else => return ctx.failTyped(T, "expected object, closure, or pointer strategy"),
     }
 }
 

@@ -18,14 +18,11 @@ pub const State = @import("zua/state/state.zig");
 // Raw Lua value handles (Table, Function, Userdata) and ownership helpers
 pub const Handlers = @import("zua/handlers/handlers.zig");
 
-// Zig callback wrappers
-pub const Native = @import("zua/functions/native.zig");
-
 // Encode/decode pipeline
 pub const Mapper = @import("zua/mapper/mapper.zig");
 
-// Metadata strategies and type customization
-pub const Meta = @import("zua/meta/meta.zig");
+// Shapes how Zig types look from the Lua side
+pub const Shape = @import("zua/shape/shape.zig");
 
 // REPL, execution, and docs
 pub const Repl = @import("zua/repl/repl.zig");

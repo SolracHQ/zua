@@ -10,10 +10,10 @@
 
 const Context = @import("../../state/context.zig");
 const Decoder = @import("../../mapper/decode.zig").Decoder;
-const Primitive = @import("../../mapper/mapper.zig").Decoder.Primitive;
+const Primitive = @import("../../mapper/mapper.zig").Primitive;
 const Mapper = @import("../../mapper/mapper.zig");
 const Table = @import("../any/table.zig").Table;
-const Meta = @import("../../meta/meta.zig");
+const Meta = @import("../../shape/shape.zig");
 const Marker = @import("../../marker.zig");
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
@@ -23,7 +23,7 @@ const Marker = @import("../../marker.zig");
 /// and either return the view or call `sync()` to flush changes back into Lua.
 pub fn TableView(comptime T: type) type {
     return struct {
-        pub const ZUA_META = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
+        pub const ZUA_SHAPE = Meta.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
         pub const __ZUA_MARKER = Marker.Marker.table_view;
         const __ZUA_TABLE_VIEW_TYPE = T;
 

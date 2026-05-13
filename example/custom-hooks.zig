@@ -8,7 +8,7 @@ const Priority = enum(u8) {
     normal = 1,
     high = 2,
 
-    pub const ZUA_META = zua.Meta.Table(Priority, .{}, .{})
+    pub const ZUA_SHAPE = zua.Shape.Table(Priority, .{}, .{})
         .withEncode([]const u8, encodeStr)
         .withDecode(decodeStrOrInt);
 
@@ -16,7 +16,7 @@ const Priority = enum(u8) {
         return @tagName(p);
     }
 
-    fn decodeStrOrInt(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !?Priority {
+    fn decodeStrOrInt(ctx: *zua.Context, primitive: zua.Mapper.Primitive) !?Priority {
         switch (primitive) {
             .string => |s| {
                 inline for (std.meta.fields(Priority)) |field| {
@@ -42,7 +42,7 @@ const Priority = enum(u8) {
 // `self: *Address` extract the raw userdata pointer directly and skip the hook,
 // so those still only accept the Lua handle.
 const Address = struct {
-    pub const ZUA_META = zua.Meta.Object(Address, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Address, .{
         .value = getValue,
         .__tostring = toString,
     }, .{}).withDecode(decodeHook);
@@ -58,7 +58,7 @@ const Address = struct {
             try ctx.failTyped([]const u8, "out of memory");
     }
 
-    fn decodeHook(ctx: *zua.Context, primitive: zua.Mapper.Decoder.Primitive) !?Address {
+    fn decodeHook(ctx: *zua.Context, primitive: zua.Mapper.Primitive) !?Address {
         return switch (primitive) {
             .integer => |n| .{ .inner = @intCast(n) },
             .string => |s| blk: {
@@ -81,7 +81,7 @@ const Address = struct {
 // hex string, or existing handle. getValue above has `self: *Address` so it
 // extracts the raw userdata pointer and the hook is not involved.
 
-fn makeAddress(_: *zua.Context, n: u64) Address {
+fn makeAddress(n: u64) Address {
     return .{ .inner = n };
 }
 

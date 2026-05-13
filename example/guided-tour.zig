@@ -22,7 +22,7 @@ fn multiply(a: f64, b: f64) f64 {
 
 // A custom type with methods and table-backed semantics
 const Vector2 = struct {
-    pub const ZUA_META = zua.Meta.Table(Vector2, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Vector2, .{
         .length = length,
         .normalize = normalize,
         .translate = translate,
@@ -50,7 +50,7 @@ const Vector2 = struct {
 
 // A stateful object backed by userdata and exposed via methods
 const Counter = struct {
-    pub const ZUA_META = zua.Meta.Object(Counter, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Counter, .{
         .value = getValue,
         .increment = increment,
         .__tostring = toString,
@@ -116,9 +116,9 @@ pub fn main(init: std.process.Init) !void {
         .add = add,
         .multiply = multiply,
         .Counter = makeCounter,
-        .Vector = zua.Native.new(makeVector, .{ .parse_err_fmt = "Vector expects (number, number): {s}" }, .{}),
-        .map_with_callback = zua.Native.new(mapWithCallback, .{ .parse_err_fmt = "map_with_callback expects (function, array): {s}" }, .{}),
-        .filter_and_sum = zua.Native.new(filterAndSum, .{ .parse_err_fmt = "filter_and_sum expects (function, array): {s}" }, .{}),
+        .Vector = zua.Shape.Fn(makeVector, .{}),
+        .map_with_callback = zua.Shape.Fn(mapWithCallback, .{}),
+        .filter_and_sum = zua.Shape.Fn(filterAndSum, .{}),
         .multi_return_example = multiReturnExample,
     });
 

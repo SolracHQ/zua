@@ -1,13 +1,14 @@
 const std = @import("std");
-const meta = @import("meta/meta.zig");
+const meta = @import("shape/metadata.zig");
 
-/// Returns whether `T` is a pointer to a capture-strategy type.
+/// Returns whether `T` is a pointer to a closure strategy type.
 pub fn isCapturePointer(comptime T: type) bool {
     if (@typeInfo(T) != .pointer) return false;
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    return meta.strategyOf(Child) == .capture;
+    const s = meta.strategyOf(Child);
+    return s == .closure;
 }
 
 /// Returns whether `T` is a struct tuple type (`is_tuple`).

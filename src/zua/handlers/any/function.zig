@@ -81,7 +81,7 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
 /// Example:
 /// ```zig
 /// const fn_handle = Function.create(state, my_native_callback);
-/// const fn_handle = Function.create(state, zua.Native.new(my_callback, .{}, .{}));
+/// const fn_handle = Function.create(state, zua.Shape.Fn(my_callback, .{}));
 /// ```
 pub fn create(state: *State, callback: anytype) Function {
     const CallbackType = @TypeOf(callback);

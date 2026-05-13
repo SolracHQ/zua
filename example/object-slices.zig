@@ -4,7 +4,7 @@ const zua = @import("zua");
 const Process = struct {
     const Self = @This();
 
-    pub const ZUA_META = zua.Meta.Object(Self, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Self, .{
         .getPid = getPid,
         .getName = getName,
     }, .{});
@@ -38,9 +38,7 @@ pub fn main(init: std.process.Init) !void {
     defer ctx.deinit();
 
     try state.addGlobals(&ctx, .{
-        .list_processes = zua.Native.new(listProcesses, .{
-            .parse_err_fmt = "list_processes expects no arguments: {s}",
-        }, .{}),
+        .list_processes = zua.Shape.Fn(listProcesses, .{}),
     });
 
     try executor.execute(&ctx, .{ .code = .{ .string =

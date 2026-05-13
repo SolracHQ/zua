@@ -6,9 +6,14 @@
 - `src/zua/marker.zig` with `Marker` enum and `markerOf(T)` introspection API. Types declare `__ZUA_MARKER` as a single `Marker` or `std.EnumSet(Marker)` to signal internal code paths. Convenience helpers (`isNativeFunction`, `isTableView`, `all`, `any`, etc.) replace ad-hoc `@hasDecl` checks throughout the codebase.
 - `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
 - `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
+- `Shape.Closure(T, callback, gc, options)`: New closure shape with optional cleanup via `gc` parameter and `ClosureOptions` for doc metadata.
 
 ### Breaking
 - Overhauled the public API namespace structure. `lua` and `isocline` moved under `Bindings` (`zua.Bindings.lua`). `Encoder`, `Decoder`, and `VarArgs` moved under `Mapper` (`zua.Mapper.Decoder`). `Fn`, `Object`, and `TableView` moved under `Handlers.Typed` (`zua.Handlers.Typed.Fn`). `Table`, `Function`, and `Userdata` moved under `Handlers.Any` (`zua.Handlers.Any.Table`). `Prelude` added as a flat re-export that preserves the old flat access for users that want it.
+- `Meta` renamed to `Shape`: `src/zua/meta/` renamed to `src/zua/shape/`, module entry point renamed from `meta.zig` to `shape.zig`. All `zua.Meta.*` references must use `zua.Shape.*`. All `pub const ZUA_META` declarations must be renamed to `pub const ZUA_SHAPE`.
+- `Native` absorbed into `Shape`: `Native.new(fn, error_config, doc_options)` replaced by `Shape.Fn(fn, options)`. Single `FnOptions` struct with `description`, `args`, and optional `parse_err_hook`. The `name`, `parse_err_fmt`, `zig_err_hook`, and `zig_err_fmt` fields are removed.
+- `Native.closure` and `Meta.Capture` replaced by `Shape.Closure`: `Native.closure(fn, initial, err, doc)` + `Meta.Capture(T, methods, opts)` replaced by `Shape.Closure(T, callback, gc, options)`. The struct IS the captured state. `gc` is optional (`null` or `void` for none, or a function that follows the normal method path). Closures have no methods (use `Shape.Object` for state + methods).
+- `Docs.add()` rejects callables: Only accepts `.table`, `.object`, `.ptr` types. Native functions and closures produce a compile-time error directing users to `Docs.addBinding()`.
 
 ### Changed
 - Consolidated all `__ZUA_*` boolean markers into `__ZUA_MARKER`:
@@ -22,9 +27,14 @@
 - Split `meta/helpers.zig` into `introspect.zig` (type introspection: `isTuple`, `isErrorUnion`, `typeListCount`, etc.) and `meta/internal.zig` (metadata strategy internals). The old file was removed.
 - Each strategy function (`Object`, `Table`, `Capture`, `strEnum`, `List`) now validates that `methods` is a struct and gives a clear compile error instead of failing deep in `MetaData`.
 - The old `typed/` directory was removed and its files moved to `handlers/typed/`.
+- `shape/meta.zig` renamed to `shape/shape.zig`: Module entry point renamed. Only public API is re-exported from `shape.zig`. Internal helpers (`getMeta`, `strategyOf`, `MappingStrategy` enum, etc.) are no longer visible through the public module.
+- `Docs.addBinding()` handles closures and `Shape.Fn`: Recognizes `.closure` strategy types and type-valued `Shape.Fn`, generating `---@param` / `---@return` annotations and a `function name(args) end` definition. The `*T` upvalue is excluded from closure docs.
+- Bindings skip self-references: `var_name = var_name` lines are no longer emitted.
 
 ### Removed
 - `isNativeWrapperType` helper. Replaced by `Marker.isNativeFunction(T)` from the new Marker API.
+- `Native` module from `root.zig` and `prelude.zig`.
+- `src/zua/meta/` and `src/zua/functions/` directories.
 
 ## 0.13.0
 

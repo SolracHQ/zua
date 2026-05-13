@@ -14,7 +14,7 @@ fn example() []const u8 {
 const SampleItems = [_]i32{ 10, 20, 30 };
 
 const TestList = struct {
-    pub const ZUA_META = zua.Meta.List(TestList, getElements, .{
+    pub const ZUA_SHAPE = zua.Shape.List(TestList, getElements, .{
         .__tostring = display,
         .sum = sum,
     }, .{});
@@ -64,12 +64,10 @@ pub fn main(init: std.process.Init) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const example_fn = zua.Native.new(example, .{}, .{
-        .name = "example",
+    const example_fn = zua.Shape.Fn(example, .{
         .description = "Return a sample string from the host environment.",
     });
-    const custom_magic_fn = zua.Native.new(example, .{}, .{
-        .name = "custom_magic",
+    const custom_magic_fn = zua.Shape.Fn(example, .{
         .description = "Alias for example() exposed for custom syntax highlighting.",
     });
 
@@ -89,7 +87,9 @@ pub fn main(init: std.process.Init) !void {
         .completion_hook = completionCallback,
         // you can customize all the token kinds.
         .style_hook = colorize,
+        // Enable stack trace capture for runtime errors.
         .stack_trace = true,
+        // Enable live Lua runtime completion for chained identifiers.
         .runtime_completion = true,
     };
     try zua.Repl.run(state, &repl_config);

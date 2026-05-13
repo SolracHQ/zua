@@ -9,10 +9,10 @@ const lexer = @import("lexer.zig");
 const Config = @import("config.zig");
 const Context = @import("../state/context.zig");
 const lua = @import("../../lua/lua.zig");
-const Meta = @import("../meta/meta.zig");
+const Meta = @import("../shape/shape.zig");
 const Mapper = @import("../mapper/mapper.zig");
 
-const Primitive = Mapper.Decoder.Primitive;
+const Primitive = Mapper.Primitive;
 
 // Token kinds
 
@@ -27,7 +27,7 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_META = Meta.strEnum(TokenKind, .{}, .{
+    pub const ZUA_SHAPE = Meta.strEnum(TokenKind, .{}, .{
         .name = "TokenKind",
         .description = "Token kinds recognized by the REPL syntax highlighter.",
     });
@@ -42,7 +42,7 @@ pub const TokenKind = enum {
 /// .ansi256 uses the 256-color xterm palette.
 /// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Rgb = struct {
-    pub const ZUA_META = Meta.Table(Rgb, .{}, .{
+    pub const ZUA_SHAPE = Meta.Table(Rgb, .{}, .{
         .name = "Rgb",
         .description = "24-bit RGB color with separate red, green, and blue channels.",
     });
@@ -58,7 +58,7 @@ pub const Color = union(enum) {
     ansi256: u8,
     rgb: Rgb,
 
-    pub const ZUA_META = Meta.Table(Color, .{}, .{
+    pub const ZUA_SHAPE = Meta.Table(Color, .{}, .{
         .name = "Color",
         .description = "ANSI or RGB color value used by a Style. Accepted forms: ANSI int, #rrggbb hex string, named color string, or {r,g,b} table.",
     }).withDecode(decodeColor);
@@ -148,7 +148,7 @@ fn ansiFromName(name: []const u8) ?u8 {
 
 /// A renderable style combining colors and text attributes.
 pub const Style = struct {
-    pub const ZUA_META = Meta.Table(Style, .{}, .{
+    pub const ZUA_SHAPE = Meta.Table(Style, .{}, .{
         .name = "Style",
         .description = "Style with foreground/background color and text attributes.",
         .field_descriptions = .{

@@ -3,7 +3,7 @@ const zua = @import("zua");
 const lua = zua.Bindings.lua;
 
 const Vec2 = struct {
-    pub const ZUA_META = zua.Meta.Table(Vec2, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{
         .add = add,
         .__add = add,
         .sub = sub,
@@ -52,8 +52,7 @@ fn lerp(a: Vec2, b: Vec2, t: f64) Vec2 {
     return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
 }
 
-const vec2_fn = zua.Native.new(vec2, .{}, .{
-    .name = "vec2",
+const vec2_fn = zua.Shape.Fn(vec2, .{
     .description = "Construct a new Vec2 value.",
     .args = &.{
         .{ .name = "x", .description = "Horizontal component." },
@@ -61,8 +60,7 @@ const vec2_fn = zua.Native.new(vec2, .{}, .{
     },
 });
 
-const lerp_fn = zua.Native.new(lerp, .{}, .{
-    .name = "lerp",
+const lerp_fn = zua.Shape.Fn(lerp, .{
     .description = "Linearly interpolate between two Vec2 values.",
     .args = &.{
         .{ .name = "a", .description = "Starting vector." },
@@ -75,13 +73,12 @@ fn docs(ctx: *zua.Context) ![]const u8 {
     return zua.Docs.generateModule(ctx.arena(), Vecmath{}, "vecmath");
 }
 
-const docs_fn = zua.Native.new(docs, .{}, .{
-    .name = "docs",
+const docs_fn = zua.Shape.Fn(docs, .{
     .description = "Generate editor stubs for the vecmath module.",
 });
 
 const Vecmath = struct {
-    pub const ZUA_META = zua.Meta.Table(Vecmath, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Vecmath, .{}, .{
         .name = "vecmath",
     });
     vec2: @TypeOf(vec2_fn) = vec2_fn,

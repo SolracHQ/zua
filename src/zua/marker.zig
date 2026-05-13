@@ -14,7 +14,7 @@ pub const Marker = enum {
     /// `Object(T)` transparent wrapper over a userdata-strategy type.
     /// Docs unwrap it to reveal the underlying userdata type.
     userdata_wrapper,
-    /// `MetaData` fallback wrapper that distinguishes explicit `ZUA_META` declarations from default metadata.
+    /// `MetaData` fallback wrapper that distinguishes explicit `ZUA_SHAPE` declarations from default metadata.
     default_guard,
 };
 

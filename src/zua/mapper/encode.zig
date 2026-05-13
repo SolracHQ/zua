@@ -13,15 +13,15 @@ const Function = @import("../handlers/any/function.zig");
 const Userdata = @import("../handlers/any/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
-const Meta = @import("../meta/meta.zig");
+const Shape = @import("../shape/shape.zig");
+const Metadata = @import("../shape/metadata.zig");
 const MetaTable = @import("../metatable.zig");
-const Native = @import("../functions/native.zig");
 const Mapper = @import("mapper.zig");
 const Marker = @import("../marker.zig");
 
 pub const Encoder = @This();
 
-pub const Primitive = Mapper.Primitive;
+const Primitive = Mapper.Primitive;
 
 /// Pushes a Zig value onto the Lua stack.
 ///
@@ -56,27 +56,19 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return pushLuaPrimitive(ctx, value);
     }
 
-    if (comptime Marker.isNativeFunction(T)) {
-        if (comptime Marker.isNativeClosure(T)) {
-            // Closure: push initial capture as userdata (upvalue 1), then pushcclosure.
-            const CaptureType = @TypeOf(value.initial);
-            const ptr: *CaptureType = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(CaptureType))));
-            ptr.* = value.initial;
-            MetaTable.attachMetatable(ctx.state, CaptureType);
-            lua.pushCClosure(ctx.state.luaState, T.trampoline(), 1);
-        } else {
-            lua.pushCFunction(ctx.state.luaState, T.trampoline());
-        }
+    const native_fn: type = if (T == type) value else T;
+    if (comptime Marker.isNativeFunction(native_fn)) {
+        lua.pushCFunction(ctx.state.luaState, native_fn.trampoline());
         return;
     }
 
     if (comptime @typeInfo(T) == .@"fn") {
-        return try pushValue(ctx, Native.new(value, .{}, .{}));
+        return try pushValue(ctx, Shape.Fn(value, .{}));
     }
 
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
-        const meta = comptime Meta.getMeta(T);
+        const meta = comptime Metadata.getMeta(T);
         if (try meta.EncodeHook(ctx, value)) |encoded| {
             return pushValue(ctx, encoded);
         }
@@ -106,13 +98,23 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
         },
         .@"enum", .@"struct", .@"union" => {
-            const strategy = comptime Meta.strategyOf(T);
+            const strategy = comptime Metadata.strategyOf(T);
 
             // Handle .object strategy: allocate as userdata with metatable
             if (comptime strategy == .object) {
                 const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
                 ptr.* = value;
                 MetaTable.attachMetatable(ctx.state, T);
+                return;
+            }
+
+            // Handle .closure strategy: allocate as userdata, push as CClosure
+            if (comptime strategy == .closure) {
+                const tramp = Metadata.closureTrampolineType(T).?;
+                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
+                ptr.* = value;
+                MetaTable.attachMetatable(ctx.state, T);
+                lua.pushCClosure(ctx.state.luaState, tramp.trampoline(), 1);
                 return;
             }
 
@@ -146,7 +148,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
                 }
 
                 if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum") {
-                    const strategy = comptime Meta.strategyOf(Pointee);
+                    const strategy = comptime Metadata.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         @compileError(std.fmt.comptimePrint("Cannot push *{s} where {s} uses .object strategy: the metatable and identity would be lost. Return {s} by value instead to preserve metatable behavior and enable proper method dispatch.", .{ @typeName(Pointee), @typeName(Pointee), @typeName(Pointee) }));

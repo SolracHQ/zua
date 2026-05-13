@@ -13,20 +13,19 @@ const Object = types.Object;
 const Alias = types.Alias;
 const AliasValue = types.AliasValue;
 const Context = @import("../state/context.zig");
-const Native = @import("../functions/native.zig");
 const Handlers = @import("../handlers/handlers.zig");
 const Mapper = @import("../mapper/mapper.zig");
-const Meta = @import("../meta/meta.zig");
+const Metadata = @import("../shape/metadata.zig");
 const helpers = @import("helpers.zig");
 const introspect = @import("../introspect.zig");
-const trampoline = @import("../functions/trampoline.zig");
+const trampoline = @import("../shape/trampoline.zig");
 const Marker = @import("../marker.zig");
 const emit = @import("emit.zig");
 
 /// Walks a Zig type and inserts its documentation into the generator's lists.
 ///
 /// Handles struct, union, enum, and opaque types according to their Zua translation
-/// strategy. Table-strategy types go into `classes`. Object/ptr/capture types go into
+/// shape. Table types go into `classes`. Object/ptr/closure types go into
 /// `objects`. Tagged unions and enums go into `aliases`. Nested types are recursed
 /// into when `recurse_nested` is true. Dedup maps prevent duplicate collection.
 ///
@@ -50,7 +49,7 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
     }
 
     const cache_key = @typeName(Normalized);
-    const meta_info = comptime Meta.getMeta(Normalized);
+    const meta_info = comptime Metadata.getMeta(Normalized);
 
     if (meta_info.DocsHook) |hook| {
         if (self.class_map.contains(cache_key)) return;
@@ -64,8 +63,8 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
         try self.alias_map.put(try helpers.persist(self, cache_key), {});
 
         var doc = Alias{
-            .name = try helpers.persist(self, Meta.nameOf(Normalized)),
-            .description = try helpers.persist(self, Meta.descriptionOf(Normalized)),
+            .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
+            .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
             .values = .empty,
         };
         try collectAliasValues(self, &doc, Normalized, recurse_nested);
@@ -73,34 +72,48 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
         return;
     }
 
-    switch (Meta.strategyOf(Normalized)) {
+    switch (Metadata.strategyOf(Normalized)) {
         .table => {
             if (self.class_map.contains(cache_key)) return;
             try self.class_map.put(try helpers.persist(self, cache_key), {});
 
             var doc = Table{
-                .name = try helpers.persist(self, Meta.nameOf(Normalized)),
-                .description = try helpers.persist(self, Meta.descriptionOf(Normalized)),
+                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
                 .fields = .empty,
                 .operators = .empty,
             };
 
-            try collectTableFields(self, &doc, Normalized, Meta.attributeDescriptionsOf(Normalized), recurse_nested);
-            try collectMethods(self, &doc.operators, Meta.methodsOf(Normalized), Normalized, recurse_nested);
+            try collectTableFields(self, &doc, Normalized, Metadata.attributeDescriptionsOf(Normalized), recurse_nested);
+            try collectMethods(self, &doc.operators, Metadata.methodsOf(Normalized), Normalized, recurse_nested);
             try self.classes.append(self.arena.allocator(), doc);
         },
-        .object, .ptr, .capture => {
+        .object, .ptr => {
             if (self.object_map.contains(cache_key)) return;
             try self.object_map.put(try helpers.persist(self, cache_key), {});
 
             var doc = Object{
-                .name = try helpers.persist(self, Meta.nameOf(Normalized)),
-                .description = try helpers.persist(self, Meta.descriptionOf(Normalized)),
+                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
                 .operators = .empty,
             };
 
-            try collectMethods(self, &doc.operators, Meta.methodsOf(Normalized), Normalized, recurse_nested);
+            try collectMethods(self, &doc.operators, Metadata.methodsOf(Normalized), Normalized, recurse_nested);
             try self.objects.append(self.arena.allocator(), doc);
+        },
+        .closure => {
+            const trampoline_type = Metadata.closureTrampolineType(Normalized).?;
+
+            if (self.functions.contains(cache_key)) return;
+
+            var doc = Function{
+                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
+            };
+
+            try collectFunctionParameters(self, &doc, trampoline_type, false, null);
+            try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(trampoline_type));
+            try self.functions.put(try helpers.persist(self, cache_key), doc);
         },
     }
 }
@@ -114,36 +127,35 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
 ///
 /// Arguments:
 /// - self: The docs generator to populate.
-/// - wrapper: A `NativeFn` or `Closure` wrapper value.
+/// - comptime T: The native function wrapper.
 /// - is_method: Whether this function is a method (skips self param).
 /// - owner_type: If a method, the type that owns the method.
 /// - display_name: The name to use in the generated stub.
 /// - cache_key: The key used for dedup and HashMap storage.
 pub fn addWrappedFunction(
     self: *Docs,
-    wrapper: anytype,
+    comptime T: type,
     comptime is_method: bool,
     comptime owner_type: ?type,
     display_name: []const u8,
     cache_key: []const u8,
 ) !void {
-    const WrapperType = @TypeOf(wrapper);
-    if (comptime !Marker.isNativeFunction(WrapperType)) {
-        @compileError("Docs.addWrappedFunction expects a NativeFn/Closure wrapper");
+    if (comptime !Marker.isNativeFunction(T)) {
+        @compileError("Docs.addWrappedFunction expects a native function wrapper type");
     }
 
     if (self.functions.contains(cache_key)) return;
 
     var doc = Function{
         .name = try helpers.persist(self, display_name),
-        .description = try helpers.persist(self, wrapper.description),
+        .description = try helpers.persist(self, helpers.nativeFnDesc(T)),
     };
 
-    try collectFunctionParameters(self, &doc, wrapper, is_method, owner_type);
-    try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(WrapperType));
+    try collectFunctionParameters(self, &doc, T, is_method, owner_type);
+    try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(T));
     try self.functions.put(try helpers.persist(self, cache_key), doc);
 
-    try recurseFunctionTypes(self, wrapper, is_method, owner_type);
+    try recurseFunctionTypes(self, T, is_method, owner_type);
 }
 
 /// Collects the fields of a table-strategy struct or union into a `Table` doc.
@@ -163,7 +175,6 @@ fn collectTableFields(
 
             inline for (info.fields) |field| {
                 if (comptime Marker.isNativeFunction(field.type)) {
-                    const wrapper: field.type = .{};
                     if (self.functions.getPtr(field.name)) |existing| {
                         try existing.field_of.append(self.arena.allocator(), .{
                             .owner = try helpers.persist(self, owner_name),
@@ -172,14 +183,14 @@ fn collectTableFields(
                     } else {
                         var func_doc = Function{
                             .name = try helpers.persist(self, field.name),
-                            .description = try helpers.persist(self, wrapper.description),
+                            .description = try helpers.persist(self, helpers.nativeFnDesc(field.type)),
                             .field_of = .empty,
                         };
                         try func_doc.field_of.append(self.arena.allocator(), .{
                             .owner = try helpers.persist(self, owner_name),
                             .field_name = try helpers.persist(self, field.name),
                         });
-                        try collectFunctionParameters(self, &func_doc, wrapper, false, null);
+                        try collectFunctionParameters(self, &func_doc, field.type, false, null);
                         try collectFunctionReturns(self, &func_doc, trampoline.nativeReturnType(field.type));
                         try self.functions.put(try helpers.persist(self, field.name), func_doc);
                     }
@@ -208,7 +219,7 @@ fn collectTableFields(
     }
 }
 
-/// Collects method and operator declarations from `ZUA_META.methods`.
+/// Collects method and operator declarations from `ZUA_SHAPE.methods`.
 ///
 /// Plain methods (no `__` prefix) are stored in the functions list with `method_of`
 /// set to the owner type's name. Metamethods with known operator names are stored as
@@ -220,7 +231,7 @@ fn collectMethods(
     comptime owner_type: type,
     comptime recurse_nested: bool,
 ) anyerror!void {
-    const owner_name = Meta.nameOf(owner_type);
+    const owner_name = Metadata.nameOf(owner_type);
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
             const op_name = field.name[2..];
@@ -236,7 +247,7 @@ fn collectMethods(
                 .returns = .empty,
             };
             try collectFunctionParameters(self, &tmp, wrapped, true, owner_type);
-            try collectFunctionReturns(self, &tmp, trampoline.nativeReturnType(@TypeOf(wrapped)));
+            try collectFunctionReturns(self, &tmp, trampoline.nativeReturnType(wrapped));
 
             try operators_out.append(self.arena.allocator(), .{
                 .name = try helpers.persist(self, op_name),
@@ -255,12 +266,12 @@ fn collectMethods(
         const wrapped = helpers.wrapMethod(method_value);
         var doc = Function{
             .name = try helpers.persist(self, field.name),
-            .description = try helpers.persist(self, wrapped.description),
+            .description = try helpers.persist(self, helpers.nativeFnDesc(wrapped)),
             .method_of = try helpers.persist(self, owner_name),
         };
 
         try collectFunctionParameters(self, &doc, wrapped, true, owner_type);
-        try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(@TypeOf(wrapped)));
+        try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(wrapped));
         try self.functions.put(method_key, doc);
 
         if (recurse_nested) {
@@ -274,10 +285,9 @@ fn collectMethods(
 fn isKnownOperator(comptime name: []const u8) bool {
     comptime {
         for (&[_][]const u8{
-            "add", "sub", "mul", "div", "mod", "pow", "unm",
-            "idiv", "band", "bor", "bxor", "bnot", "shl", "shr",
-            "concat", "len", "eq", "lt", "le",
-            "call",
+            "add",    "sub",  "mul", "div",  "mod",  "pow",  "unm",
+            "idiv",   "band", "bor", "bxor", "bnot", "shl",  "shr",
+            "concat", "len",  "eq",  "lt",   "le",   "call",
         }) |op| {
             if (std.mem.eql(u8, name, op)) return true;
         }
@@ -291,12 +301,11 @@ fn isKnownOperator(comptime name: []const u8) bool {
 fn collectFunctionParameters(
     self: *Docs,
     doc: *Function,
-    wrapper: anytype,
+    comptime T: type,
     comptime is_method: bool,
     comptime owner_type: ?type,
 ) !void {
-    const WrapperType = @TypeOf(wrapper);
-    const fn_info = trampoline.fnTypeInfo(WrapperType);
+    const fn_info = trampoline.fnTypeInfo(T);
     comptime var arg_index: usize = 0;
 
     inline for (fn_info.params) |param| {
@@ -307,7 +316,7 @@ fn collectFunctionParameters(
 
         if (comptime is_method and owner_type != null and helpers.isSelfParam(param_type, owner_type.?)) continue;
 
-        const arg_info = helpers.argDocInfo(wrapper.args, arg_index);
+        const arg_info = helpers.argDocInfo(T.args, arg_index);
         arg_index += 1;
 
         if (comptime param_type == Mapper.Decoder.VarArgs) {
@@ -343,10 +352,10 @@ fn collectFunctionReturns(self: *Docs, doc: *Function, comptime ReturnType: type
 /// type (with a custom variant name) or an inline table shape. Named variant tables
 /// are pushed to the classes list.
 fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
-    const variant_descs = comptime Meta.variantDescriptionsOf(T);
+    const variant_descs = comptime Metadata.variantDescriptionsOf(T);
     switch (@typeInfo(T)) {
         .@"enum" => {
-            const is_str_enum = comptime Meta.proxyTypeOf(T) == []const u8;
+            const is_str_enum = comptime Metadata.proxyTypeOf(T) == []const u8;
             inline for (std.meta.fields(T)) |field| {
                 const type_str = if (comptime is_str_enum)
                     try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{field.name})
@@ -395,9 +404,8 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
 
 /// Recursively collects doc entries for types referenced in a function's parameters
 /// and return types.
-fn recurseFunctionTypes(self: *Docs, wrapper: anytype, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
-    const WrapperType = @TypeOf(wrapper);
-    const fn_info = trampoline.fnTypeInfo(WrapperType);
+fn recurseFunctionTypes(self: *Docs, comptime T: type, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
+    const fn_info = trampoline.fnTypeInfo(T);
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
@@ -407,9 +415,9 @@ fn recurseFunctionTypes(self: *Docs, wrapper: anytype, comptime is_method: bool,
         try maybeRecurseReferencedType(self, param_type, true);
     }
 
-    const count = comptime introspect.typeListCount(trampoline.nativeReturnType(WrapperType));
+    const count = comptime introspect.typeListCount(trampoline.nativeReturnType(T));
     inline for (0..count) |index| {
-        try maybeRecurseReferencedType(self, introspect.typeListAt(trampoline.nativeReturnType(WrapperType), index), true);
+        try maybeRecurseReferencedType(self, introspect.typeListAt(trampoline.nativeReturnType(T), index), true);
     }
 }
 
@@ -435,8 +443,8 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
 
     switch (@typeInfo(T)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {
-            const strategy = comptime Meta.strategyOf(T);
-            if (comptime strategy == .table or strategy == .object or strategy == .ptr) {
+            const strategy = comptime Metadata.strategyOf(T);
+            if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure) {
                 try addType(self, T, true);
             }
         },

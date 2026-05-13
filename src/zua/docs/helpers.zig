@@ -10,17 +10,17 @@ const emit = @import("emit.zig");
 const types = @import("types.zig");
 const DisplayContext = types.DisplayContext;
 const Context = @import("../state/context.zig");
-const Native = @import("../functions/native.zig");
+const Shape = @import("../shape/shape.zig");
+const ArgInfo = @import("../shape/fn.zig").ArgInfo;
 const Handlers = @import("../handlers/handlers.zig");
 const RawFunction = @import("../handlers/any/function.zig").Function;
 const RawTable = @import("../handlers/any/table.zig").Table;
 const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/mapper.zig");
-const Meta = @import("../meta/meta.zig");
+const MetaData = @import("../shape/metadata.zig");
 const Marker = @import("../marker.zig");
 const Object = @import("../handlers/typed/object.zig");
 const TableView = @import("../handlers/typed/table_view.zig");
-
 
 /// Produces a human-readable Lua type string for a Zig type.
 ///
@@ -56,7 +56,7 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
     if (Normalized == RawTable) return persist(self, "table");
     if (Normalized == RawFunction) return persist(self, "function");
     if (Normalized == RawUserdata) return persist(self, "userdata");
-    if (Normalized == Mapper.Decoder.Primitive) return persist(self, "any");
+    if (Normalized == Mapper.Primitive) return persist(self, "any");
     if (Normalized == Mapper.Decoder.VarArgs) return persist(self, "any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
@@ -82,13 +82,13 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
             if (ptr.size == .one) {
                 const child = ptr.child;
                 if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
-                    break :blk try persist(self, Meta.nameOf(child));
+                    break :blk try persist(self, MetaData.nameOf(child));
                 }
             }
 
             break :blk try persist(self, @typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, Meta.nameOf(Normalized)),
+        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, MetaData.nameOf(Normalized)),
         else => persist(self, @typeName(Normalized)),
     };
 }
@@ -144,22 +144,19 @@ pub fn persist(self: *Docs, text: []const u8) ![]const u8 {
     return self.arena.allocator().dupe(u8, text);
 }
 
-/// Wraps a method value, converting a plain Zig function to a `Native` wrapper
-/// if necessary.
-///
-/// Accepts either a `NativeFn`/`Closure` wrapper (returned as-is) or a plain
-/// Zig function (wrapped via `Native.new`).
-///
-/// Arguments:
-/// - method_value: A Zig function or native wrapper value representing a method.
-///
-/// Returns:
-/// - A `NativeFn` or `Closure` wrapper.
-pub fn wrapMethod(comptime method_value: anytype) @TypeOf(if (@typeInfo(@TypeOf(method_value)) == .@"fn") Native.new(method_value, .{}, .{}) else method_value) {
+/// Returns the description from a native function wrapper type.
+pub fn nativeFnDesc(comptime T: type) []const u8 {
+    return T.description;
+}
+
+/// Returns the wrapper type for a method value.
+/// Accepts a Zig function (wraps with Shape.Fn) or a native function type (as-is).
+pub fn wrapMethod(comptime method_value: anytype) type {
     const T = @TypeOf(method_value);
-    if (comptime @typeInfo(T) == .@"fn") return Native.new(method_value, .{}, .{});
-    if (comptime Marker.isNativeFunction(T)) return method_value;
-    @compileError("method docs only support Zig functions or NativeFn/Closure wrappers");
+    if (comptime @typeInfo(T) == .@"fn") return Shape.Fn(method_value, .{});
+    if (comptime Marker.isNativeFunction(T)) return T;
+    if (comptime @typeInfo(T) == .type and Marker.isNativeFunction(method_value)) return method_value;
+    @compileError("method docs only support Zig functions or Shape.Fn wrappers");
 }
 
 /// Normalizes a top-level type by unwrapping any transparent typed wrappers.
@@ -186,7 +183,7 @@ pub fn normalizeRootType(comptime T: type) type {
 /// Returns:
 /// - bool: `true` if the type should be emitted as an alias.
 pub fn shouldEmitAlias(comptime T: type) bool {
-    if (Meta.strategyOf(T) != .table) return false;
+    if (MetaData.strategyOf(T) != .table) return false;
     return switch (@typeInfo(T)) {
         .@"union" => |info| info.tag_type != null,
         .@"enum" => true,
@@ -271,11 +268,11 @@ pub fn isIgnoredDocType(comptime T: type) bool {
     return T == *Context or T == Context or T == Mapper.Primitive or T == Handlers.Handle or T == Handlers.Any.Userdata or T == Handlers.Any.Function;
 }
 
-/// Looks up a field description from a `ZUA_META` attribute descriptions
+/// Looks up a field description from a `ZUA_SHAPE` attribute descriptions
 /// struct.
 ///
 /// Arguments:
-/// - descriptions: The `ZUA_META` attribute description struct.
+/// - descriptions: The `ZUA_SHAPE` attribute description struct.
 /// - field_name: The field name to look up.
 ///
 /// Returns:
@@ -299,7 +296,7 @@ pub fn fieldDescription(comptime descriptions: anytype, comptime field_name: []c
 /// Returns:
 /// - struct: A struct with `name` and `description` fields. Falls back to
 ///   `"arg{N}"` and `""` when the index is out of range.
-pub fn argDocInfo(args: []const Native.ArgInfo, comptime index: usize) struct { name: []const u8, description: []const u8 } {
+pub fn argDocInfo(args: []const ArgInfo, comptime index: usize) struct { name: []const u8, description: []const u8 } {
     if (index < args.len) {
         return .{
             .name = args[index].name,

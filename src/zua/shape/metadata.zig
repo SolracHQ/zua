@@ -1,19 +1,79 @@
 const std = @import("std");
-const meta = @import("./meta.zig");
+const EncodeHookType = @import("./shape.zig").EncodeHookType;
+const DecodeHookType = @import("./shape.zig").DecodeHookType;
+const DocsHookType = @import("./shape.zig").DocsHookType;
 const Mapper = @import("../mapper/mapper.zig");
-const Primitive = Mapper.Decoder.Primitive;
+const Primitive = Mapper.Primitive;
 const Context = @import("../state/context.zig");
-const helpers = @import("internal.zig");
+const helpers = @import("./internal.zig");
+const builtin = @import("builtin");
 const Marker = @import("../marker.zig");
 
-/// Constructs the compile-time metadata type for `ZUA_META`.
+pub const MappingStrategy = enum {
+    table,
+    object,
+    ptr,
+    closure,
+};
+
+pub fn VariantInfoType(comptime FieldType: type) type {
+    const fd_type = FieldDescriptions(FieldType);
+    return struct {
+        name: ?[]const u8 = null,
+        description: ?[]const u8 = null,
+        field_descriptions: fd_type = .{},
+    };
+}
+
+pub fn FieldDescriptions(comptime T: type) type {
+    const info = @typeInfo(T);
+    if (info == .@"struct") {
+        const fields = info.@"struct".fields;
+        if (fields.len == 0) return @Struct(.auto, null, &.{}, &.{}, &.{});
+        var names: [fields.len][]const u8 = undefined;
+        var types: [fields.len]type = undefined;
+        var attributes: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
+        for (fields, 0..) |field, i| {
+            names[i] = field.name;
+            types[i] = ?[]const u8;
+            attributes[i] = .{
+                .default_value_ptr = &@as(?[]const u8, null),
+            };
+        }
+        return @Struct(.auto, null, &names, &types, &attributes);
+    }
+    return @Struct(.auto, null, &.{}, &.{}, &.{});
+}
+
+pub fn VariantDescriptions(comptime T: type) type {
+    const info = @typeInfo(T);
+    if (info == .@"union" and info.@"union".tag_type != null) {
+        const fields = info.@"union".fields;
+        if (fields.len == 0) return @Struct(.auto, null, &.{}, &.{}, &.{});
+        var names: [fields.len][]const u8 = undefined;
+        var types: [fields.len]type = undefined;
+        var attributes: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
+        for (fields, 0..) |field, i| {
+            const InfoType = VariantInfoType(field.type);
+            names[i] = field.name;
+            types[i] = InfoType;
+            attributes[i] = .{
+                .default_value_ptr = &@as(InfoType, .{}),
+            };
+        }
+        return @Struct(.auto, null, &names, &types, &attributes);
+    }
+    return @Struct(.auto, null, &.{}, &.{}, &.{});
+}
+
+/// Constructs the compile-time metadata type for `ZUA_SHAPE`.
 ///
-/// This is the low-level builder that all strategy helpers (`Object`, `Table`,
-/// `Ptr`, `Capture`) delegate to. It produces a struct type with the constants
+/// This is the low-level builder that all shape helpers (`Object`, `Table`,
+/// `Ptr`, `Closure`) delegate to. It produces a struct type with the constants
 /// that translation, documentation, and stub-generation code query at compile
 /// time.
 ///
-/// Most types should use the strategy helpers in `zua.Meta` instead of calling
+/// Most types should use the shape helpers in `zua.Shape` instead of calling
 /// `MetaData` directly. Use `MetaData` directly only when you need to customize
 /// the proxy type, encode hook, or decode hook in ways the helpers do not
 /// expose.
@@ -33,7 +93,7 @@ const Marker = @import("../marker.zig");
 /// - Type: The original Zig type the metadata describes.
 /// - ProxyType: The type used as an intermediate representation during encode.
 ///   Most strategies use `void`; `strEnum` uses `[]const u8`.
-/// - strategy: The mapping strategy (table, object, ptr, capture).
+/// - strategy: The mapping strategy (table, object, ptr, closure).
 /// - encode_hook: Optional encode hook. `null` produces a no-op default.
 /// - decode_hook: Optional decode hook. `null` produces a no-op default.
 /// - methods: A comptime struct of method name–function pairs, or `null`/`{}`.
@@ -41,11 +101,11 @@ const Marker = @import("../marker.zig");
 ///   `field_descriptions`, and `variants`.
 ///
 /// Returns:
-/// - `type`: A struct type suitable for use as `pub const ZUA_META`.
+/// - `type`: A struct type suitable for use as `pub const ZUA_SHAPE`.
 ///
 /// Example:
 /// ```zig
-/// pub const ZUA_META = MetaData(MyType, []const u8, .table,
+/// pub const ZUA_SHAPE = MetaData(MyType, []const u8, .table,
 ///     MyType.encode, MyType.decode,
 ///     .{ .__gc = cleanup },
 ///     .{ .name = "MyType", .description = "Does a thing." },
@@ -54,15 +114,15 @@ const Marker = @import("../marker.zig");
 pub fn MetaData(
     comptime Type: type,
     comptime ProxyType: type,
-    comptime strategy: meta.MappingStrategy,
-    comptime encode_hook: ?meta.EncodeHookType(Type, ProxyType),
-    comptime decode_hook: ?meta.DecodeHookType(Type),
+    comptime strategy: MappingStrategy,
+    comptime encode_hook: ?EncodeHookType(Type, ProxyType),
+    comptime decode_hook: ?DecodeHookType(Type),
     comptime methods: anytype,
     comptime options: anytype,
-    comptime docs_hook: ?meta.DocsHookType(Type),
+    comptime docs_hook: ?DocsHookType(Type),
 ) type {
-    if (comptime !@hasDecl(Type, "ZUA_META") and !Marker.isDefaultGuard(Type)) {
-        @compileError(@typeName(Type) ++ " has no visible ZUA_META: is it misspelled or declared outside the type?");
+    if (comptime !@hasDecl(Type, "ZUA_SHAPE") and !Marker.isDefaultGuard(Type)) {
+        @compileError(@typeName(Type) ++ " has no visible ZUA_SHAPE: is it misspelled or declared outside the type?");
     }
 
     const T = if (@hasDecl(Type, "__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE else Type;
@@ -76,8 +136,8 @@ pub fn MetaData(
         pub const Strategy = strategy;
         pub const Proxy = ProxyType;
         pub const Methods = if (@typeInfo(@TypeOf(methods)) != .@"struct") .{} else methods;
-        pub const EncodeHook: meta.EncodeHookType(T, ProxyType) = encode_hook orelse default_encode;
-        pub const DecodeHook: meta.DecodeHookType(T) = decode_hook orelse default_decode;
+        pub const EncodeHook: EncodeHookType(T, ProxyType) = encode_hook orelse default_encode;
+        pub const DecodeHook: DecodeHookType(T) = decode_hook orelse default_decode;
         pub const Description: []const u8 = opts_description orelse "";
         pub const Name: []const u8 = opts_name orelse blk: {
             const full: []const u8 = @typeName(T);
@@ -86,7 +146,7 @@ pub fn MetaData(
         };
         pub const AttributeDescriptions = if (@typeInfo(@TypeOf(opts_field_descriptions)) != .@"struct") .{} else opts_field_descriptions;
         pub const VariantDescriptions = if (@typeInfo(@TypeOf(opts_variants)) != .@"struct") .{} else opts_variants;
-        pub const DocsHook: ?meta.DocsHookType(T) = docs_hook;
+        pub const DocsHook: ?DocsHookType(T) = docs_hook;
 
         fn default_encode(_: *Context, _: T) anyerror!?ProxyType {
             return null;
@@ -101,10 +161,10 @@ pub fn MetaData(
         /// The hook converts `T` into `ProxyType` before the value is pushed to Lua.
         pub inline fn withEncode(
             comptime NewProxyType: type,
-            comptime handler: meta.EncodeHookType(T, NewProxyType),
+            comptime handler: EncodeHookType(T, NewProxyType),
         ) type {
-            if (comptime strategy == .capture)
-                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support encode hook");
+            if (comptime strategy == .closure)
+                @compileError("closure strategy type " ++ @typeName(T) ++ " does not support encode hook");
             return comptime MetaData(T, NewProxyType, strategy, handler, decode_hook, methods, options, null);
         }
 
@@ -112,10 +172,10 @@ pub fn MetaData(
         ///
         /// The hook converts a Lua primitive into `T`.
         pub inline fn withDecode(
-            comptime handler: meta.DecodeHookType(T),
+            comptime handler: DecodeHookType(T),
         ) type {
-            if (comptime strategy == .capture)
-                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support decode hook");
+            if (comptime strategy == .closure)
+                @compileError("closure strategy type " ++ @typeName(T) ++ " does not support decode hook");
 
             return comptime MetaData(T, ProxyType, strategy, encode_hook, handler, methods, options, null);
         }
@@ -127,10 +187,10 @@ pub fn MetaData(
         /// populated `Doc` (Alias, Table, Object, etc.) that replaces the
         /// auto-collected entry.
         pub inline fn withDocs(
-            comptime handler: meta.DocsHookType(T),
+            comptime handler: DocsHookType(T),
         ) type {
-            if (comptime strategy == .capture)
-                @compileError("capture strategy type " ++ @typeName(T) ++ " do not support docs hook");
+            if (comptime strategy == .closure)
+                @compileError("closure strategy type " ++ @typeName(T) ++ " does not support docs hook");
 
             return comptime MetaData(T, ProxyType, strategy, encode_hook, decode_hook, methods, options, handler);
         }
@@ -138,13 +198,13 @@ pub fn MetaData(
 }
 
 /// Wraps a type so that `MetaData` can distinguish default metadata from
-/// user-declared `ZUA_META`.
+/// user-declared `ZUA_SHAPE`.
 ///
 /// When `getMeta` falls back to the default strategy (`.table` for structs,
 /// `.object` for untagged unions) it wraps the original type in `DefaultGuard`.
 /// The guard's `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` field lets internal code recover
 /// the original type while `MetaData`'s compile-time guard (`@hasDecl(Type,
-/// "ZUA_META")`) correctly identifies these as having no explicit metadata.
+/// "ZUA_SHAPE")`) correctly identifies these as having no explicit metadata.
 ///
 /// Arguments:
 /// - T: The original type to wrap.
@@ -169,15 +229,15 @@ pub fn DefaultGuard(comptime T: type) type {
 pub inline fn getMeta(comptime T: type) type {
     helpers.assertContainerType(T);
     // Force evaluation of all public declarations in debug builds so
-    // misspelled ZUA_META constants are caught at compile time.
+    // misspelled ZUA_SHAPE constants are caught at compile time.
     // Skipped in release to preserve lazy evaluation semantics.
-    if (comptime @import("builtin").mode == .Debug) {
+    if (comptime builtin.mode == .Debug) {
         inline for (comptime std.meta.declarations(T)) |decl| {
             _ = &@field(T, decl.name);
         }
     }
     const info = @typeInfo(T);
-    if (comptime @hasDecl(T, "ZUA_META")) return T.ZUA_META;
+    if (comptime @hasDecl(T, "ZUA_SHAPE")) return T.ZUA_SHAPE;
     if (comptime info == .@"union" and info.@"union".tag_type == null) return MetaData(DefaultGuard(T), void, .object, null, null, null, .{}, null);
     return MetaData(DefaultGuard(T), void, .table, null, null, null, .{}, null);
 }
@@ -187,13 +247,13 @@ pub inline fn getMeta(comptime T: type) type {
 /// This is the main branch point used by translation and docs code to decide
 /// whether `T` behaves as a table, userdata object, light userdata pointer,
 /// or closure capture.
-pub inline fn strategyOf(comptime T: type) meta.MappingStrategy {
+pub inline fn strategyOf(comptime T: type) MappingStrategy {
     return comptime getMeta(T).Strategy;
 }
 
 /// Returns the method set exposed by `T`.
 ///
-/// The returned comptime struct is the method table declared on `ZUA_META`,
+/// The returned comptime struct is the method table declared on `ZUA_SHAPE`,
 /// or an empty struct when `T` exposes no methods.
 pub inline fn methodsOf(comptime T: type) @TypeOf(getMeta(T).Methods) {
     return comptime getMeta(T).Methods;
@@ -237,6 +297,14 @@ pub inline fn attributeDescriptionsOf(comptime T: type) @TypeOf(getMeta(T).Attri
 /// or an empty struct when no variant-level documentation was declared.
 pub inline fn variantDescriptionsOf(comptime T: type) @TypeOf(getMeta(T).VariantDescriptions) {
     return comptime getMeta(T).VariantDescriptions;
+}
+
+/// Returns the trampoline type for a closure type `T`.
+/// Returns `null` if `T` is not a `.closure` type.
+pub inline fn closureTrampolineType(comptime T: type) ?type {
+    if (comptime strategyOf(T) != .closure) return null;
+    const meta = comptime getMeta(T);
+    return comptime meta.__ZUA_CLOSURE_TRAMPOLINE;
 }
 
 test {

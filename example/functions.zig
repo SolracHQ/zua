@@ -33,13 +33,15 @@ fn increment(x: i32) i32 {
 
 // --- Closures ---
 
-/// Captured state for a counter closure. The `Meta.Capture` strategy
-/// stores this struct as upvalue 1 of the Lua C closure so mutations
-/// persist across calls to the same closure instance.
-const CounterState = struct {
-    pub const ZUA_META = zua.Meta.Capture(@This(), .{}, .{});
+/// A counter closure. Each call increments by `step` and returns the new value.
+const Counter = struct {
+    pub const ZUA_SHAPE = zua.Shape.Closure(@This(), tick, null, .{});
     count: i32,
     step: i32,
+    fn tick(up: *Counter) i32 {
+        up.count += up.step;
+        return up.count;
+    }
 };
 
 /// Each call increments `count` by `step` and returns the new value.
@@ -68,16 +70,11 @@ fn describeArgs(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) ![]const u8
     return buf.items;
 }
 
-fn counterTick(s: *CounterState) i32 {
-    s.count += s.step;
-    return s.count;
-}
-
 /// CallbackRegistry: an Object type that stores a callback for later use.
 /// Demonstrates the Object strategy with callback ownership.
 const CallbackRegistry = struct {
     // Marker for Object strategy
-    pub const ZUA_META = zua.Meta.Object(CallbackRegistry, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(CallbackRegistry, .{
         .set_callback = setCallback,
         .call_stored = callStored,
         .__gc = deinit,
@@ -114,7 +111,7 @@ const CallbackRegistry = struct {
     }
 };
 
-fn makeCallbackRegistry(_: *zua.Context) CallbackRegistry {
+fn makeCallbackRegistry() CallbackRegistry {
     return CallbackRegistry{};
 }
 
@@ -137,17 +134,17 @@ pub fn main(init: std.process.Init) !void {
     defer owned_typed_increment.release();
 
     const module = .{
-        .add = zua.Native.new(add, .{ .parse_err_fmt = "add expects (number, number): {s}" }, .{}),
-        .greet = zua.Native.new(greet, .{ .parse_err_fmt = "greet expects (string): {s}" }, .{}),
-        .divide = zua.Native.new(safeDivide, .{ .parse_err_fmt = "divide expects (number, number): {s}" }, .{}),
-        .apply_twice = zua.Native.new(applyTwice, .{ .parse_err_fmt = "apply_twice expects (function, number): {s}" }, .{}),
-        .CallbackRegistry = zua.Native.new(makeCallbackRegistry, .{ .parse_err_fmt = "CallbackRegistry expects (): {s}" }, .{}),
+        .add = zua.Shape.Fn(add, .{}),
+        .greet = zua.Shape.Fn(greet, .{}),
+        .divide = zua.Shape.Fn(safeDivide, .{}),
+        .apply_twice = zua.Shape.Fn(applyTwice, .{}),
+        .CallbackRegistry = zua.Shape.Fn(makeCallbackRegistry, .{}),
         .increment = owned_increment,
         .typed_increment = owned_typed_increment,
-        .sum_all = zua.Native.new(sumAll, .{ .parse_err_fmt = "sum_all expects numbers: {s}" }, .{}),
-        .describe_args = zua.Native.new(describeArgs, .{ .parse_err_fmt = "describe_args expects any: {s}" }, .{}),
-        .counter_by_one = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 1 }, .{}, .{}),
-        .counter_by_ten = zua.Native.closure(counterTick, CounterState{ .count = 0, .step = 10 }, .{}, .{}),
+        .sum_all = zua.Shape.Fn(sumAll, .{}),
+        .describe_args = zua.Shape.Fn(describeArgs, .{}),
+        .counter_by_one = Counter{ .count = 0, .step = 1 },
+        .counter_by_ten = Counter{ .count = 0, .step = 10 },
     };
 
     try state.addGlobals(&ctx, module);

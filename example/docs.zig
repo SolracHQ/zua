@@ -2,8 +2,8 @@ const std = @import("std");
 const zua = @import("zua");
 
 const Vector2 = struct {
-    pub const ZUA_META = zua.Meta.Table(Vector2, .{
-        .scale = zua.Native.new(scale, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Vector2, .{
+        .scale = zua.Shape.Fn(scale, .{
             .args = &.{
                 .{ .name = "factor", .description = "Scalar multiplier applied to both coordinates." },
             },
@@ -26,9 +26,9 @@ const Vector2 = struct {
 };
 
 const Counter = struct {
-    pub const ZUA_META = zua.Meta.Object(Counter, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Counter, .{
         .value = getValue,
-        .increment = zua.Native.new(increment, .{}, .{
+        .increment = zua.Shape.Fn(increment, .{
             .description = "Increment the counter by a specified amount.",
             .args = &.{
                 .{ .name = "amount", .description = "Amount added to the counter." },
@@ -54,7 +54,7 @@ const Condition = union(enum) {
     eq: i32,
     in_range: struct { min: i32, max: i32 },
 
-    pub const ZUA_META = zua.Meta.Table(Condition, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Condition, .{}, .{
         .name = "Condition",
         .description = "Tagged union selector accepted by scan-style APIs.",
         .variants = .{
@@ -78,7 +78,7 @@ const Priority = enum(u8) {
     normal,
     high,
 
-    pub const ZUA_META = zua.Meta.strEnum(Priority, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.strEnum(Priority, .{}, .{
         .name = "Priority",
         .description = "String-backed priority enum.",
     });
@@ -103,12 +103,12 @@ const Os = union(enum) {
     Concrete: ConcreteOs,
     Family: OsFamily,
 
-    pub const ZUA_META = zua.Meta.Table(Os, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Os, .{}, .{
         .name = "Os",
         .description = "Operating system selector. Accepted as strings like \"linux\", \"macos\", \"unix-like\", or \"bsd-based\".",
     }).withDecode(decode).withDocs(osDocs);
 
-    fn decode(ctx: *zua.Context, prim: zua.Mapper.Decoder.Primitive) !?Os {
+    fn decode(ctx: *zua.Context, prim: zua.Mapper.Primitive) !?Os {
         return switch (prim) {
             .string => |s| {
                 if (std.mem.eql(u8, s, "windows")) return .{ .Concrete = .windows };
@@ -143,13 +143,12 @@ fn getStatus() []const u8 {
     return "active";
 }
 
-const get_status = zua.Native.new(getStatus, .{}, .{
-    .name = "status",
+const get_status = zua.Shape.Fn(getStatus, .{
     .description = "Get the current status string.",
 });
 
 const Logger = struct {
-    pub const ZUA_META = zua.Meta.Table(Logger, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Logger, .{}, .{
         .name = "Logger",
         .description = "Logging utility with a shared status function.",
     });
@@ -157,7 +156,7 @@ const Logger = struct {
 };
 
 const Analytics = struct {
-    pub const ZUA_META = zua.Meta.Table(Analytics, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.Table(Analytics, .{}, .{
         .name = "Analytics",
         .description = "Analytics tracker with a shared status function.",
     });
@@ -176,7 +175,7 @@ fn maybeIncrement(value: ?i32) ?i32 {
     return if (value) |n| n + 1 else null;
 }
 
-fn sumAll(_: *zua.Context, condition: Condition, args: zua.Mapper.Decoder.VarArgs) i64 {
+fn sumAll(condition: Condition, args: zua.Mapper.Decoder.VarArgs) i64 {
     var total: i64 = 0;
     for (args.args) |prim| switch (prim) {
         .integer => |n| switch (condition) {
@@ -192,12 +191,25 @@ fn sumAll(_: *zua.Context, condition: Condition, args: zua.Mapper.Decoder.VarArg
     return total;
 }
 
+const CounterClosure = struct {
+    pub const ZUA_SHAPE = zua.Shape.Closure(@This(), tick, null, .{
+        .description = "Creates a counter that starts at 0 and steps by delta on each call.",
+        .args = &.{
+            .{ .name = "delta", .description = "Amount added to the counter." },
+        },
+    });
+    count: i32,
+    fn tick(up: *CounterClosure, delta: i32) i32 {
+        up.count += delta;
+        return up.count;
+    }
+};
+
 pub fn main(init: std.process.Init) !void {
     var generator = zua.Docs.init(init.gpa);
     defer generator.deinit();
 
-    const make_vector = zua.Native.new(makeVector, .{}, .{
-        .name = "make_vector",
+    const make_vector = zua.Shape.Fn(makeVector, .{
         .description = "Construct a new Vector2 value.",
         .args = &.{
             .{ .name = "x", .description = "Initial horizontal coordinate." },
@@ -205,21 +217,18 @@ pub fn main(init: std.process.Init) !void {
         },
     });
 
-    const new_counter = zua.Native.new(newCounter, .{}, .{
-        .name = "new_counter",
+    const new_counter = zua.Shape.Fn(newCounter, .{
         .description = "Create a new Counter instance.",
     });
 
-    const maybe_increment = zua.Native.new(maybeIncrement, .{}, .{
-        .name = "maybe_increment",
+    const maybe_increment = zua.Shape.Fn(maybeIncrement, .{
         .description = "Increment a number when one is provided.",
         .args = &.{
             .{ .name = "value", .description = "Optional integer to increment." },
         },
     });
 
-    const sum_all = zua.Native.new(sumAll, .{}, .{
-        .name = "sum_all",
+    const sum_all = zua.Shape.Fn(sumAll, .{
         .description = "Sum all integer varargs.",
         .args = &.{
             .{ .name = "condition", .description = "Selector for which integers to sum." },
@@ -231,13 +240,16 @@ pub fn main(init: std.process.Init) !void {
     try generator.add(Priority);
     try generator.add(Color);
     try generator.add(Mode);
-    try generator.add(make_vector);
-    try generator.add(new_counter);
-    try generator.add(maybe_increment);
-    try generator.add(sum_all);
     try generator.add(Vector2);
     try generator.add(Logger);
     try generator.add(Analytics);
+
+    try generator.addBinding("make_vector", make_vector);
+    try generator.addBinding("new_counter", new_counter);
+    try generator.addBinding("maybe_increment", maybe_increment);
+    try generator.addBinding("sum_all", sum_all);
+    try generator.addBinding("make_counter", CounterClosure{ .count = 0 });
+
     const stubs = try generator.generate();
     std.debug.print("{s}", .{stubs});
 }

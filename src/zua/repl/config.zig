@@ -3,9 +3,8 @@ const std = @import("std");
 const completion = @import("completion.zig");
 const highlight = @import("highlight.zig");
 
+const Shape = @import("../shape/shape.zig");
 const Fn = @import("../handlers/typed/fn.zig").Fn;
-const Meta = @import("../meta/meta.zig");
-const Native = @import("../functions/native.zig");
 const Object = @import("../handlers/typed/object.zig").Object;
 
 const Completer = completion.Completer;
@@ -15,48 +14,48 @@ const CompletionHook = completion.CompletionHook;
 pub const Config = @This();
 
 const methods = .{
-    .set_color = Native.new(setColor, .{}, .{
+    .set_color = Shape.Fn(setColor, .{
         .description = "Set a color override for a token kind.",
         .args = &.{
             .{ .name = "kind", .description = "Token kind to color." },
             .{ .name = "color", .description = "Color value as ANSI int, hex string, color name, or {r,g,b} table." },
         },
-    }),
-    .set_style = Native.new(setStyle, .{}, .{
+    }){},
+    .set_style = Shape.Fn(setStyle, .{
         .description = "Set a full style override for a token kind.",
         .args = &.{
             .{ .name = "kind", .description = "Token kind to style." },
             .{ .name = "style", .description = "Style table with optional fg, bg, bold, dim, italic fields." },
         },
-    }),
-    .set_style_hook = Native.new(setStyleHook, .{}, .{
+    }){},
+    .set_style_hook = Shape.Fn(setStyleHook, .{
         .description = "Set the Lua-side syntax highlighting hook.",
         .args = &.{
             .{ .name = "hook", .description = "Function receiving (kind, text) and returning a Style table or nil." },
         },
-    }),
-    .set_completion_hook = Native.new(setLuaCompletionHook, .{}, .{
+    }){},
+    .set_completion_hook = Shape.Fn(setLuaCompletionHook, .{
         .description = "Set the Lua-side tab completion hook.",
         .args = &.{
             .{ .name = "hook", .description = "Function receiving (completer, prefix) and calling completer:add/addEx to publish candidates." },
         },
-    }),
-    .set_runtime_completion = Native.new(setRuntimeCompletion, .{}, .{
+    }){},
+    .set_runtime_completion = Shape.Fn(setRuntimeCompletion, .{
         .description = "Enable or disable live Lua runtime completion for chained identifiers.",
         .args = &.{
             .{ .name = "enabled", .description = "Whether live Lua runtime completion is enabled." },
         },
-    }),
-    .set_default_styles = Native.new(setDefaultStyles, .{}, .{
+    }){},
+    .set_default_styles = Shape.Fn(setDefaultStyles, .{
         .description = "Enable or disable built-in default syntax highlighting styles.",
         .args = &.{
             .{ .name = "enabled", .description = "When true (default), built-in styles are used as fallback after hooks and overrides." },
         },
-    }),
+    }){},
     .__gc = gc,
 };
 
-pub const ZUA_META = Meta.Object(Config, methods, .{ .name = "ReplConfig", .description = "REPL configuration with runtime Lua-facing controls." });
+pub const ZUA_SHAPE = Shape.Object(Config, methods, .{ .name = "ReplConfig", .description = "REPL configuration with runtime Lua-facing controls." });
 
 /// Prompt displayed for each input line.
 prompt: [:0]const u8 = "zua",
