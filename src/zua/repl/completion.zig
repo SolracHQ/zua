@@ -101,8 +101,8 @@ pub const CompletionState = struct {
 /// stack across the callback boundary.
 pub fn completionCallbackC(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
     const cs: *CompletionState = @ptrCast(@alignCast(isocline.completionArg(cenv) orelse return));
-    const previous_top = lua.getTop(cs.ctx.state.luaState);
-    defer lua.setTop(cs.ctx.state.luaState, previous_top);
+    cs.ctx.state.pushTop();
+    defer cs.ctx.state.popTop();
 
     cs.completer.get()._ctx = cs.ctx;
 
@@ -257,8 +257,8 @@ fn collectTableKeys(
     restrict_functions: bool,
 ) void {
     const state = ctx.state;
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
+    state.pushTop();
+    defer state.popTop();
 
     const table = Table.fromBorrowed(state, table_index);
     const keys = table.keys(ctx) catch return;
@@ -311,8 +311,8 @@ fn collectIntrospection(
     prefix: []const u8,
 ) void {
     const state = ctx.state;
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
+    state.pushTop();
+    defer state.popTop();
 
     lua.pushValue(state.luaState, introspection_fn_index);
     lua.pushNil(state.luaState);
@@ -343,8 +343,8 @@ fn collectFromValue(
     restrict_functions: bool,
 ) void {
     const state = ctx.state;
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
+    state.pushTop();
+    defer state.popTop();
 
     const value_index = lua.absIndex(state.luaState, -1);
     const value_type = lua.valueType(state.luaState, value_index);
@@ -369,8 +369,8 @@ fn completeGlobalPrefix(
     filter_prefix: []const u8,
 ) void {
     const state = ctx.state;
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
+    state.pushTop();
+    defer state.popTop();
 
     _ = state.globals();
     collectTableKeys(ctx, completer, lua.absIndex(state.luaState, -1), filter_prefix, "", false);
@@ -386,8 +386,8 @@ fn completeMemberPrefix(
     restrict_functions: bool,
 ) void {
     const state = ctx.state;
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
+    state.pushTop();
+    defer state.popTop();
 
     if (!resolveObjectPrefix(ctx, object_prefix)) return;
     collectFromValue(ctx, completer, filter_prefix, full_prefix, restrict_functions);

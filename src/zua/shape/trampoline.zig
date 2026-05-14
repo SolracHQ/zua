@@ -1,6 +1,8 @@
 const std = @import("std");
 pub const lua = @import("../../lua/lua.zig");
 const Mapper = @import("../mapper/mapper.zig");
+const Decoder = @import("../mapper/decode/decoder.zig");
+const Tracing = @import("../mapper/decode/tracing.zig");
 const introspect = @import("../introspect.zig");
 const State = @import("../state/state.zig");
 const Context = @import("../state/context.zig");
@@ -26,7 +28,8 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
 
         pub const description: []const u8 = options.description;
         pub const args: []const ArgInfo = options.args;
-        pub const parse_err_hook: ?fn (*Context, []const u8) void = options.parse_err_hook;
+        pub const parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = options.parse_err_hook;
+        const decode_depth = Tracing.maxDecodeDepth(decodedParameterTypes());
 
         pub fn trampoline() lua.CFunction {
             return struct {
@@ -38,8 +41,11 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
                     };
 
                     var ctx = Context.init(vm);
+                    var segs: [decode_depth]Tracing.Segment = @splat(.empty);
+                    var decode_err: Tracing.DecodeError = .{ .tag = .custom };
+                    const trace = Tracing.Trace{ .path = &segs, .deep = 0, .err = &decode_err };
 
-                    execute(&ctx) catch |err| {
+                    execute(&ctx, trace) catch |err| {
                         const msg = ctx.err orelse @errorName(err);
                         lua.pushString(state, msg);
                         ctx.deinit();
@@ -52,22 +58,29 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
             }.luaCFunction;
         }
 
-        fn execute(ctx: *Context) !void {
-            const decoded = try decodeArgs(ctx);
+        fn execute(ctx: *Context, trace: Tracing.Trace) !void {
+            const decoded = try decodeArgs(ctx, trace);
             const result = try callFunction(ctx, decoded);
             try pushResult(ctx, result);
         }
 
-        fn decodeArgs(ctx: *Context) !Mapper.Decoder.ParseResult(decodedParameterTypes()) {
+        fn decodeArgs(ctx: *Context, trace: Tracing.Trace) !Decoder.ParseResult(decodedParameterTypes()) {
             const types = comptime decodedParameterTypes();
             const total = lua.getTop(ctx.state.luaState);
             const effective_count: lua.StackCount = if (comptime hasVarArgs(function_info))
                 @min(total, @as(lua.StackCount, @intCast(decodedParameterCount())))
             else
                 total;
-            return Mapper.Decoder.parseTuple(ctx, 1, effective_count, types) catch {
+            return Decoder.parseArgsDepth(ctx, 1, effective_count, types, trace) catch {
                 if (parse_err_hook) |hook| {
-                    hook(ctx, ctx.err orelse "argument decoding failed");
+                    hook(ctx, &trace);
+                } else {
+                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, args) catch "";
+                    const err_msg = trace.err.format(ctx.arena()) catch "decode failed";
+                    ctx.err = if (fmt.len > 0)
+                        std.fmt.allocPrint(ctx.arena(), "{s}: {s}", .{ fmt, err_msg }) catch err_msg
+                    else
+                        err_msg;
                 }
                 return error.Failed;
             };
@@ -75,7 +88,7 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
 
         fn callFunction(
             ctx: *Context,
-            decoded: Mapper.Decoder.ParseResult(decodedParameterTypes()),
+            decoded: Decoder.ParseResult(decodedParameterTypes()),
         ) !ActualReturnType {
             const types = comptime decodedParameterTypes();
             var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
@@ -142,7 +155,8 @@ pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime option
         pub const __ZUA_MARKER: std.EnumSet(Marker.Marker) = Marker.new(&.{.native_function});
         pub const description: []const u8 = options.description;
         pub const args: []const ArgInfo = options.args;
-        pub const parse_err_hook: ?fn (*Context, []const u8) void = options.parse_err_hook;
+        pub const parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = options.parse_err_hook;
+        const decode_depth = Tracing.maxDecodeDepth(decodedParameterTypes());
 
         const __ZuaFnTypeInfo = cb_info;
         const __ZuaNativeReturnType = ActualReturnType;
@@ -156,7 +170,10 @@ pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime option
                         return lua.raiseError(state);
                     };
                     var ctx = Context.init(vm);
-                    execute(&ctx) catch |err| {
+                    var segs: [decode_depth]Tracing.Segment = @splat(.empty);
+                    var decode_err: Tracing.DecodeError = .{ .tag = .custom };
+                    const trace = Tracing.Trace{ .path = &segs, .deep = 0, .err = &decode_err };
+                    execute(&ctx, trace) catch |err| {
                         const msg = ctx.err orelse @errorName(err);
                         lua.pushString(state, msg);
                         ctx.deinit();
@@ -168,22 +185,29 @@ pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime option
             }.luaCFunction;
         }
 
-        fn execute(ctx: *Context) !void {
-            const decoded = try decodeArgs(ctx);
+        fn execute(ctx: *Context, trace: Tracing.Trace) !void {
+            const decoded = try decodeArgs(ctx, trace);
             const result = try callFunction(ctx, decoded);
             try pushResult(ctx, result);
         }
 
-        fn decodeArgs(ctx: *Context) !Mapper.Decoder.ParseResult(decodedParameterTypes()) {
+        fn decodeArgs(ctx: *Context, trace: Tracing.Trace) !Decoder.ParseResult(decodedParameterTypes()) {
             const types = comptime decodedParameterTypes();
             const total = lua.getTop(ctx.state.luaState);
             const effective_count: lua.StackCount = if (comptime hasVarArgs(cb_info))
                 @min(total, @as(lua.StackCount, @intCast(decodedParameterCount())))
             else
                 total;
-            return Mapper.Decoder.parseTuple(ctx, 1, effective_count, types) catch {
+            return Decoder.parseArgsDepth(ctx, 1, effective_count, types, trace) catch {
                 if (parse_err_hook) |hook| {
-                    hook(ctx, ctx.err orelse "argument decoding failed");
+                    hook(ctx, &trace);
+                } else {
+                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, args) catch "";
+                    const err_msg = trace.err.format(ctx.arena()) catch "decode failed";
+                    ctx.err = if (fmt.len > 0)
+                        std.fmt.allocPrint(ctx.arena(), "{s}: {s}", .{ fmt, err_msg }) catch err_msg
+                    else
+                        err_msg;
                 }
                 return error.Failed;
             };
@@ -191,7 +215,7 @@ pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime option
 
         fn callFunction(
             ctx: *Context,
-            decoded: Mapper.Decoder.ParseResult(decodedParameterTypes()),
+            decoded: Decoder.ParseResult(decodedParameterTypes()),
         ) !ActualReturnType {
             const types = comptime decodedParameterTypes();
             var call_args: std.meta.ArgsTuple(CallbackType) = undefined;
@@ -260,13 +284,13 @@ fn validateClosureCallback(comptime T: type, comptime info: std.builtin.Type.Fn,
 fn hasVarArgs(comptime info: std.builtin.Type.Fn) bool {
     if (info.params.len == 0) return false;
     const last = info.params[info.params.len - 1].type orelse return false;
-    return last == Mapper.Decoder.VarArgs;
+    return last == Mapper.VarArgs;
 }
 
 fn validateVarArgs(comptime info: std.builtin.Type.Fn) void {
     inline for (info.params, 0..) |param, i| {
         const T = param.type orelse continue;
-        if (T == Mapper.Decoder.VarArgs and i != info.params.len - 1) {
+        if (T == Mapper.VarArgs and i != info.params.len - 1) {
             @compileError(std.fmt.comptimePrint("VarArgs must be the last parameter of the zig native function, found at position #{d}", .{i}));
         }
     }
@@ -284,7 +308,7 @@ fn buildVarArgsFor(
     ctx: *Context,
     comptime fn_info: std.builtin.Type.Fn,
     comptime decodedParameterCount: usize,
-) !Mapper.Decoder.VarArgs {
+) !Mapper.VarArgs {
     const varargs_slot = fn_info.params.len - 1;
     _ = varargs_slot;
     const total = lua.getTop(ctx.state.luaState);
@@ -293,15 +317,15 @@ fn buildVarArgsFor(
     else
         0;
     const start_index: lua.StackIndex = @intCast(decodedParameterCount + 1);
-    return Mapper.Decoder.buildVarArgs(ctx, start_index, remaining) catch return error.Failed;
+    return Decoder.buildVarArgs(ctx, start_index, remaining) catch return error.Failed;
 }
 
 fn pushResultFor(ctx: *Context, result: anytype, comptime T: type) !void {
     if (comptime returnValueCountFor(T) == 0) return;
     if (comptime introspect.isTuple(T)) {
-        inline for (result) |val| try Mapper.Encoder.pushValue(ctx, val);
+        inline for (result) |val| try Mapper.Encoder.push(ctx, val);
     } else {
-        try Mapper.Encoder.pushValue(ctx, result);
+        try Mapper.Encoder.push(ctx, result);
     }
 }
 

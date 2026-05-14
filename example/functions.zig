@@ -48,7 +48,7 @@ const Counter = struct {
 // --- VarArgs ---
 
 /// Sums all Lua number arguments passed in. Demonstrates VarArgs.
-fn sumAll(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) !i64 {
+fn sumAll(ctx: *zua.Context, args: zua.Mapper.VarArgs) !i64 {
     var total: i64 = 0;
     for (args.args) |prim| {
         switch (prim) {
@@ -61,7 +61,7 @@ fn sumAll(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) !i64 {
 }
 
 /// Describes the Lua type of each argument passed in.
-fn describeArgs(ctx: *zua.Context, args: zua.Mapper.Decoder.VarArgs) ![]const u8 {
+fn describeArgs(ctx: *zua.Context, args: zua.Mapper.VarArgs) ![]const u8 {
     var buf = std.ArrayList(u8).empty;
     for (args.args, 0..) |prim, i| {
         if (i > 0) try buf.appendSlice(ctx.arena(), ", ");

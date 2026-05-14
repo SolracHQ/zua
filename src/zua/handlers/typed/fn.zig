@@ -96,7 +96,7 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
                     checkCallbackSignature(callback, ins, outs);
                 }
             }
-            try Mapper.Encoder.pushValue(ctx, callback);
+            try Mapper.Encoder.push(ctx, callback);
             return .{ .function = Function.fromStack(ctx.state, -1) };
         }
 

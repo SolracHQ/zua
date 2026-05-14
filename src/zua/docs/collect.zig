@@ -15,6 +15,7 @@ const AliasValue = types.AliasValue;
 const Context = @import("../state/context.zig");
 const Handlers = @import("../handlers/handlers.zig");
 const Mapper = @import("../mapper/mapper.zig");
+const Internals = @import("../mapper/internals.zig");
 const Metadata = @import("../shape/metadata.zig");
 const helpers = @import("helpers.zig");
 const introspect = @import("../introspect.zig");
@@ -319,7 +320,7 @@ fn collectFunctionParameters(
         const arg_info = helpers.argDocInfo(T.args, arg_index);
         arg_index += 1;
 
-        if (comptime param_type == Mapper.Decoder.VarArgs) {
+        if (comptime param_type == Mapper.VarArgs) {
             try doc.parameters.append(self.arena.allocator(), .{
                 .name = try helpers.persist(self, "..."),
                 .description = try helpers.persist(self, arg_info.description),
@@ -429,8 +430,8 @@ fn recurseFunctionTypes(self: *Docs, comptime T: type, comptime is_method: bool,
 fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_nested: bool) anyerror!void {
     if (!recurse_nested) return;
 
-    if (comptime Mapper.isOptional(T)) {
-        return maybeRecurseReferencedType(self, Mapper.optionalChild(T), recurse_nested);
+    if (comptime Internals.isOptional(T)) {
+        return maybeRecurseReferencedType(self, Internals.optionalChild(T), recurse_nested);
     }
 
     if (comptime helpers.isTransparentTypedWrapper(T)) {
@@ -449,7 +450,7 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
             }
         },
         .pointer => |ptr| {
-            if (ptr.size == .slice and !Mapper.isStringValueType(T)) {
+            if (ptr.size == .slice and !Internals.isStringValueType(T)) {
                 try maybeRecurseReferencedType(self, ptr.child, recurse_nested);
             }
         },

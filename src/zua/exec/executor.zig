@@ -46,7 +46,7 @@ fn reset(self: *Executor) void {
 
 /// Internal executor implementation that loads and calls a Lua chunk,
 /// leaving `num_results` values on the stack.
-fn execute_impl(self: *Executor, ctx: *Context, config: Config, num_results: i32) !void {
+fn executeImpl(self: *Executor, ctx: *Context, config: Config, num_results: i32) !void {
     self.reset();
     const previous_top = lua.getTop(ctx.state.luaState);
     errdefer lua.setTop(ctx.state.luaState, previous_top);
@@ -68,15 +68,17 @@ fn execute_impl(self: *Executor, ctx: *Context, config: Config, num_results: i32
 /// Returns:
 /// - !void: `error.Failed` on load or runtime failure.
 pub fn execute(self: *Executor, ctx: *Context, config: Config) !void {
-    try self.execute_impl(ctx, config, 0);
+    try self.executeImpl(ctx, config, 0);
 }
 
 /// Loads and executes a Lua chunk and leaves any results on the Lua stack.
 ///
-/// This is useful when the caller wants to inspect or print returned values
-/// after execution.
-pub fn eval_untyped(self: *Executor, ctx: *Context, config: Config) !void {
-    try self.execute_impl(ctx, config, lua.MULT_RETURN);
+/// Returns the number of result values left on the stack.
+/// The caller owns these stack slots and should pop or read them.
+pub fn evalCount(self: *Executor, ctx: *Context, config: Config) !usize {
+    const previous_top = lua.getTop(ctx.state.luaState);
+    try self.executeImpl(ctx, config, lua.MULT_RETURN);
+    return @intCast(lua.getTop(ctx.state.luaState) - previous_top);
 }
 
 /// Loads and executes a Lua chunk and decodes returned values into `types`.

@@ -8,6 +8,7 @@
 const std = @import("std");
 const Context = @import("../state/context.zig");
 const trampoline = @import("trampoline.zig");
+const Tracing = @import("../mapper/decode/tracing.zig");
 
 /// Describes one parameter of a Zig function for Lua annotation generation.
 ///
@@ -46,9 +47,9 @@ pub const FnOptions = struct {
     args: []const ArgInfo = &.{},
 
     /// Optional hook called when argument decoding fails at runtime.
-    /// The hook receives the error message and can override it by setting
-    /// `ctx.err`. If unset, the default decoder message is used as-is.
-    parse_err_hook: ?fn (*Context, []const u8) void = null,
+    /// The hook receives the formatted path and error message. Can override
+    /// by setting `ctx.err`. If unset, the default path-formatting is used.
+    parse_err_hook: ?fn (*Context, trace: *const Tracing.Trace) void = null,
 };
 
 /// Wraps a Zig function so it can be called from Lua.

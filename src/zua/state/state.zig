@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const lua = @import("../../lua/lua.zig");
 const Table = @import("../handlers/any/table.zig").Table;
 const Mapper = @import("../mapper/mapper.zig");
@@ -7,6 +8,11 @@ const MetaTable = @import("../metatable.zig");
 
 const registry_key_prefix: [:0]const u8 = "zua_zua_";
 var zua_registry_key: [:0]const u8 = "zua_zua";
+
+const SavedTop = struct {
+    top: i32,
+    trace: if (builtin.mode == .Debug) struct { frames: [8]usize, count: usize } else void,
+};
 
 /// A Fat Wrapper over Lua State that owns the Lua state, allocator, I/O interface, and cached metatables.
 /// Is the main component of State API, the only canonical way to access Lua state and registry, and the main entry point for all operations.
@@ -23,6 +29,8 @@ luaState: *lua.State,
 metatable_cache: std.StringHashMap(c_int),
 /// Io interface for basically anything since zif 0.16.0
 io: std.Io,
+/// Stack of saved stack tops for `pushTop`/`popTop` nesting.
+top_stack: std.ArrayList(SavedTop) = .empty,
 
 fn stateGc(L: ?*lua.State) callconv(.c) c_int {
     const state = L orelse unreachable;
@@ -38,6 +46,27 @@ fn cleanup(self: *State) void {
         lua.unref(self.luaState, lua.REGISTRY_INDEX, ref.*);
     }
     self.metatable_cache.deinit();
+
+    if (builtin.mode == .Debug and self.top_stack.items.len > 0) {
+        std.debug.print("zua: {d} unmatched pushTop call(s)\n", .{self.top_stack.items.len});
+        var stderr_buf: [4096]u8 = undefined;
+        var stderr_writer = std.Io.File.Writer.init(.stderr(), self.io, stderr_buf[0..]);
+        const terminal: std.Io.Terminal = .{
+            .writer = &stderr_writer.interface,
+            .mode = .no_color,
+        };
+        for (self.top_stack.items) |*entry| {
+            const trace: std.debug.StackTrace = .{
+                .return_addresses = entry.trace.frames[0..entry.trace.count],
+                .skipped = .none,
+            };
+            std.debug.writeStackTrace(&trace, terminal) catch {};
+        }
+        stderr_writer.interface.flush() catch {};
+        @panic("zua: unbalanced pushTop/popTop detected");
+    }
+
+    self.top_stack.deinit(self.allocator);
 }
 
 fn makeRegistryKey(comptime suffix: []const u8) [:0]const u8 {
@@ -156,6 +185,28 @@ pub fn addGlobals(self: *State, ctx: *Context, value: anytype) !void {
 pub fn registry(self: *State) Table {
     lua.pushValue(self.luaState, lua.REGISTRY_INDEX);
     return Table.fromStack(self, -1);
+}
+
+/// Saves the current stack top for later restoration with `popTop`.
+///
+/// Use with `defer state.popTop()` around code that may push/pop values,
+/// mirroring the Lua C API pattern of saving and restoring the stack.
+/// In debug builds, the call site is captured to detect unbalanced usage.
+pub fn pushTop(self: *State) void {
+    var entry: SavedTop = .{
+        .top = lua.getTop(self.luaState),
+        .trace = if (builtin.mode == .Debug) .{ .frames = [_]usize{0} ** 8, .count = 0 } else {},
+    };
+    if (builtin.mode == .Debug) {
+        const result = std.debug.captureCurrentStackTrace(.{ .first_address = @returnAddress() }, &entry.trace.frames);
+        entry.trace.count = result.return_addresses.len;
+    }
+    self.top_stack.append(self.allocator, entry) catch @panic("OOM");
+}
+
+/// Restores the stack top to the value saved by the matching `pushTop`.
+pub fn popTop(self: *State) void {
+    lua.setTop(self.luaState, self.top_stack.pop().?.top);
 }
 
 /// Recovers the owning ZuaState instance from a raw `lua_State` pointer.

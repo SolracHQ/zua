@@ -19,7 +19,7 @@ pub const TableView = Handlers.Typed.TableView;
 pub const Mapper = @import("zua/mapper/mapper.zig");
 pub const Encoder = Mapper.Encoder;
 pub const Decoder = Mapper.Decoder;
-pub const VarArgs = Mapper.Decoder.VarArgs;
+pub const VarArgs = Mapper.VarArgs;
 pub const Primitive = Mapper.Primitive;
 
 pub const Shape = @import("zua/shape/shape.zig");

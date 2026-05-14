@@ -16,6 +16,7 @@ pub const Handlers = @This();
 const lua = @import("../../lua/lua.zig");
 const State = @import("../state/state.zig");
 const Mapper = @import("../mapper/mapper.zig");
+const Internals = @import("../mapper/internals.zig");
 const Marker = @import("../marker.zig");
 
 pub const Handle = union(enum) {
@@ -142,7 +143,7 @@ pub const Typed = struct {
 pub fn takeOwnership(value: anytype) void {
     const T = @TypeOf(value.*);
 
-    if (comptime Mapper.isOptional(T)) {
+    if (comptime Internals.isOptional(T)) {
         if (value.*) |inner| takeOwnership(&inner);
         return;
     }
@@ -167,7 +168,7 @@ pub fn takeOwnership(value: anytype) void {
         },
         .pointer => |ptr_info| {
             if (ptr_info.size == .slice) {
-                if (comptime Mapper.isStringValueType(T)) return;
+                if (comptime Internals.isStringValueType(T)) return;
                 const slice = value.*;
                 for (0..slice.len) |i| {
                     takeOwnership(&slice[i]);
@@ -191,8 +192,8 @@ pub fn takeOwnership(value: anytype) void {
 /// - Tagged union branches are processed recursively.
 /// - All other values are ignored.
 pub fn release(comptime T: type, value: T) void {
-    if (comptime Mapper.isOptional(T)) {
-        if (value) |inner| release(Mapper.optionalChild(T), inner);
+    if (comptime Internals.isOptional(T)) {
+        if (value) |inner| release(Internals.optionalChild(T), inner);
         return;
     }
 
@@ -214,7 +215,7 @@ pub fn release(comptime T: type, value: T) void {
         },
         .pointer => |ptr_info| {
             if (ptr_info.size == .slice) {
-                if (comptime Mapper.isStringValueType(T)) return;
+                if (comptime Internals.isStringValueType(T)) return;
                 for (value) |item| release(@TypeOf(item), item);
                 return;
             }

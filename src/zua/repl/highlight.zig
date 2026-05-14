@@ -223,8 +223,8 @@ pub fn highlightCallbackC(
     arg: ?*anyopaque,
 ) callconv(.c) void {
     const hs: *HighlightState = @ptrCast(@alignCast(arg orelse return));
-    const previous_top = lua.getTop(hs.ctx.state.luaState);
-    defer lua.setTop(hs.ctx.state.luaState, previous_top);
+    hs.ctx.state.pushTop();
+    defer hs.ctx.state.popTop();
     const source = std.mem.span(input);
     const formatted = process(hs.ctx, source, &hs.config.style_overrides, hs.config) orelse return;
     defer hs.ctx.arena().free(formatted);

@@ -4,6 +4,7 @@ const Mapper = @import("../mapper/mapper.zig");
 const Primitive = Mapper.Primitive;
 const Context = @import("../state/context.zig");
 const Handlers = @import("../handlers/handlers.zig");
+const Marker = @import("../marker.zig");
 
 /// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
 ///
@@ -23,6 +24,24 @@ pub fn assertContainerType(comptime T: type) void {
 pub fn assertMethodsIsStruct(comptime methods: anytype) void {
     if (comptime @typeInfo(@TypeOf(methods)) != .@"struct") {
         @compileError("methods must be a struct literal, got " ++ @typeName(@TypeOf(methods)));
+    }
+}
+
+/// Compile-time validation that each method field is valid.
+///
+/// Each field must be a raw Zig function or a `Shape.Fn`/`Shape.Closure` wrapper
+/// (a type carrying the `native_function` marker). Nested structs and non-callable
+/// values are rejected with a clear error naming the field.
+pub fn assertValidMethods(comptime methods: anytype) void {
+    inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
+        const T = field.type;
+        if (comptime @typeInfo(T) == .@"fn") continue;
+        if (comptime Marker.isNativeFunction(T)) continue;
+        if (comptime @typeInfo(T) == .type) {
+            const val = @field(methods, field.name);
+            if (Marker.isNativeFunction(val)) continue;
+        }
+        @compileError("method `" ++ field.name ++ "` must be a Zig function or Shape.Fn/Closure wrapper, got " ++ @typeName(T));
     }
 }
 

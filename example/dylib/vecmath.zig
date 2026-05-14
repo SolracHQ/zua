@@ -93,6 +93,6 @@ export fn luaopen_vecmath(L: *lua.State) c_int {
     const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
-    zua.Mapper.Encoder.pushValue(&ctx, Vecmath{}) catch return 0;
+    zua.Mapper.Encoder.push(&ctx, Vecmath{}) catch return 0;
     return 1;
 }

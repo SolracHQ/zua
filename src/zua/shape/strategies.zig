@@ -30,6 +30,7 @@ const Mapper = @import("../mapper/mapper.zig");
 pub inline fn Object(comptime T: type, comptime methods: anytype, comptime options: meta.MetaOptions(T, .object)) type {
     comptime internal.assertContainerType(T);
     comptime internal.assertMethodsIsStruct(methods);
+    comptime internal.assertValidMethods(methods);
     return comptime metadata.MetaData(T, void, .object, null, null, methods, options, null);
 }
 
@@ -56,6 +57,7 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime option
     comptime internal.assertContainerType(T);
     comptime internal.assertTaggedIfUnion(T);
     comptime internal.assertMethodsIsStruct(methods);
+    comptime internal.assertValidMethods(methods);
     return comptime metadata.MetaData(T, void, .table, null, null, methods, options, null);
 }
 
@@ -125,6 +127,7 @@ pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime opti
     if (comptime @typeInfo(T) != .@"enum")
         @compileError("strEnum requires an enum type, got " ++ @typeName(T));
     comptime internal.assertMethodsIsStruct(methods);
+    comptime internal.assertValidMethods(methods);
     return comptime metadata.MetaData(T, []const u8, .table, internal.strEnumEncode(T), internal.strEnumDecode(T), methods, options, null);
 }
 
@@ -160,6 +163,7 @@ pub inline fn strEnum(comptime T: type, comptime methods: anytype, comptime opti
 pub inline fn List(comptime T: type, comptime getElements: anytype, comptime methods: anytype, comptime options: meta.MetaOptions(T, .object)) type {
     comptime internal.assertContainerType(T);
     comptime internal.assertMethodsIsStruct(methods);
+    comptime internal.assertValidMethods(methods);
     comptime internal.assertNoListCollisions(methods);
     return comptime metadata.MetaData(T, void, .object, null, null, internal.mergeMethodSets(internal.generateListMethodsSet(T, getElements), methods), options, null);
 }

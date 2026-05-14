@@ -17,6 +17,7 @@ const RawFunction = @import("../handlers/any/function.zig").Function;
 const RawTable = @import("../handlers/any/table.zig").Table;
 const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/mapper.zig");
+const Internals = @import("../mapper/internals.zig");
 const MetaData = @import("../shape/metadata.zig");
 const Marker = @import("../marker.zig");
 const Object = @import("../handlers/typed/object.zig");
@@ -38,8 +39,8 @@ const TableView = @import("../handlers/typed/table_view.zig");
 /// Returns:
 /// - []const u8: Arena-allocated Lua type name string.
 pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
-    if (comptime Mapper.isOptional(T)) {
-        const child_name = try displayTypeName(self, Mapper.optionalChild(T), ctx);
+    if (comptime Internals.isOptional(T)) {
+        const child_name = try displayTypeName(self, Internals.optionalChild(T), ctx);
         return std.fmt.allocPrint(self.arena.allocator(), "{s}?", .{child_name});
     }
 
@@ -57,11 +58,11 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
     if (Normalized == RawFunction) return persist(self, "function");
     if (Normalized == RawUserdata) return persist(self, "userdata");
     if (Normalized == Mapper.Primitive) return persist(self, "any");
-    if (Normalized == Mapper.Decoder.VarArgs) return persist(self, "any");
+    if (Normalized == Mapper.VarArgs) return persist(self, "any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
     if (comptime Marker.isNativeFunction(Normalized)) return persist(self, "function");
-    if (comptime Mapper.isStringValueType(Normalized)) return persist(self, "string");
+    if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
     return switch (@typeInfo(Normalized)) {
         .bool => persist(self, "boolean"),
@@ -200,7 +201,7 @@ pub fn shouldEmitAlias(comptime T: type) bool {
 /// Returns:
 /// - type: The innermost relevant type.
 pub fn normalizeReferencedType(comptime T: type) type {
-    if (comptime Mapper.isOptional(T)) return normalizeReferencedType(Mapper.optionalChild(T));
+    if (comptime Internals.isOptional(T)) return normalizeReferencedType(Internals.optionalChild(T));
     if (comptime isTransparentTypedWrapper(T)) return unwrapTransparentTypedWrapper(T);
 
     return switch (@typeInfo(T)) {

@@ -7,6 +7,12 @@
 - `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
 - `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
 - `Shape.Closure(T, callback, gc, options)`: New closure shape with optional cleanup via `gc` parameter and `ClosureOptions` for doc metadata.
+- `PrimitiveTag` enum and `Primitive.tag()`: Exposes the Lua type tag of a decoded primitive without accessing variant payloads.
+- `Mapper.Decode.Tracing` namespace with `Segment`, `DecodeError`, and `Trace` types for structured decode error reporting. Errors now carry a `tag` (wrong_type, out_of_range, etc.), `expected` type name, and `got` tag so hooks can branch on the reason instead of parsing message strings.
+- Internal utilities (low-level helpers, functions with extra comptime args, code that depends on library-only invariants like max decode depth) are now grouped under `Internals` namespaces (`Mapper.Internals`, `Mapper.Decode.Internals`, `Handlers.Any.Table.Internals`). Users never need to go deeper, but as with `Bindings`, the door is open if you need it.
+- Compile-time methods validation: `Object`, `Table`, `strEnum`, and `List` now reject non-callable method fields with a clear error naming the field, catching mistakes at the `ZUA_SHAPE` declaration site instead of deep in metatable building.
+- `Mapper.Decoder.pop(ctx, T)`: symmetric counterpart to `Encoder.push`. Reads a typed value from the top of the Lua stack and pops the slot in one call.
+- `State.pushTop()` and `State.popTop()` for save/restore stack management. Use `state.pushTop(); defer state.popTop();` around code that may push/pop values. In debug builds, each `pushTop` records the call site and `cleanup` reports any unbalanced pairs with stack traces, making Lua stack leaks detectable at shutdown.
 
 ### Breaking
 - Overhauled the public API namespace structure. `lua` and `isocline` moved under `Bindings` (`zua.Bindings.lua`). `Encoder`, `Decoder`, and `VarArgs` moved under `Mapper` (`zua.Mapper.Decoder`). `Fn`, `Object`, and `TableView` moved under `Handlers.Typed` (`zua.Handlers.Typed.Fn`). `Table`, `Function`, and `Userdata` moved under `Handlers.Any` (`zua.Handlers.Any.Table`). `Prelude` added as a flat re-export that preserves the old flat access for users that want it.
@@ -14,6 +20,8 @@
 - `Native` absorbed into `Shape`: `Native.new(fn, error_config, doc_options)` replaced by `Shape.Fn(fn, options)`. Single `FnOptions` struct with `description`, `args`, and optional `parse_err_hook`. The `name`, `parse_err_fmt`, `zig_err_hook`, and `zig_err_fmt` fields are removed.
 - `Native.closure` and `Meta.Capture` replaced by `Shape.Closure`: `Native.closure(fn, initial, err, doc)` + `Meta.Capture(T, methods, opts)` replaced by `Shape.Closure(T, callback, gc, options)`. The struct IS the captured state. `gc` is optional (`null` or `void` for none, or a function that follows the normal method path). Closures have no methods (use `Shape.Object` for state + methods).
 - `Docs.add()` rejects callables: Only accepts `.table`, `.object`, `.ptr` types. Native functions and closures produce a compile-time error directing users to `Docs.addBinding()`.
+- `parse_err_hook` signature changed from `fn (*Context, []const u8) void` to `fn (*Context, *const Trace) void`. The hook now receives the full decode trace (path segments + structured `DecodeError`) instead of a flat message string. Use `trace.err.format(arena)` to produce the default error message, or inspect `trace.err.tag`, `trace.err.expected`, `trace.err.got` for structured branching.
+- `VarArgs` moved from `Mapper.Decoder.VarArgs` to `Mapper.VarArgs`. Update imports from `zua.Mapper.Decoder.VarArgs` to `zua.Mapper.VarArgs`.
 
 ### Changed
 - Consolidated all `__ZUA_*` boolean markers into `__ZUA_MARKER`:
@@ -30,6 +38,11 @@
 - `shape/meta.zig` renamed to `shape/shape.zig`: Module entry point renamed. Only public API is re-exported from `shape.zig`. Internal helpers (`getMeta`, `strategyOf`, `MappingStrategy` enum, etc.) are no longer visible through the public module.
 - `Docs.addBinding()` handles closures and `Shape.Fn`: Recognizes `.closure` strategy types and type-valued `Shape.Fn`, generating `---@param` / `---@return` annotations and a `function name(args) end` definition. The `*T` upvalue is excluded from closure docs.
 - Bindings skip self-references: `var_name = var_name` lines are no longer emitted.
+- Decode error messages now include the trace: when argument decoding fails, the error shows the full path to the failing field (e.g. `config.metadata.version: expected i32, got string`). Parameter names from `FnOptions.args` are used automatically. When no hook is set, the trampoline formats the trace and error into the message. When a hook is set, the hook receives the raw trace and can produce a custom message.
+- `Mapper.Decoder.decodeAt`, `decodeValue`, `decodeStruct`, and `parseTuple` now produce trace-based error messages internally. Public signatures are unchanged.
+- `Executor.eval_untyped` renamed to `Executor.evalCount`. Returns `!usize` (number of results) instead of `!void`.
+- `isOptional`, `isStringValueType`, `parseInteger`, and `parseFloat` moved from `Mapper` to `Mapper.Internals`. The old paths still work via re-export in the `Prelude`.
+- All examples updated for `VarArgs` move and new hook signature.
 
 ### Removed
 - `isNativeWrapperType` helper. Replaced by `Marker.isNativeFunction(T)` from the new Marker API.

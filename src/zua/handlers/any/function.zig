@@ -89,7 +89,7 @@ pub fn create(state: *State, callback: anytype) Function {
     if (comptime @typeInfo(CallbackType) == .@"fn" or Marker.isNativeFunction(CallbackType)) {
         var ctx = Context.init(state);
         defer ctx.deinit();
-        Mapper.Encoder.pushValue(&ctx, callback) catch @panic("This must never happen, push a function to lua cannot fail in the zig sense, lua will just panic, so if you see this, please report a bug");
+        Mapper.Encoder.push(&ctx, callback) catch @panic("This must never happen, push a function to lua cannot fail in the zig sense, lua will just panic, so if you see this, please report a bug");
         return Function.fromStack(state, -1);
     }
 
@@ -126,7 +126,7 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
     const ArgsTuple = @TypeOf(args);
     const arg_count = @typeInfo(ArgsTuple).@"struct".fields.len;
     inline for (args) |arg| {
-        try Mapper.Encoder.pushValue(ctx, arg);
+        try Mapper.Encoder.push(ctx, arg);
     }
 
     // Call the function

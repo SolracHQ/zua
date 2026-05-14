@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
+const Mapper = @import("../mapper/mapper.zig");
 const State = @import("../state/state.zig").State;
 const Context = @import("../state/context.zig").Context;
 const Executor = @import("../exec/executor.zig").Executor;
@@ -85,9 +86,6 @@ pub fn run(state: *State, config: *const Config) !void {
 
 /// Evaluate a single REPL source line.
 fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *const Config) !void {
-    const previous_top = lua.getTop(state.luaState);
-    defer lua.setTop(state.luaState, previous_top);
-
     const wrapped = try tryWrapAsExpression(ctx, source);
     const load_source = wrapped orelse source;
     var executor: Executor = .{};
@@ -97,20 +95,20 @@ fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *const C
         .take_error_ownership = false,
     };
 
-    executor.eval_untyped(ctx, exec_config) catch {
+    const count = executor.evalCount(ctx, exec_config) catch {
         const msg = ctx.err orelse "unknown error";
         try printMessage(state, "Error: ", msg);
         return;
     };
-    try printResults(state, previous_top);
+    try printResults(ctx, count);
 }
 
 fn tryWrapAsExpression(ctx: *Context, source: []const u8) !?[]const u8 {
     const trimmed_source = std.mem.trim(u8, source, " \t\r\n");
     if (trimmed_source.len == 0) return null;
 
-    const previous_top = lua.getTop(ctx.state.luaState);
-    defer lua.setTop(ctx.state.luaState, previous_top);
+    ctx.state.pushTop();
+    defer ctx.state.popTop();
 
     const wrapped = try std.fmt.allocPrintSentinel(ctx.arena(), "return {s}", .{trimmed_source}, 0);
     lua.loadString(ctx.state.luaState, wrapped) catch |err| {
@@ -125,23 +123,30 @@ fn tryWrapAsExpression(ctx: *Context, source: []const u8) !?[]const u8 {
 // Output helpers
 
 /// Print all values returned by the last Lua expression or statement.
-fn printResults(state: *State, previous_top: lua.StackIndex) !void {
+fn printResults(ctx: *Context, count: usize) !void {
     var stdout_buffer: [4096]u8 = undefined;
-    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
-    const top = lua.getTop(state.luaState);
-    if (top == previous_top) return;
+    var writer = std.Io.File.Writer.init(.stdout(), ctx.state.io, stdout_buffer[0..]);
 
     var first = true;
-    var index: lua.StackIndex = previous_top + 1;
-    while (index <= top) : (index += 1) {
+    for (0..count) |_| {
         if (!first) try writer.interface.print(", ", .{});
         first = false;
 
-        const abs = lua.absIndex(state.luaState, index);
-        if (lua.toDisplayString(state.luaState, abs)) |v| {
-            try writer.interface.print("{s}", .{v});
-        } else {
-            try writer.interface.print("{s}", .{lua.typeName(state.luaState, lua.valueType(state.luaState, abs))});
+        const prim = try Mapper.Decoder.pop(ctx, Mapper.Primitive);
+        switch (prim) {
+            .nil => try writer.interface.print("nil", .{}),
+            .boolean => |b| {
+                const s = if (b) "true" else "false";
+                try writer.interface.print("{s}", .{s});
+            },
+            .integer => |i| try writer.interface.print("{d}", .{i}),
+            .float => |f| try writer.interface.print("{e}", .{f}),
+            .string => |s| try writer.interface.print("\"{s}\"", .{s}),
+            .table => try writer.interface.print("table", .{}),
+            .function => try writer.interface.print("function", .{}),
+            .light_userdata => try writer.interface.print("userdata:light", .{}),
+            .userdata => try writer.interface.print("userdata", .{}),
+            .handle => try writer.interface.print("handle", .{}),
         }
     }
     try writer.interface.print("\n", .{});

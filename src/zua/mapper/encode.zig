@@ -13,10 +13,12 @@ const Function = @import("../handlers/any/function.zig");
 const Userdata = @import("../handlers/any/userdata.zig").Userdata;
 const Context = @import("../state/context.zig");
 const State = @import("../state/state.zig");
+
+const Internals = @import("internals.zig");
+const Mapper = @import("mapper.zig");
 const Shape = @import("../shape/shape.zig");
 const Metadata = @import("../shape/metadata.zig");
 const MetaTable = @import("../metatable.zig");
-const Mapper = @import("mapper.zig");
 const Marker = @import("../marker.zig");
 
 pub const Encoder = @This();
@@ -37,15 +39,15 @@ const Primitive = Mapper.Primitive;
 ///
 /// Example:
 /// ```zig
-/// Mapper.Encoder.pushValue(ctx, 123);
-/// Mapper.Encoder.pushValue(ctx, "hello");
+/// Mapper.Encoder.push(ctx, 123);
+/// Mapper.Encoder.push(ctx, "hello");
 /// ```
-pub fn pushValue(ctx: *Context, value: anytype) !void {
+pub fn push(ctx: *Context, value: anytype) !void {
     const T = @TypeOf(value);
 
-    if (comptime Mapper.isOptional(T)) {
+    if (comptime Internals.isOptional(T)) {
         if (value) |unwrapped| {
-            try pushValue(ctx, unwrapped);
+            try push(ctx, unwrapped);
         } else {
             lua.pushNil(ctx.state.luaState);
         }
@@ -63,14 +65,14 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
     }
 
     if (comptime @typeInfo(T) == .@"fn") {
-        return try pushValue(ctx, Shape.Fn(value, .{}));
+        return try push(ctx, Shape.Fn(value, .{}));
     }
 
     // Check for custom encode hook first
     if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
         const meta = comptime Metadata.getMeta(T);
         if (try meta.EncodeHook(ctx, value)) |encoded| {
-            return pushValue(ctx, encoded);
+            return push(ctx, encoded);
         }
     }
 
@@ -82,7 +84,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
         return;
     }
 
-    if (comptime Mapper.isStringValueType(T)) {
+    if (comptime Internals.isStringValueType(T)) {
         lua.pushString(ctx.state.luaState, value);
         return;
     }
@@ -143,7 +145,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
                 if (@typeInfo(Pointee) == .array) {
                     const arr_info = @typeInfo(Pointee).array;
                     const slice: []const arr_info.child = value[0..arr_info.len];
-                    pushValue(ctx, slice);
+                    push(ctx, slice);
                     return;
                 }
 
@@ -165,7 +167,7 @@ pub fn pushValue(ctx: *Context, value: anytype) !void {
                 @compileError(std.fmt.comptimePrint("Pointer to {s} is not yet supported for encoding. Please open an issue with your use case. (Custom encode hooks do not yet support pointer types; this requires a PtrEncodeHook design that is still pending.)", .{@typeName(Pointee)}));
             },
             .slice => {
-                if (comptime Mapper.isStringValueType(T)) {
+                if (comptime Internals.isStringValueType(T)) {
                     @compileError("This path must be unreachable since we already push string-like types as Lua strings above. Report a bug if you hit this error.");
                 }
                 const size = std.math.cast(i32, value.len) orelse try ctx.failWithFmtTyped(i32, "Slice is too large to push as Lua table: length {d} exceeds Lua's maximum table size {d}", .{ value.len, std.math.maxInt(c_int) });
@@ -199,10 +201,16 @@ pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
         .integer => |i| lua.pushInteger(ctx.state.luaState, i),
         .float => |f| lua.pushNumber(ctx.state.luaState, f),
         .string => |s| lua.pushString(ctx.state.luaState, s),
-        .table => |t| try pushValue(ctx, t),
-        .function => |f| try pushValue(ctx, f),
+        .table => |t| try push(ctx, t),
+        .function => |f| try push(ctx, f),
         .light_userdata => |p| lua.pushLightUserdata(ctx.state.luaState, p),
-        .userdata => |u| try pushValue(ctx, u),
+        .userdata => |u| try push(ctx, u),
+        .handle => |h| switch (h) {
+            .borrowed, .stack_owned => |idx| lua.pushValue(ctx.state.luaState, idx),
+            .registry_owned => |ref| {
+                _ = lua.rawGetI(ctx.state.luaState, lua.REGISTRY_INDEX, ref);
+            },
+        },
     }
 }
 
@@ -242,7 +250,7 @@ pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
         },
         .pointer => |pointer| switch (pointer.size) {
             .slice => {
-                if (comptime Mapper.isStringValueType(T)) {
+                if (comptime Internals.isStringValueType(T)) {
                     @compileError(std.fmt.comptimePrint("String-like value {s} cannot be filled into a Lua table: string values are always pushed as Lua strings, not tables.", .{@typeName(T)}));
                 }
 
@@ -281,7 +289,7 @@ pub fn inferArrayCapacity(value: anytype) i32 {
         .@"union" => 0, // Tagged unions have no array elements
         .array => @intCast(value.len),
         .pointer => |pointer| switch (pointer.size) {
-            .slice => if (comptime Mapper.isStringValueType(T))
+            .slice => if (comptime Internals.isStringValueType(T))
                 @compileError(std.fmt.comptimePrint("String-like slice {s} cannot be converted to a Lua table: strings are always represented as Lua strings, not tables.", .{@typeName(T)}))
             else
                 std.math.cast(i32, value.len) orelse @panic("slice too large for Lua table"),

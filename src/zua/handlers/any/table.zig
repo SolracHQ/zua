@@ -4,6 +4,8 @@ const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Handle = @import("../handlers.zig").Handle;
 const Mapper = @import("../../mapper/mapper.zig");
+const Decoder = @import("../../mapper/decode/decoder.zig");
+const Trace = @import("../../mapper/decode/tracing.zig").Trace;
 const Context = @import("../../state/context.zig").Context;
 const State = @import("../../state/state.zig");
 const Function = @import("function.zig");
@@ -156,13 +158,13 @@ pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) !void {
 
     if (comptime isStringKeyType(Key)) {
         const key_text = coerceStringKey(key);
-        try Mapper.Encoder.pushValue(ctx, value);
+        try Mapper.Encoder.push(ctx, value);
         lua.setField(self.state.luaState, index, key_text);
         return;
     }
 
     const key_value = coerceIntegerKey(key);
-    try Mapper.Encoder.pushValue(ctx, value);
+    try Mapper.Encoder.push(ctx, value);
     lua.setIndex(self.state.luaState, index, key_value);
 }
 
@@ -195,8 +197,25 @@ pub fn get(self: Table, ctx: *Context, key: anytype, comptime T: type) !T {
     // Drop the access copy while keeping the fetched value on the stack.
     lua.remove(self.state.luaState, index);
 
-    return try Mapper.Decoder.decodeAt(ctx, -1, T);
+    return try Decoder.decodeAt(ctx, -1, T);
 }
+
+pub const Internals = struct {
+    pub fn getDepth(self: Table, ctx: *Context, key: anytype, comptime T: type, trace: Trace) !T {
+        const Key = @TypeOf(key);
+        const index = self.pushForAccess();
+
+        if (comptime isStringKeyType(Key)) {
+            _ = lua.getField(self.state.luaState, index, coerceStringKey(key));
+        } else {
+            _ = lua.getIndex(self.state.luaState, index, coerceIntegerKey(key));
+        }
+
+        lua.remove(self.state.luaState, index);
+
+        return try Decoder.decodeAtDepth(ctx, -1, T, trace);
+    }
+};
 
 /// Checks if `key` exists in the table.
 ///

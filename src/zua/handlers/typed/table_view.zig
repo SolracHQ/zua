@@ -9,7 +9,7 @@
 //! is the Lua representation and a typed copy is convenient for mutation.
 
 const Context = @import("../../state/context.zig");
-const Decoder = @import("../../mapper/decode.zig").Decoder;
+const Decoder = @import("../../mapper/mapper.zig").Decoder.Internals;
 const Primitive = @import("../../mapper/mapper.zig").Primitive;
 const Mapper = @import("../../mapper/mapper.zig");
 const Table = @import("../any/table.zig").Table;

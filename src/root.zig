@@ -34,4 +34,5 @@ pub const Prelude = @import("prelude.zig");
 
 test {
     std.testing.refAllDecls(@This());
+    _ = @import("test.zig");
 }
