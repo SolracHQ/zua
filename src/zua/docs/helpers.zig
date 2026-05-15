@@ -5,18 +5,17 @@
 //! Lua annotations.
 
 const std = @import("std");
-const Docs = @import("./docs.zig");
-const emit = @import("emit.zig");
-const types = @import("types.zig");
-const DisplayContext = types.DisplayContext;
-const Context = @import("../state/context.zig");
-const Shape = @import("../shape/shape.zig");
-const ArgInfo = @import("../shape/fn.zig").ArgInfo;
-const Handlers = @import("../handlers/handlers.zig");
+const Generator = @import("generator.zig").Generator;
+const Emit = @import("emit.zig");
+const DisplayContext = @import("types.zig").DisplayContext;
+const Context = @import("../context.zig");
+const Shape = @import("../shape/api.zig");
+const ArgInfo = Shape.Options.ArgInfo;
+const Handlers = @import("../handlers/api.zig");
 const RawFunction = @import("../handlers/any/function.zig").Function;
 const RawTable = @import("../handlers/any/table.zig").Table;
 const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
-const Mapper = @import("../mapper/mapper.zig");
+const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
 const MetaData = @import("../shape/metadata.zig");
 const Marker = @import("../marker.zig");
@@ -38,7 +37,7 @@ const TableView = @import("../handlers/typed/table_view.zig");
 ///
 /// Returns:
 /// - []const u8: Arena-allocated Lua type name string.
-pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
+pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
     if (comptime Internals.isOptional(T)) {
         const child_name = try displayTypeName(self, Internals.optionalChild(T), ctx);
         return std.fmt.allocPrint(self.arena.allocator(), "{s}?", .{child_name});
@@ -104,7 +103,7 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
 ///
 /// Returns:
 /// - []const u8: Arena-allocated Lua function signature string.
-pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
+pub fn functionHandleSignature(self: *Generator, comptime T: type) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "fun(");
 
@@ -113,7 +112,7 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
             if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
             const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{index + 1});
             const arg_type_str = try displayTypeName(self, field.type, .parameter);
-            try emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type_str });
+            try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type_str });
         }
     }
 
@@ -141,17 +140,18 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
 ///
 /// Returns:
 /// - []const u8: Arena-allocated copy of `text`.
-pub fn persist(self: *Docs, text: []const u8) ![]const u8 {
+pub fn persist(self: *Generator, text: []const u8) ![]const u8 {
     return self.arena.allocator().dupe(u8, text);
 }
 
-/// Returns the description from a native function wrapper type.
+/// Returns the description string from a `Shape.Fn` or closure wrapper type.
 pub fn nativeFnDesc(comptime T: type) []const u8 {
     return T.description;
 }
 
-/// Returns the wrapper type for a method value.
-/// Accepts a Zig function (wraps with Shape.Fn) or a native function type (as-is).
+/// Wraps a Zig function or native function type into a documentation-ready
+/// callable type. Plain Zig functions get wrapped with `Shape.Fn`; native
+/// function types pass through as-is.
 pub fn wrapMethod(comptime method_value: anytype) type {
     const T = @TypeOf(method_value);
     if (comptime @typeInfo(T) == .@"fn") return Shape.Fn(method_value, .{});
@@ -193,7 +193,7 @@ pub fn shouldEmitAlias(comptime T: type) bool {
 }
 
 /// Normalizes a type for reference comparison by unwrapping optionals,
-/// transparent wrappers, and single-element pointers to named types.
+/// transparent wrappers, and single-element pointers to named Types.
 ///
 /// Arguments:
 /// - T: The type to normalize.
@@ -347,7 +347,7 @@ pub fn isSelfParam(comptime ParamType: type, comptime OwnerType: type) bool {
 ///
 /// Returns:
 /// - []const u8: Arena-allocated shape string like `"{ name: string?, pid: integer? }"`.
-pub fn structToAliasShape(self: *Docs, comptime T: type) ![]const u8 {
+pub fn structToAliasShape(self: *Generator, comptime T: type) ![]const u8 {
     const info = @typeInfo(T);
     if (comptime info != .@"struct") @compileError("structToAliasShape requires a struct type, got " ++ @typeName(T));
     const fields = info.@"struct".fields;
@@ -357,7 +357,7 @@ pub fn structToAliasShape(self: *Docs, comptime T: type) ![]const u8 {
     inline for (fields, 0..) |field, i| {
         if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
         const type_str = try displayTypeName(self, field.type, .field);
-        try emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
+        try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
     }
     try out.appendSlice(self.arena.allocator(), " }");
     return out.toOwnedSlice(self.arena.allocator());

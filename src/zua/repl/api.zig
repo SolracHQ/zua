@@ -6,30 +6,31 @@
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const Mapper = @import("../mapper/mapper.zig");
-const State = @import("../state/state.zig").State;
-const Context = @import("../state/context.zig").Context;
-const Executor = @import("../exec/executor.zig").Executor;
+const Mapper = @import("../mapper/api.zig");
+const Handlers = @import("../handlers/api.zig");
+const State = @import("../state.zig").State;
+const Context = @import("../context.zig").Context;
+const Executor = @import("../executor.zig").Executor;
 const Object = @import("../handlers/typed/object.zig").Object;
 
-pub const highlight = @import("highlight.zig");
-pub const completion = @import("completion.zig");
+pub const Highlight = @import("highlight.zig");
+pub const Completion = @import("completion.zig");
 pub const isocline = @import("../../isocline/isocline.zig");
 
 pub const Repl = @This();
 
 // Exported helpers and callback types used by REPL clients.
-pub const Completer = completion.Completer;
-pub const CompletionHook = completion.CompletionHook;
+pub const Completer = Completion.Completer;
+pub const CompletionHook = Completion.CompletionHook;
 
-const HighlightState = highlight.HighlightState;
+const HighlightState = Highlight.HighlightState;
 
 pub const Config = @import("config.zig");
 
 /// Runs the interactive Zua REPL session using the provided `State`.
 ///
 /// The REPL supports optional history persistence, syntax highlighting, and
-/// tab completion. Each entered line is evaluated in a fresh `Context`, which
+/// tab Completion. Each entered line is evaluated in a fresh `Context`, which
 /// ensures temporary allocations are reclaimed between commands.
 pub fn run(state: *State, config: *const Config) !void {
     if (config.history_path) |path| {
@@ -46,22 +47,22 @@ pub fn run(state: *State, config: *const Config) !void {
         .config = config,
     };
 
-    isocline.setDefaultHighlighter(highlight.highlightCallbackC, &hl_state);
+    isocline.setDefaultHighlighter(Highlight.highlightCallbackC, &hl_state);
     defer isocline.setDefaultHighlighter(null, null);
 
     // Completion state with a session-scoped Completer as a zua Object.
-    var comp_state = completion.CompletionState{
+    var comp_state = Completion.CompletionState{
         .config = config,
         .ctx = undefined,
         .completer = blk: {
-            const initial = completion.Completer{
+            const initial = Completion.Completer{
                 ._env = null,
                 ._ctx = undefined,
             };
-            break :blk Object(completion.Completer).create(state, initial).takeOwnership();
+            break :blk Object(Completion.Completer).create(state, initial).takeOwnership();
         },
     };
-    isocline.setDefaultCompleter(completion.completionCallbackC, &comp_state);
+    isocline.setDefaultCompleter(Completion.completionCallbackC, &comp_state);
     defer comp_state.completer.release();
     defer isocline.setDefaultCompleter(null, null);
 
@@ -133,6 +134,7 @@ fn printResults(ctx: *Context, count: usize) !void {
         first = false;
 
         const prim = try Mapper.Decoder.pop(ctx, Mapper.Primitive);
+        defer Handlers.release(Mapper.Primitive, prim);
         switch (prim) {
             .nil => try writer.interface.print("nil", .{}),
             .boolean => |b| {

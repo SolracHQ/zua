@@ -1,21 +1,69 @@
+//! Generates the Lua CFunction trampolines that bridge Zig functions
+//! and closures into callable Lua values. Each trampoline is a compiled
+//! C closure that decodes arguments from the Lua stack, calls back into
+//! Zig, and pushes return values. Used by `Shape.Fn` and `Shape.Closure`.
+
 const std = @import("std");
 pub const lua = @import("../../lua/lua.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const Mapper = @import("../mapper/api.zig");
 const Decoder = @import("../mapper/decode/decoder.zig");
 const Tracing = @import("../mapper/decode/tracing.zig");
-const introspect = @import("../introspect.zig");
-const State = @import("../state/state.zig");
-const Context = @import("../state/context.zig");
+const Introspect = @import("../introspect.zig");
+const State = @import("../state.zig");
+const Context = @import("../context.zig");
 const Marker = @import("../marker.zig");
-const FnOptions = @import("fn.zig").FnOptions;
-const ArgInfo = @import("fn.zig").ArgInfo;
 
+/// Describes one parameter of a Zig function for Lua annotation generation.
+///
+/// Attach these to `FnOptions.args` so the docs generator produces
+/// `---@param name description` lines with proper parameter names instead
+/// of generic `arg1`, `arg2`, etc.
+pub const ArgInfo = struct {
+    /// The parameter name as it appears in the Lua annotation.
+    name: []const u8,
+    /// Optional description shown after the type in `---@param`.
+    description: ?[]const u8 = null,
+};
+
+/// Options passed to `Shape.Fn` to attach documentation metadata.
+///
+/// All fields are optional. Use `.{}` or omit for bare-bones wrapping.
+///
+/// Example:
+/// ```zig
+/// const my_fn = zua.Shape.Fn(add, .{
+///     .description = "Adds two integers together.",
+///     .args = &.{
+///         .{ .name = "a", .description = "First addend." },
+///         .{ .name = "b", .description = "Second addend." },
+///     },
+/// });
+/// ```
+pub const FnOptions = struct {
+    /// Description shown as a `--` comment before the function definition
+    /// in generated Lua stubs.
+    description: []const u8 = "",
+
+    /// Parameter metadata for docs. Each entry describes one Lua argument
+    /// in order, excluding `*Context` and `*T` (those are injected
+    /// automatically and never appear in annotations).
+    args: []const ArgInfo = &.{},
+
+    /// Optional hook called when argument decoding fails at runtime.
+    /// The hook receives the formatted path and error message. Can override
+    /// by setting `ctx.err`. If unset, the default path-formatting is used.
+    parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = null,
+};
+
+/// Builds a callable wrapper type for a Zig function. The returned type
+/// carries a `trampoline()` method that produces the Lua CFunction closure.
+/// Arguments are decoded from the Lua stack based on the function signature.
 pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime options: FnOptions) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
     const ReturnType = function_info.return_type orelse
         @compileError("Zig native functions must have an explicit return type (use void if none)");
-    const ActualReturnType = introspect.unwrapErrorUnion(ReturnType);
+    const ActualReturnType = Introspect.unwrapErrorUnion(ReturnType);
 
     comptime validateKind(hasContext, function_info);
     comptime validateVarArgs(function_info);
@@ -105,7 +153,7 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
             }
 
             const raw = @call(.auto, function, call_args);
-            return if (comptime introspect.isErrorUnion(ReturnType)) try raw else raw;
+            return if (comptime Introspect.isErrorUnion(ReturnType)) try raw else raw;
         }
 
         fn pushResult(ctx: *Context, result: ActualReturnType) !void {
@@ -136,12 +184,15 @@ pub fn makeFn(comptime function: anytype, comptime hasContext: bool, comptime op
     };
 }
 
+/// Builds a callable wrapper type for a closure. The struct `T` is stored
+/// as upvalue 1 in the Lua C closure and recovered on each call. Optional
+/// `__gc` cleanup is wired through the metatable.
 pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime options: FnOptions) type {
     const CallbackType = @TypeOf(callback);
     const cb_info = @typeInfo(CallbackType).@"fn";
     const ReturnType = cb_info.return_type orelse
         @compileError("Closure callback must have an explicit return type (use void if none)");
-    const ActualReturnType = introspect.unwrapErrorUnion(ReturnType);
+    const ActualReturnType = Introspect.unwrapErrorUnion(ReturnType);
 
     const has_context = comptime cb_info.params.len > 0 and
         cb_info.params[0].type != null and
@@ -236,7 +287,7 @@ pub fn makeClosure(comptime T: type, comptime callback: anytype, comptime option
             }
 
             const raw = @call(.auto, callback, call_args);
-            return if (comptime introspect.isErrorUnion(ReturnType)) try raw else raw;
+            return if (comptime Introspect.isErrorUnion(ReturnType)) try raw else raw;
         }
 
         fn pushResult(ctx: *Context, result: ActualReturnType) !void {
@@ -322,7 +373,7 @@ fn buildVarArgsFor(
 
 fn pushResultFor(ctx: *Context, result: anytype, comptime T: type) !void {
     if (comptime returnValueCountFor(T) == 0) return;
-    if (comptime introspect.isTuple(T)) {
+    if (comptime Introspect.isTuple(T)) {
         inline for (result) |val| try Mapper.Encoder.push(ctx, val);
     } else {
         try Mapper.Encoder.push(ctx, result);

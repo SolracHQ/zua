@@ -3,10 +3,10 @@
 //! centralize the logic for pushing arguments, calling Lua, and decoding results.
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
-const Handle = @import("../handlers.zig").Handle;
-const Mapper = @import("../../mapper/mapper.zig");
-const State = @import("../../state/state.zig");
-const Context = @import("../../state/context.zig").Context;
+const Handle = @import("../api.zig").Handle;
+const Mapper = @import("../../mapper/api.zig");
+const State = @import("../../state.zig");
+const Context = @import("../../context.zig").Context;
 const Marker = @import("../../marker.zig");
 const MetaTable = @import("../../metatable.zig");
 

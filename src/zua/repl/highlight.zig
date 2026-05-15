@@ -4,13 +4,13 @@
 //! understood by isocline's ic_highlight_formatted. The output string
 //! must match the raw input character-for-character outside of the tags.
 const std = @import("std");
-const isocline = @import("../../isocline/isocline.zig");
-const lexer = @import("lexer.zig");
-const Config = @import("config.zig");
-const Context = @import("../state/context.zig");
 const lua = @import("../../lua/lua.zig");
-const Meta = @import("../shape/shape.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const isocline = @import("../../isocline/isocline.zig");
+const Lexer = @import("lexer.zig");
+const Config = @import("config.zig");
+const Context = @import("../context.zig");
+const Meta = @import("../shape/api.zig");
+const Mapper = @import("../mapper/api.zig");
 
 const Primitive = Mapper.Primitive;
 
@@ -27,7 +27,7 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_SHAPE = Meta.strEnum(TokenKind, .{}, .{
+    pub const ZUA_SHAPE = Meta.StrEnum(TokenKind, .{}, .{
         .name = "TokenKind",
         .description = "Token kinds recognized by the REPL syntax highlighter.",
     });
@@ -234,7 +234,7 @@ pub fn highlightCallbackC(
 
 // Internal helpers
 
-fn tokenKindFromLexer(kind: lexer.TokenKind) ?TokenKind {
+fn tokenKindFromLexer(kind: Lexer.TokenKind) ?TokenKind {
     return switch (kind) {
         .keyword => .keyword,
         .keyword_value => .keyword_value,
@@ -308,7 +308,7 @@ pub fn process(
     config: *const Config,
 ) ?[]const u8 {
     const arena = ctx.arena();
-    var tokens = lexer.lex(arena, source) catch return null;
+    var tokens = Lexer.lex(arena, source) catch return null;
     defer tokens.deinit(arena);
 
     // Pre-size: bbcode tags can add ~30 bytes per token in the worst case.

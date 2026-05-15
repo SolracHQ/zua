@@ -1,13 +1,20 @@
+//! Compile-time metadata builder for `ZUA_SHAPE` declarations. Produces
+//! the struct type that carries a type's translation strategy, hooks,
+//! methods, and documentation fields. The encoder, decoder, and docs
+//! generator query this metadata through `getMeta` and `strategyOf`.
+
 const std = @import("std");
-const EncodeHookType = @import("./shape.zig").EncodeHookType;
-const DecodeHookType = @import("./shape.zig").DecodeHookType;
-const DocsHookType = @import("./shape.zig").DocsHookType;
-const Mapper = @import("../mapper/mapper.zig");
-const Primitive = Mapper.Primitive;
-const Context = @import("../state/context.zig");
-const helpers = @import("./internal.zig");
 const builtin = @import("builtin");
+
+const EncodeHookType = @import("./helpers.zig").EncodeHookType;
+const DecodeHookType = @import("./helpers.zig").DecodeHookType;
+const DocsHookType = @import("./helpers.zig").DocsHookType;
+const Mapper = @import("../mapper/api.zig");
+const Primitive = Mapper.Primitive;
+const Context = @import("../context.zig");
+const Assertions = @import("./assertions.zig");
 const Marker = @import("../marker.zig");
+const Trampoline = @import("./trampoline.zig");
 
 pub const MappingStrategy = enum {
     table,
@@ -92,7 +99,7 @@ pub fn VariantDescriptions(comptime T: type) type {
 /// Arguments:
 /// - Type: The original Zig type the metadata describes.
 /// - ProxyType: The type used as an intermediate representation during encode.
-///   Most strategies use `void`; `strEnum` uses `[]const u8`.
+///   Most strategies use `void`; `StrEnum` uses `[]const u8`.
 /// - strategy: The mapping strategy (table, object, ptr, closure).
 /// - encode_hook: Optional encode hook. `null` produces a no-op default.
 /// - decode_hook: Optional decode hook. `null` produces a no-op default.
@@ -227,7 +234,7 @@ pub fn DefaultGuard(comptime T: type) type {
 /// Internally this is used by code that needs to compute metadata shape at
 /// compile time without materializing a separate metadata value.
 pub inline fn getMeta(comptime T: type) type {
-    helpers.assertContainerType(T);
+    Assertions.assertContainerType(T);
     // Force evaluation of all public declarations in debug builds so
     // misspelled ZUA_SHAPE constants are caught at compile time.
     // Skipped in release to preserve lazy evaluation semantics.
@@ -276,7 +283,7 @@ pub inline fn descriptionOf(comptime T: type) []const u8 {
 
 /// Returns the proxy type used by `T`'s encode hook.
 ///
-/// For most strategies this is `void`, but helpers such as `strEnum()` use a
+/// For most strategies this is `void`, but helpers such as `StrEnum()` use a
 /// concrete proxy type like `[]const u8` to describe the value pushed into Lua
 /// when a custom encode hook is active.
 pub inline fn proxyTypeOf(comptime T: type) type {
@@ -297,6 +304,46 @@ pub inline fn attributeDescriptionsOf(comptime T: type) @TypeOf(getMeta(T).Attri
 /// or an empty struct when no variant-level documentation was declared.
 pub inline fn variantDescriptionsOf(comptime T: type) @TypeOf(getMeta(T).VariantDescriptions) {
     return comptime getMeta(T).VariantDescriptions;
+}
+
+/// Builds metadata for a closure-shaped type.
+///
+/// The struct is stored as the closure's captured state. Each call from
+/// Lua invokes `callback` with `*T` as the first parameter (or second
+/// if `*Context` comes first). Remaining parameters are decoded from Lua.
+pub fn MetaDataForClosure(comptime T: type, comptime callback: anytype, comptime gc: anytype, comptime opts: Trampoline.FnOptions) type {
+    Assertions.assertContainerType(T);
+    if (comptime @typeInfo(T) != .@"struct")
+        @compileError("Closure requires a struct type, got " ++ @typeName(T));
+
+    const gc_methods = if (gc == null or gc == void) .{} else .{ .__gc = gc };
+    const trampoline_type = comptime Trampoline.makeClosure(T, callback, .{ .args = opts.args, .description = opts.description });
+
+    return struct {
+        pub const Strategy = MappingStrategy.closure;
+        pub const Proxy = void;
+        pub const EncodeHook: EncodeHookType(T, void) = struct {
+            fn hook(_: *Context, _: T) anyerror!?void {
+                return null;
+            }
+        }.hook;
+        pub const DecodeHook: DecodeHookType(T) = struct {
+            fn hook(_: *Context, _: Primitive) anyerror!?T {
+                return null;
+            }
+        }.hook;
+        pub const Methods = gc_methods;
+        pub const Description: []const u8 = opts.description;
+        pub const Name: []const u8 = blk: {
+            const full: []const u8 = @typeName(T);
+            const dot = std.mem.lastIndexOfScalar(u8, full, '.');
+            break :blk if (dot) |d| full[d + 1 ..] else full;
+        };
+        pub const AttributeDescriptions = .{};
+        pub const VariantDescriptions = .{};
+        pub const DocsHook: ?DocsHookType(T) = null;
+        pub const __ZUA_CLOSURE_TRAMPOLINE = trampoline_type;
+    };
 }
 
 /// Returns the trampoline type for a closure type `T`.

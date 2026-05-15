@@ -4,9 +4,9 @@
 //! Lua source from a string or file path. It captures optional stack trace
 //! behavior and can preserve error messages beyond the call-local `Context`.
 const std = @import("std");
-const lua = @import("../../lua/lua.zig");
-const Mapper = @import("../mapper/mapper.zig");
-const Context = @import("../state/context.zig");
+const lua = @import("../lua/lua.zig");
+const Mapper = @import("mapper/api.zig");
+const Context = @import("context.zig");
 
 pub const Executor = @This();
 

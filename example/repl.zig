@@ -1,7 +1,7 @@
 const std = @import("std");
 const zua = @import("zua");
 const REPL = zua.Repl;
-const highlight = REPL.highlight;
+const highlight = REPL.Highlight;
 const isocline = REPL.isocline;
 
 /// A simple global function exported into the REPL.

@@ -1,10 +1,19 @@
+//! Fat wrapper over a Lua VM instance. Owns the `lua_State`, allocator,
+//! I/O interface, and metatable cache. Lives as long as the Lua state
+//! lives, stored as Lua userdata with `__gc` for automatic cleanup.
+//!
+//! Create one with `init` for a fresh Lua environment or `libState` when
+//! you receive an existing `lua_State*` from a host that already has one.
+//! The pointer returned by either path is stable and safe to capture in
+//! callbacks. Recover it from a raw `lua_State*` with `fromState`.
+
 const std = @import("std");
 const builtin = @import("builtin");
-const lua = @import("../../lua/lua.zig");
-const Table = @import("../handlers/any/table.zig").Table;
-const Mapper = @import("../mapper/mapper.zig");
+const lua = @import("../lua/lua.zig");
+const Table = @import("handlers/any/table.zig").Table;
+const Mapper = @import("mapper/api.zig");
 const Context = @import("context.zig");
-const MetaTable = @import("../metatable.zig");
+const MetaTable = @import("metatable.zig");
 
 const registry_key_prefix: [:0]const u8 = "zua_zua_";
 var zua_registry_key: [:0]const u8 = "zua_zua";
@@ -14,18 +23,14 @@ const SavedTop = struct {
     trace: if (builtin.mode == .Debug) struct { frames: [8]usize, count: usize } else void,
 };
 
-/// A Fat Wrapper over Lua State that owns the Lua state, allocator, I/O interface, and cached metatables.
-/// Is the main component of State API, the only canonical way to access Lua state and registry, and the main entry point for all operations.
-///
-/// Create one with `State.init(allocator, io)` for a fresh Lua state, or `State.libState(L, allocator, io, suffix)`
-/// for an existing state received by a shared library loader. Call `deinit` to close the Lua state.
-///
-/// Use `globals()` and `registry()` to attach tables or functions.
+/// Stable pointer, safe to capture in callbacks. Valid until `deinit` is called.
 pub const State = @This();
 
 allocator: std.mem.Allocator,
 luaState: *lua.State,
-// Maps @typeName(T) to a LUA_REGISTRYINDEX ref for the cached metatable.
+/// Each metatable is keyed by `@typeName(T)` so that types with the same
+/// name in different modules share a cached metatable. References are
+/// stored in the Lua registry and unrefed on cleanup.
 metatable_cache: std.StringHashMap(c_int),
 /// Io interface for basically anything since zif 0.16.0
 io: std.Io,
@@ -99,12 +104,8 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io) !*State {
     return self;
 }
 
-/// Creates or reuses a ZuaState userdata inside an existing Lua state.
-/// This is intended for shared libraries and module loaders that receive an
-/// existing `lua_State` pointer from `luaopen_*`.
-///
-/// The returned pointer is stored in the Lua registry under a suffix-specific
-/// key derived from `zua_zua_`.
+/// Creates or reuses a ZuaState inside an existing `lua_State*`. Uses a
+/// suffix-based registry key so dylib reloads can recover the same state.
 pub fn libState(
     L: *lua.State,
     allocator: std.mem.Allocator,
@@ -138,13 +139,15 @@ pub fn libState(
     return self;
 }
 
-/// Closes the Lua state. Cleanup of Zua-owned runtime state is handled by the
-/// `__gc` metamethod on the state userdata when the Lua state is closed.
+/// Closes the Lua state. Zua-owned runtime state is cleaned up when Lua
+/// collects the state userdata.
 pub fn deinit(self: *State) void {
     lua.deinit(self.luaState);
 }
 
-/// Pushes the cached metatable for T onto the stack, creating it on first call.
+/// Pushes the metatable for T onto the stack. On first call the metatable
+/// is built from `T`'s `ZUA_SHAPE` metadata: declared methods and metamethods
+/// are wired through trampolines and cached by `@typeName(T)`.
 pub fn getOrCreateMetatable(self: *State, comptime T: type) void {
     const key = @typeName(T);
 
@@ -160,13 +163,9 @@ pub fn getOrCreateMetatable(self: *State, comptime T: type) void {
     self.metatable_cache.put(key, ref) catch @panic("out of memory storing metatable ref");
 }
 
-/// Returns a borrowed handle to the Lua globals table.
-///
-/// The returned `Table` points to `LUA_RIDX_GLOBALS` in the registry and is
-/// valid as long as the Lua state is alive. Use `addGlobals` to write into it.
-///
-/// Returns:
-/// - Table: A borrowed handle to `_G`.
+/// Borrowed handle to the Lua globals table (`_G`). Each call pushes a
+/// value onto the Lua stack that must be released or balanced. Use
+/// `addGlobals` to write into it without managing the stack yourself.
 pub fn globals(self: *State) Table {
     _ = lua.getIndex(self.luaState, lua.REGISTRY_INDEX, lua.RIDX_GLOBALS);
     return Table.fromStack(self, -1);
@@ -177,11 +176,12 @@ pub fn globals(self: *State) Table {
 /// can be called multiple times to register independent subsystems.
 pub fn addGlobals(self: *State, ctx: *Context, value: anytype) !void {
     const _globals = self.globals();
-    try Mapper.Encoder.fillTable(ctx, _globals, value);
+    try Mapper.Encoder.Internals.fillTable(ctx, _globals, value);
 }
 
-/// Pushes the Lua registry onto the stack and returns an absolute-indexed handle.
-/// Use this to store host state via `setLightUserdata("key", &state)`.
+/// Borrowed handle to the Lua registry. Each call pushes a value onto the
+/// Lua stack that must be released or balanced. Use this to store host state
+/// via `setLightUserdata("key", &state)`.
 pub fn registry(self: *State) Table {
     lua.pushValue(self.luaState, lua.REGISTRY_INDEX);
     return Table.fromStack(self, -1);

@@ -12,22 +12,22 @@ pub const Bindings = struct {
 };
 
 // Core state
-pub const Context = @import("zua/state/context.zig");
-pub const State = @import("zua/state/state.zig");
+pub const Context = @import("zua/context.zig");
+pub const State = @import("zua/state.zig");
 
 // Raw Lua value handles (Table, Function, Userdata) and ownership helpers
-pub const Handlers = @import("zua/handlers/handlers.zig");
+pub const Handlers = @import("zua/handlers/api.zig");
 
 // Encode/decode pipeline
-pub const Mapper = @import("zua/mapper/mapper.zig");
+pub const Mapper = @import("zua/mapper/api.zig");
 
 // Shapes how Zig types look from the Lua side
-pub const Shape = @import("zua/shape/shape.zig");
+pub const Shape = @import("zua/shape/api.zig");
 
 // REPL, execution, and docs
-pub const Repl = @import("zua/repl/repl.zig");
-pub const Executor = @import("zua/exec/executor.zig");
-pub const Docs = @import("zua/docs/docs.zig");
+pub const Repl = @import("zua/repl/api.zig");
+pub const Executor = @import("zua/executor.zig");
+pub const Docs = @import("zua/docs/api.zig");
 
 // Flat re-export for users that already know the API
 pub const Prelude = @import("prelude.zig");

@@ -2,12 +2,12 @@
 //! They support borrowed, stack-owned, and registry-owned lifetimes and centralize conversions between Zig values and Lua tables.
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
-const Handle = @import("../handlers.zig").Handle;
-const Mapper = @import("../../mapper/mapper.zig");
+const Handle = @import("../api.zig").Handle;
+const Mapper = @import("../../mapper/api.zig");
 const Decoder = @import("../../mapper/decode/decoder.zig");
 const Trace = @import("../../mapper/decode/tracing.zig").Trace;
-const Context = @import("../../state/context.zig").Context;
-const State = @import("../../state/state.zig");
+const Context = @import("../../context.zig").Context;
+const State = @import("../../state.zig");
 const Function = @import("function.zig");
 const Userdata = @import("userdata.zig").Userdata;
 
@@ -104,8 +104,8 @@ pub fn create(state: *State, array_capacity: i32, record_capacity: i32) Table {
 /// defer tbl.release();
 /// ```
 pub fn from(state: *State, value: anytype) Table {
-    const table = Table.create(state, Mapper.Encoder.inferArrayCapacity(value), Mapper.Encoder.inferRecordCapacity(value));
-    Mapper.Encoder.fillTable(table, value);
+    const table = Table.create(state, Mapper.Encoder.Internals.inferArrayCapacity(value), Mapper.Encoder.Internals.inferRecordCapacity(value));
+    Mapper.Encoder.Internals.fillTable(table, value);
     return table;
 }
 
@@ -312,8 +312,8 @@ pub fn release(self: Table) void {
     self.handle.release(self.state);
 }
 
-// Pushes the table onto the stack and returns its absolute index.
-// Caller must call lua.pop(state.luaState, 1) when done.
+/// Pushes the table value onto the stack and returns its absolute index.
+/// The caller must pop the stack slot after use.
 pub fn pushForAccess(self: Table) lua.StackIndex {
     switch (self.handle) {
         .borrowed, .stack_owned => |idx| {

@@ -11,8 +11,8 @@
 
 const std = @import("std");
 const Internals = @import("../internals.zig");
-const ArgInfo = @import("../../shape/fn.zig").ArgInfo;
-const PrimitiveTag = @import("../mapper.zig").PrimitiveTag;
+const ArgInfo = @import("../../shape/trampoline.zig").ArgInfo;
+const PrimitiveTag = @import("../api.zig").PrimitiveTag;
 
 
 /// One step in a decode trace path.
@@ -110,7 +110,7 @@ pub const DecodeError = struct {
 ///
 /// Carries the path buffer, the current nesting depth, and a pointer to
 /// the `DecodeError` that will be populated if decoding fails.
-/// Passed by value through the pipeline — the path slice and error pointer
+/// Passed by value through the pipeline. The path slice and error pointer
 /// are shared with the original, so writes to either are visible to the
 /// caller regardless of how many times `Trace` is copied.
 pub const Trace = struct {
@@ -143,7 +143,7 @@ pub const Trace = struct {
 /// value of the given type. The result is used to size the path buffer on
 /// the caller's stack (no heap allocation).
 ///
-/// Only `.table` strategy types contribute depth — `.object`, `.ptr`, and
+/// Only `.table` strategy types contribute depth. `.object`, `.ptr`, and
 /// `.closure` types are opaque to the decoder and counted as 0.
 pub fn maxDecodeDepth(comptime types: anytype) usize {
     const Ty = @TypeOf(types);
@@ -159,7 +159,7 @@ pub fn maxDecodeDepth(comptime types: anytype) usize {
 /// Formats a path array into a string like `arg0.metadata.version`.
 ///
 /// Walks `path` from the start until `.empty` and joins the human-readable
-/// form of each segment. No parameter names are substituted — use
+/// form of each segment. No parameter names are substituted. Use
 /// `formatDecodePathArg` when `FnOptions.args` are available.
 pub fn formatDecodePath(arena: std.mem.Allocator, path: []const Segment) ![]const u8 {
     return formatDecodePathArg(arena, path, null);

@@ -6,9 +6,10 @@
 
 pub const Userdata = @This();
 
-const Handle = @import("../handlers.zig").Handle;
+const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
-const State = @import("../../state/state.zig");
+const Handle = @import("../api.zig").Handle;
+const State = @import("../../state.zig");
 
 state: *State,
 handle: Handle,
@@ -90,8 +91,6 @@ pub fn get(self: Userdata) ?*anyopaque {
         },
     };
 }
-
-const std = @import("std");
 
 test {
     std.testing.refAllDecls(@This());

@@ -1,5 +1,10 @@
+//! Comptime type introspection helpers used by the trampolines and docs
+//! generator. Not part of the public API, used internally to unwrap
+//! error unions, detect tuples, count and index type lists, and check
+//! for closure capture pointers.
+
 const std = @import("std");
-const meta = @import("shape/metadata.zig");
+const Meta = @import("shape/metadata.zig");
 
 /// Returns whether `T` is a pointer to a closure strategy type.
 pub fn isCapturePointer(comptime T: type) bool {
@@ -7,7 +12,7 @@ pub fn isCapturePointer(comptime T: type) bool {
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    const s = meta.strategyOf(Child);
+    const s = Meta.strategyOf(Child);
     return s == .closure;
 }
 

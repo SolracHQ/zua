@@ -130,7 +130,7 @@ fn printValues(state: *zua.State, values: []const zua.Mapper.Primitive) !void {
 }
 
 fn generateDocs(init: std.process.Init) !void {
-    var generator = zua.Docs.init(init.gpa);
+    var generator = zua.Docs.Generator.init(init.gpa);
     defer generator.deinit();
     try generator.addBinding("repl", zua.Repl.Config{});
     const stubs = try generator.generate();

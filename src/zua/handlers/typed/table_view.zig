@@ -8,12 +8,13 @@
 //! The view is intended for use with table-strategy types where the table itself
 //! is the Lua representation and a typed copy is convenient for mutation.
 
-const Context = @import("../../state/context.zig");
-const Decoder = @import("../../mapper/mapper.zig").Decoder.Internals;
-const Primitive = @import("../../mapper/mapper.zig").Primitive;
-const Mapper = @import("../../mapper/mapper.zig");
+const std = @import("std");
+const Context = @import("../../context.zig");
+const Decoder = @import("../../mapper/api.zig").Decoder.Internals;
+const Primitive = @import("../../mapper/api.zig").Primitive;
+const Mapper = @import("../../mapper/api.zig");
 const Table = @import("../any/table.zig").Table;
-const Meta = @import("../../shape/shape.zig");
+const Meta = @import("../../shape/api.zig");
 const Marker = @import("../../marker.zig");
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
@@ -69,7 +70,7 @@ pub fn TableView(comptime T: type) type {
         /// This is useful for cases where the view is modified and the callback
         /// continues using the same Lua table before returning.
         pub fn sync(self: @This(), ctx: *Context) !void {
-            try Mapper.Encoder.fillTable(ctx, self.handle, self.ref.*);
+            try Mapper.Encoder.Internals.fillTable(ctx, self.handle, self.ref.*);
         }
 
         /// Creates a new view wrapper owning the same underlying Lua table handle.
@@ -103,8 +104,6 @@ pub fn TableView(comptime T: type) type {
         }
     };
 }
-
-const std = @import("std");
 
 /// Returns the inner type `T` if `Wrapper` is a `TableView(T)`, otherwise `null`.
 pub fn tableViewInnerType(comptime Wrapper: type) ?type {

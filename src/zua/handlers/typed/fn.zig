@@ -4,15 +4,14 @@
 //! `Function` handle. It can be stored in Zig values and passed through the Lua
 //! API while preserving the expected argument and return shapes.
 
-const Function = @import("../any/function.zig");
-const Context = @import("../../state/context.zig");
-const Mapper = @import("../../mapper/mapper.zig");
-const Shape = @import("../../shape/shape.zig");
-const introspect = @import("../../introspect.zig");
-const Marker = @import("../../marker.zig");
-
 const std = @import("std");
-const trampoline = @import("../../shape/trampoline.zig");
+const Function = @import("../any/function.zig");
+const Context = @import("../../context.zig");
+const Mapper = @import("../../mapper/api.zig");
+const Shape = @import("../../shape/api.zig");
+const Introspect = @import("../../introspect.zig");
+const Marker = @import("../../marker.zig");
+const Trampoline = @import("../../shape/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
 ///
@@ -144,25 +143,25 @@ fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, com
     const wrapper_t = callbackWrapper(callback);
     const actual_args = wrapper_t.decodedParameterTypes();
     const expected_args = ins;
-    const actual_count = introspect.typeListCount(actual_args);
-    const expected_count = introspect.typeListCount(expected_args);
+    const actual_count = Introspect.typeListCount(actual_args);
+    const expected_count = Introspect.typeListCount(expected_args);
     if (comptime actual_count != expected_count) @compileError("Fn.create: callback argument count mismatch: expected " ++ @typeName(expected_count) ++ " args, got " ++ @typeName(actual_count));
     inline for (0..actual_count) |i| {
-        const actual = introspect.typeListAt(actual_args, i);
-        const expected = introspect.typeListAt(expected_args, i);
+        const actual = Introspect.typeListAt(actual_args, i);
+        const expected = Introspect.typeListAt(expected_args, i);
         if (comptime actual != expected) @compileError("Fn.create: callback argument #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));
     }
 
-    const actual_return = trampoline.nativeReturnType(wrapper_t);
+    const actual_return = Trampoline.nativeReturnType(wrapper_t);
     const expected_return = outs;
-    const actual_return_count = introspect.typeListCount(actual_return);
-    const expected_return_count = introspect.typeListCount(expected_return);
+    const actual_return_count = Introspect.typeListCount(actual_return);
+    const expected_return_count = Introspect.typeListCount(expected_return);
     if (comptime actual_return_count != expected_return_count) @compileError("Fn.create: callback return count mismatch: expected " ++ @typeName(expected_return_count) ++ " return values, got " ++ @typeName(actual_return_count));
     inline for (0..actual_return_count) |i| {
-        const actual = introspect.typeListAt(actual_return, i);
-        const expected = introspect.typeListAt(expected_return, i);
+        const actual = Introspect.typeListAt(actual_return, i);
+        const expected = Introspect.typeListAt(expected_return, i);
         if (comptime actual != expected) @compileError("Fn.create: callback return #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
             " expected " ++ @typeName(expected) ++
             ", got " ++ @typeName(actual));

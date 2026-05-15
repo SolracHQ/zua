@@ -2,7 +2,15 @@
 
 ## Unreleased
 
+### Changed
+- `Docs` restructured: public API is `generateGlobals` and `generateModule`. The builder (init, add, addBinding, generate) lives in `Generator`, used inside docs hooks. Hook entry types are under `Entry` (`Docs.Entry.Alias` instead of `Docs.Alias`). Hooks receive `*Generator` instead of `*Docs`.
+- `State` and `Context` moved from `zua/state/` to `zua/` level. `Executor` moved from `zua/exec/` to `zua/` level. Single-file modules with no directory.
+- Entry point files renamed to `api.zig` across modules: `handlers/api.zig`, `mapper/api.zig`, `repl/api.zig`, `docs/api.zig`.
+- `shape/` internals extracted to `shape/internals.zig` instead of inline struct.
+- `Mapper.Encoder` restructured into `encode/api.zig` + `encode/internals.zig`. Only `push` remains public; `fillTable`, `inferArrayCapacity`, `inferRecordCapacity`, `pushLuaPrimitive` moved to `Mapper.Encoder.Internals`.
+
 ### Added
+- `CONTRIBUTING.md` with conventions for public API vs Internals, module naming, single-file vs multi-file module layout, documentation style guide, and changelog categories.
 - `src/zua/marker.zig` with `Marker` enum and `markerOf(T)` introspection API. Types declare `__ZUA_MARKER` as a single `Marker` or `std.EnumSet(Marker)` to signal internal code paths. Convenience helpers (`isNativeFunction`, `isTableView`, `all`, `any`, etc.) replace ad-hoc `@hasDecl` checks throughout the codebase.
 - `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
 - `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
@@ -11,7 +19,7 @@
 - `Mapper.Decode.Tracing` namespace with `Segment`, `DecodeError`, and `Trace` types for structured decode error reporting. Errors now carry a `tag` (wrong_type, out_of_range, etc.), `expected` type name, and `got` tag so hooks can branch on the reason instead of parsing message strings.
 - Internal utilities (low-level helpers, functions with extra comptime args, code that depends on library-only invariants like max decode depth) are now grouped under `Internals` namespaces (`Mapper.Internals`, `Mapper.Decode.Internals`, `Handlers.Any.Table.Internals`). Users never need to go deeper, but as with `Bindings`, the door is open if you need it.
 - Compile-time methods validation: `Object`, `Table`, `strEnum`, and `List` now reject non-callable method fields with a clear error naming the field, catching mistakes at the `ZUA_SHAPE` declaration site instead of deep in metatable building.
-- `Mapper.Decoder.pop(ctx, T)`: symmetric counterpart to `Encoder.push`. Reads a typed value from the top of the Lua stack and pops the slot in one call.
+- `Mapper.Decoder.pop(ctx, T)`: symmetric counterpart to `Encoder.push`. Reads a typed value from the top of the Lua stack and pops the slot in one call. Any handler types (`Table`, `Function`, `Userdata`) in the returned value are automatically converted to owned (registry) handles before the slot is removed. Call `.release()` on them when done. `decode`, `decodeType`, and `parseTuple` still return borrowed handles valid only during the caller's stack frame.
 - `State.pushTop()` and `State.popTop()` for save/restore stack management. Use `state.pushTop(); defer state.popTop();` around code that may push/pop values. In debug builds, each `pushTop` records the call site and `cleanup` reports any unbalanced pairs with stack traces, making Lua stack leaks detectable at shutdown.
 
 ### Breaking

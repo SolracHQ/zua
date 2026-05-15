@@ -7,10 +7,10 @@
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
 const Meta = @import("shape/metadata.zig");
-const Shape = @import("shape/shape.zig");
+const Shape = @import("shape/api.zig");
 const Marker = @import("marker.zig");
-const State = @import("state/state.zig");
-const Context = @import("state/context.zig");
+const State = @import("state.zig");
+const Context = @import("context.zig");
 
 /// Ensures the metatable for `T` exists and attaches it to the value on top of the Lua stack.
 ///
@@ -92,15 +92,8 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
     }
 }
 
-/// Selects the Lua C function trampoline for a method value.
-///
-/// If the method is already a compiled callback wrapper, its trampoline is returned
-/// directly. Otherwise the method function is wrapped in a new `NativeFn` so it can
-/// be exposed to Lua with the standard decode/execute semantics.
-///
-/// Arguments:
-/// - method_fn: The method value (NativeFn/Closure wrapper or a Zig function).
-/// - name: The method name, used for clear error messages.
+/// Returns the Lua CFunction trampoline for a method value. Handles
+/// native function wrappers, closures, and plain Zig functions.
 fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
@@ -119,11 +112,10 @@ fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.
     return Shape.Fn(method_fn, .{}).trampoline();
 }
 
-/// Generates a combined __index trampoline for types that have both regular
-/// named methods and a custom __index handler.
-///
-/// This trampoline first checks if the key matches any regular method names, and if so dispatches to the corresponding method. If not, it falls back to the custom
-/// __index handler
+/// Generates a combined `__index` trampoline for types that declare both
+/// regular named methods and a custom `__index` handler. Dispatches to
+/// the named method when the key matches, otherwise falls through to the
+/// custom handler.
 fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
     const methods = comptime Meta.methodsOf(T);
     const methods_type = comptime @TypeOf(methods);

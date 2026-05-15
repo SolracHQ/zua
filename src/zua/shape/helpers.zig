@@ -1,66 +1,30 @@
+//! Shared hook type signatures and generators for the Shape module.
+//! Used internally by `MetaData` to type-check encode, decode, and docs
+//! hooks. Also provides compile-time helpers for merging method sets
+//! and generating list method implementations.
+
 const std = @import("std");
-const meta = @import("./shape.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const Trampoline = @import("trampoline.zig");
+const Context = @import("../context.zig");
+const Mapper = @import("../mapper/api.zig");
 const Primitive = Mapper.Primitive;
-const Context = @import("../state/context.zig");
-const Handlers = @import("../handlers/handlers.zig");
-const Marker = @import("../marker.zig");
-
-/// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
-///
-/// Emits a compile error if the type does not support field mapping or
-/// strategy-based metadata.
-///
-/// Arguments:
-/// - T: The type to validate.
-pub fn assertContainerType(comptime T: type) void {
-    const info = @typeInfo(T);
-    if (comptime info != .@"struct" and info != .@"union" and info != .@"enum" and info != .@"opaque") {
-        @compileError(@typeName(T) ++ " is not a struct, union, enum, or opaque type and cannot be used with meta strategies that require field mapping");
-    }
+const Handlers = @import("../handlers/api.zig");
+const Gen = @import("../docs/generator.zig").Generator;
+pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
+    return fn (*Context, T) anyerror!?ProxyType;
 }
 
-/// Compile-time assertion that `methods` is a struct type.
-pub fn assertMethodsIsStruct(comptime methods: anytype) void {
-    if (comptime @typeInfo(@TypeOf(methods)) != .@"struct") {
-        @compileError("methods must be a struct literal, got " ++ @typeName(@TypeOf(methods)));
-    }
+pub fn DecodeHookType(comptime T: type) type {
+    return fn (*Context, Primitive) anyerror!?T;
 }
 
-/// Compile-time validation that each method field is valid.
-///
-/// Each field must be a raw Zig function or a `Shape.Fn`/`Shape.Closure` wrapper
-/// (a type carrying the `native_function` marker). Nested structs and non-callable
-/// values are rejected with a clear error naming the field.
-pub fn assertValidMethods(comptime methods: anytype) void {
-    inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
-        const T = field.type;
-        if (comptime @typeInfo(T) == .@"fn") continue;
-        if (comptime Marker.isNativeFunction(T)) continue;
-        if (comptime @typeInfo(T) == .type) {
-            const val = @field(methods, field.name);
-            if (Marker.isNativeFunction(val)) continue;
-        }
-        @compileError("method `" ++ field.name ++ "` must be a Zig function or Shape.Fn/Closure wrapper, got " ++ @typeName(T));
-    }
-}
-
-/// Compile-time assertion that `T`, if a union, is a tagged union.
-///
-/// Untagged unions cannot use `.table` strategy; they must use `.object` or
-/// `.ptr` instead.
-///
-/// Arguments:
-/// - T: The type to validate.
-pub fn assertTaggedIfUnion(comptime T: type) void {
-    if (comptime @typeInfo(T) == .@"union" and @typeInfo(T).@"union".tag_type == null) {
-        @compileError(@typeName(T) ++ " is an untagged union, use Shape.Object or Shape.Ptr instead");
-    }
+pub fn DocsHookType(comptime _: type) type {
+    return fn (*Gen) anyerror!void;
 }
 
 /// Builds an encode hook that converts an enum value to its `@tagName` string.
 ///
-/// The returned function pointer is used by `Shape.strEnum` to push enum
+/// The returned function pointer is used by `Shape.StrEnum` to push enum
 /// values as Lua strings.
 ///
 /// Arguments:
@@ -68,7 +32,7 @@ pub fn assertTaggedIfUnion(comptime T: type) void {
 ///
 /// Returns:
 /// - An encode hook function pointer for use in `MetaData`.
-pub fn strEnumEncode(comptime T: type) meta.EncodeHookType(T, []const u8) {
+pub fn strEnumEncode(comptime T: type) EncodeHookType(T, []const u8) {
     return struct {
         fn encode(_: *Context, value: T) !?[]const u8 {
             return @tagName(value);
@@ -86,7 +50,7 @@ pub fn strEnumEncode(comptime T: type) meta.EncodeHookType(T, []const u8) {
 ///
 /// Returns:
 /// - A decode hook function pointer for use in `MetaData`.
-pub fn strEnumDecode(comptime T: type) meta.DecodeHookType(T) {
+pub fn strEnumDecode(comptime T: type) DecodeHookType(T) {
     return struct {
         fn decode(ctx: *Context, primitive: Primitive) anyerror!?T {
             const str = switch (primitive) {
@@ -118,21 +82,6 @@ pub fn ElementType(comptime getElements: anytype) type {
     if (info != .pointer or info.pointer.size != .slice)
         @compileError("getElements must return a slice type, got " ++ @typeName(R));
     return info.pointer.child;
-}
-
-/// Compile-time assertion that user-provided methods do not shadow
-/// auto-generated list methods (`get`, `iter`, `__index`, `__len`).
-///
-/// Arguments:
-/// - methods: A comptime struct of method name–function pairs.
-pub fn assertNoListCollisions(comptime methods: anytype) void {
-    const reserved = [_][]const u8{ "get", "iter", "__index", "__len" };
-    inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
-        inline for (reserved) |name| {
-            if (comptime std.mem.eql(u8, field.name, name))
-                @compileError("List already generates '" ++ name ++ "'; remove it from methods or use Object instead");
-        }
-    }
 }
 
 /// Merges two method struct types into a single type containing all fields
@@ -233,7 +182,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
         }
 
         pub fn iter(self: Handlers.Any.Userdata) struct {
-            meta.Fn(iget, .{}),
+            Trampoline.makeFn(iget, false, .{}),
             Handlers.Any.Userdata,
             ?usize,
         } {
@@ -254,32 +203,32 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 /// Returns:
 /// - A struct value with `get`, `__index`, `__len`, and `iter` fields.
 pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
-    const Gen = generatedListMethods(L, getElements);
+    const ListGen = generatedListMethods(L, getElements);
     break :blk .{
-        .get = meta.Fn(Gen.get, .{
+        .get = Trampoline.makeFn(ListGen.get, false, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = Gen.__index,
-        .__len = Gen.__len,
-        .iter = meta.Fn(Gen.iter, .{
+        .__index = ListGen.__index,
+        .__len = ListGen.__len,
+        .iter = Trampoline.makeFn(ListGen.iter, false, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
 }) {
-    const Gen = generatedListMethods(L, getElements);
+    const ListGen = generatedListMethods(L, getElements);
     return .{
-        .get = meta.Fn(Gen.get, .{
+        .get = Trampoline.makeFn(ListGen.get, false, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = Gen.__index,
-        .__len = Gen.__len,
-        .iter = meta.Fn(Gen.iter, .{
+        .__index = ListGen.__index,
+        .__len = ListGen.__len,
+        .iter = Trampoline.makeFn(ListGen.iter, false, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };

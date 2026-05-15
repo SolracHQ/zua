@@ -5,11 +5,11 @@
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
-const State = @import("../state/state.zig").State;
-const Context = @import("../state/context.zig").Context;
+const State = @import("../state.zig").State;
+const Context = @import("../context.zig").Context;
 const Table = @import("../handlers/any/table.zig").Table;
-const Shape = @import("../shape/shape.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const Shape = @import("../shape/api.zig");
+const Mapper = @import("../mapper/api.zig");
 const Object = @import("../handlers/typed/object.zig").Object;
 const isocline = @import("../../isocline/isocline.zig");
 const Config = @import("config.zig");

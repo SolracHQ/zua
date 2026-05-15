@@ -78,7 +78,7 @@ const Priority = enum(u8) {
     normal,
     high,
 
-    pub const ZUA_SHAPE = zua.Shape.strEnum(Priority, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.StrEnum(Priority, .{}, .{
         .name = "Priority",
         .description = "String-backed priority enum.",
     });
@@ -123,8 +123,8 @@ const Os = union(enum) {
         };
     }
 
-    fn osDocs(self: *zua.Docs) !void {
-        var alias = zua.Docs.Alias{
+    fn osDocs(self: *zua.Docs.Generator) !void {
+        var alias = zua.Docs.Entry.Alias{
             .name = try self.arena.allocator().dupe(u8, "Os"),
             .description = try self.arena.allocator().dupe(u8, "Operating system selector."),
             .values = .empty,
@@ -206,50 +206,38 @@ const CounterClosure = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    var generator = zua.Docs.init(init.gpa);
-    defer generator.deinit();
-
-    const make_vector = zua.Shape.Fn(makeVector, .{
-        .description = "Construct a new Vector2 value.",
-        .args = &.{
-            .{ .name = "x", .description = "Initial horizontal coordinate." },
-            .{ .name = "y", .description = "Initial vertical coordinate." },
-        },
+    const stubs = try zua.Docs.generateGlobals(init.gpa, .{
+        .Os = Os,
+        .Priority = Priority,
+        .Color = Color,
+        .Mode = Mode,
+        .Vector2 = Vector2,
+        .Logger = Logger,
+        .Analytics = Analytics,
+        .make_vector = zua.Shape.Fn(makeVector, .{
+            .description = "Construct a new Vector2 value.",
+            .args = &.{
+                .{ .name = "x", .description = "Initial horizontal coordinate." },
+                .{ .name = "y", .description = "Initial vertical coordinate." },
+            },
+        }),
+        .new_counter = zua.Shape.Fn(newCounter, .{
+            .description = "Create a new Counter instance.",
+        }),
+        .maybe_increment = zua.Shape.Fn(maybeIncrement, .{
+            .description = "Increment a number when one is provided.",
+            .args = &.{
+                .{ .name = "value", .description = "Optional integer to increment." },
+            },
+        }),
+        .sum_all = zua.Shape.Fn(sumAll, .{
+            .description = "Sum all integer varargs.",
+            .args = &.{
+                .{ .name = "condition", .description = "Selector for which integers to sum." },
+                .{ .name = "...", .description = "Additional integer values." },
+            },
+        }),
+        .make_counter = CounterClosure{ .count = 0 },
     });
-
-    const new_counter = zua.Shape.Fn(newCounter, .{
-        .description = "Create a new Counter instance.",
-    });
-
-    const maybe_increment = zua.Shape.Fn(maybeIncrement, .{
-        .description = "Increment a number when one is provided.",
-        .args = &.{
-            .{ .name = "value", .description = "Optional integer to increment." },
-        },
-    });
-
-    const sum_all = zua.Shape.Fn(sumAll, .{
-        .description = "Sum all integer varargs.",
-        .args = &.{
-            .{ .name = "condition", .description = "Selector for which integers to sum." },
-            .{ .name = "...", .description = "Additional integer values." },
-        },
-    });
-
-    try generator.add(Os);
-    try generator.add(Priority);
-    try generator.add(Color);
-    try generator.add(Mode);
-    try generator.add(Vector2);
-    try generator.add(Logger);
-    try generator.add(Analytics);
-
-    try generator.addBinding("make_vector", make_vector);
-    try generator.addBinding("new_counter", new_counter);
-    try generator.addBinding("maybe_increment", maybe_increment);
-    try generator.addBinding("sum_all", sum_all);
-    try generator.addBinding("make_counter", CounterClosure{ .count = 0 });
-
-    const stubs = try generator.generate();
     std.debug.print("{s}", .{stubs});
 }

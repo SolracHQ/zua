@@ -5,23 +5,20 @@
 //! It is the "collection" phase of the two-phase collect-and-emit pipeline.
 
 const std = @import("std");
-const Docs = @import("./docs.zig");
-const types = @import("types.zig");
-const Table = types.Table;
-const Function = types.Function;
-const Object = types.Object;
-const Alias = types.Alias;
-const AliasValue = types.AliasValue;
-const Context = @import("../state/context.zig");
-const Handlers = @import("../handlers/handlers.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const Generator = @import("generator.zig").Generator;
+const Types = @import("types.zig");
+const Table = Types.Table;
+const Function = Types.Function;
+const Object = Types.Object;
+const Alias = Types.Alias;
+const Context = @import("../context.zig");
+const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
 const Metadata = @import("../shape/metadata.zig");
-const helpers = @import("helpers.zig");
-const introspect = @import("../introspect.zig");
-const trampoline = @import("../shape/trampoline.zig");
+const Helpers = @import("helpers.zig");
+const Introspect = @import("../introspect.zig");
+const Trampoline = @import("../shape/trampoline.zig");
 const Marker = @import("../marker.zig");
-const emit = @import("emit.zig");
 
 /// Walks a Zig type and inserts its documentation into the generator's lists.
 ///
@@ -35,14 +32,14 @@ const emit = @import("emit.zig");
 /// - T: The Zig type to document.
 /// - recurse_nested: If true, recursively collect types referenced by fields,
 ///   parameters, and return values.
-pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) anyerror!void {
-    const Normalized = helpers.normalizeRootType(T);
+pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool) anyerror!void {
+    const Normalized = Helpers.normalizeRootType(T);
 
-    if (comptime helpers.isIgnoredDocType(Normalized)) return;
-    if (comptime helpers.isTransparentTypedWrapper(Normalized)) {
-        return addType(self, helpers.unwrapTransparentTypedWrapper(Normalized), recurse_nested);
+    if (comptime Helpers.isIgnoredDocType(Normalized)) return;
+    if (comptime Helpers.isTransparentTypedWrapper(Normalized)) {
+        return addType(self, Helpers.unwrapTransparentTypedWrapper(Normalized), recurse_nested);
     }
-    if (comptime helpers.isTypedFunctionHandle(Normalized)) return;
+    if (comptime Helpers.isTypedFunctionHandle(Normalized)) return;
 
     switch (@typeInfo(Normalized)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {},
@@ -54,18 +51,18 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
 
     if (meta_info.DocsHook) |hook| {
         if (self.class_map.contains(cache_key)) return;
-        try self.class_map.put(try helpers.persist(self, cache_key), {});
+        try self.class_map.put(try Helpers.persist(self, cache_key), {});
         try hook(self);
         return;
     }
 
-    if (comptime helpers.shouldEmitAlias(Normalized)) {
+    if (comptime Helpers.shouldEmitAlias(Normalized)) {
         if (self.alias_map.contains(cache_key)) return;
-        try self.alias_map.put(try helpers.persist(self, cache_key), {});
+        try self.alias_map.put(try Helpers.persist(self, cache_key), {});
 
         var doc = Alias{
-            .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
-            .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
+            .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
+            .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
             .values = .empty,
         };
         try collectAliasValues(self, &doc, Normalized, recurse_nested);
@@ -76,11 +73,11 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
     switch (Metadata.strategyOf(Normalized)) {
         .table => {
             if (self.class_map.contains(cache_key)) return;
-            try self.class_map.put(try helpers.persist(self, cache_key), {});
+            try self.class_map.put(try Helpers.persist(self, cache_key), {});
 
             var doc = Table{
-                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
                 .fields = .empty,
                 .operators = .empty,
             };
@@ -91,11 +88,11 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
         },
         .object, .ptr => {
             if (self.object_map.contains(cache_key)) return;
-            try self.object_map.put(try helpers.persist(self, cache_key), {});
+            try self.object_map.put(try Helpers.persist(self, cache_key), {});
 
             var doc = Object{
-                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
                 .operators = .empty,
             };
 
@@ -108,13 +105,13 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
             if (self.functions.contains(cache_key)) return;
 
             var doc = Function{
-                .name = try helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
+                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
             };
 
             try collectFunctionParameters(self, &doc, trampoline_type, false, null);
-            try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(trampoline_type));
-            try self.functions.put(try helpers.persist(self, cache_key), doc);
+            try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(trampoline_type));
+            try self.functions.put(try Helpers.persist(self, cache_key), doc);
         },
     }
 }
@@ -134,7 +131,7 @@ pub fn addType(self: *Docs, comptime T: type, comptime recurse_nested: bool) any
 /// - display_name: The name to use in the generated stub.
 /// - cache_key: The key used for dedup and HashMap storage.
 pub fn addWrappedFunction(
-    self: *Docs,
+    self: *Generator,
     comptime T: type,
     comptime is_method: bool,
     comptime owner_type: ?type,
@@ -148,13 +145,13 @@ pub fn addWrappedFunction(
     if (self.functions.contains(cache_key)) return;
 
     var doc = Function{
-        .name = try helpers.persist(self, display_name),
-        .description = try helpers.persist(self, helpers.nativeFnDesc(T)),
+        .name = try Helpers.persist(self, display_name),
+        .description = try Helpers.persist(self, Helpers.nativeFnDesc(T)),
     };
 
     try collectFunctionParameters(self, &doc, T, is_method, owner_type);
-    try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(T));
-    try self.functions.put(try helpers.persist(self, cache_key), doc);
+    try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(T));
+    try self.functions.put(try Helpers.persist(self, cache_key), doc);
 
     try recurseFunctionTypes(self, T, is_method, owner_type);
 }
@@ -163,7 +160,7 @@ pub fn addWrappedFunction(
 /// NativeFn wrapper fields are promoted to `field_of` function entries instead of
 /// opaque `---@field` annotations.
 fn collectTableFields(
-    self: *Docs,
+    self: *Generator,
     doc: *Table,
     comptime T: type,
     comptime attribute_descriptions: anytype,
@@ -178,29 +175,29 @@ fn collectTableFields(
                 if (comptime Marker.isNativeFunction(field.type)) {
                     if (self.functions.getPtr(field.name)) |existing| {
                         try existing.field_of.append(self.arena.allocator(), .{
-                            .owner = try helpers.persist(self, owner_name),
-                            .field_name = try helpers.persist(self, field.name),
+                            .owner = try Helpers.persist(self, owner_name),
+                            .field_name = try Helpers.persist(self, field.name),
                         });
                     } else {
                         var func_doc = Function{
-                            .name = try helpers.persist(self, field.name),
-                            .description = try helpers.persist(self, helpers.nativeFnDesc(field.type)),
+                            .name = try Helpers.persist(self, field.name),
+                            .description = try Helpers.persist(self, Helpers.nativeFnDesc(field.type)),
                             .field_of = .empty,
                         };
                         try func_doc.field_of.append(self.arena.allocator(), .{
-                            .owner = try helpers.persist(self, owner_name),
-                            .field_name = try helpers.persist(self, field.name),
+                            .owner = try Helpers.persist(self, owner_name),
+                            .field_name = try Helpers.persist(self, field.name),
                         });
                         try collectFunctionParameters(self, &func_doc, field.type, false, null);
-                        try collectFunctionReturns(self, &func_doc, trampoline.nativeReturnType(field.type));
-                        try self.functions.put(try helpers.persist(self, field.name), func_doc);
+                        try collectFunctionReturns(self, &func_doc, Trampoline.nativeReturnType(field.type));
+                        try self.functions.put(try Helpers.persist(self, field.name), func_doc);
                     }
                     try maybeRecurseReferencedType(self, field.type, recurse_nested);
                 } else {
                     try doc.fields.append(self.arena.allocator(), .{
-                        .name = try helpers.persist(self, field.name),
-                        .description = try helpers.persist(self, helpers.fieldDescription(attribute_descriptions, field.name)),
-                        .type = try helpers.displayTypeName(self, field.type, .field),
+                        .name = try Helpers.persist(self, field.name),
+                        .description = try Helpers.persist(self, Helpers.fieldDescription(attribute_descriptions, field.name)),
+                        .type = try Helpers.displayTypeName(self, field.type, .field),
                     });
                     try maybeRecurseReferencedType(self, field.type, recurse_nested);
                 }
@@ -209,9 +206,9 @@ fn collectTableFields(
         .@"union" => |info| {
             inline for (info.fields) |field| {
                 try doc.fields.append(self.arena.allocator(), .{
-                    .name = try helpers.persist(self, field.name),
-                    .description = try helpers.persist(self, helpers.fieldDescription(attribute_descriptions, field.name)),
-                    .type = try helpers.displayTypeName(self, field.type, .field),
+                    .name = try Helpers.persist(self, field.name),
+                    .description = try Helpers.persist(self, Helpers.fieldDescription(attribute_descriptions, field.name)),
+                    .type = try Helpers.displayTypeName(self, field.type, .field),
                 });
                 try maybeRecurseReferencedType(self, field.type, recurse_nested);
             }
@@ -226,8 +223,8 @@ fn collectTableFields(
 /// set to the owner type's name. Metamethods with known operator names are stored as
 /// `Operator` entries on the owning type.
 fn collectMethods(
-    self: *Docs,
-    operators_out: *std.ArrayList(types.Operator),
+    self: *Generator,
+    operators_out: *std.ArrayList(Types.Operator),
     comptime methods: anytype,
     comptime owner_type: type,
     comptime recurse_nested: bool,
@@ -239,7 +236,7 @@ fn collectMethods(
             if (comptime !isKnownOperator(op_name)) continue;
 
             const method_value = @field(methods, field.name);
-            const wrapped = helpers.wrapMethod(method_value);
+            const wrapped = Helpers.wrapMethod(method_value);
 
             var tmp = Function{
                 .name = "",
@@ -248,12 +245,12 @@ fn collectMethods(
                 .returns = .empty,
             };
             try collectFunctionParameters(self, &tmp, wrapped, true, owner_type);
-            try collectFunctionReturns(self, &tmp, trampoline.nativeReturnType(wrapped));
+            try collectFunctionReturns(self, &tmp, Trampoline.nativeReturnType(wrapped));
 
             try operators_out.append(self.arena.allocator(), .{
-                .name = try helpers.persist(self, op_name),
+                .name = try Helpers.persist(self, op_name),
                 .param_type = if (tmp.parameters.items.len > 0) tmp.parameters.items[0].type else null,
-                .return_type = if (tmp.returns.items.len > 0) tmp.returns.items[0] else try helpers.persist(self, "nil"),
+                .return_type = if (tmp.returns.items.len > 0) tmp.returns.items[0] else try Helpers.persist(self, "nil"),
             });
 
             if (recurse_nested) {
@@ -264,15 +261,15 @@ fn collectMethods(
 
         const method_key = try std.fmt.allocPrint(self.arena.allocator(), "{s}.{s}", .{ @typeName(owner_type), field.name });
         const method_value = @field(methods, field.name);
-        const wrapped = helpers.wrapMethod(method_value);
+        const wrapped = Helpers.wrapMethod(method_value);
         var doc = Function{
-            .name = try helpers.persist(self, field.name),
-            .description = try helpers.persist(self, helpers.nativeFnDesc(wrapped)),
-            .method_of = try helpers.persist(self, owner_name),
+            .name = try Helpers.persist(self, field.name),
+            .description = try Helpers.persist(self, Helpers.nativeFnDesc(wrapped)),
+            .method_of = try Helpers.persist(self, owner_name),
         };
 
         try collectFunctionParameters(self, &doc, wrapped, true, owner_type);
-        try collectFunctionReturns(self, &doc, trampoline.nativeReturnType(wrapped));
+        try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(wrapped));
         try self.functions.put(method_key, doc);
 
         if (recurse_nested) {
@@ -300,59 +297,59 @@ fn isKnownOperator(comptime name: []const u8) bool {
 /// doc's parameter list. Skips `*Context`, capture pointers, and self parameters
 /// (for methods). Varargs parameters are annotated as `...: any`.
 fn collectFunctionParameters(
-    self: *Docs,
+    self: *Generator,
     doc: *Function,
     comptime T: type,
     comptime is_method: bool,
     comptime owner_type: ?type,
 ) !void {
-    const fn_info = trampoline.fnTypeInfo(T);
+    const fn_info = Trampoline.fnTypeInfo(T);
     comptime var arg_index: usize = 0;
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
 
         if (comptime param_type == *Context) continue;
-        if (comptime introspect.isCapturePointer(param_type)) continue;
+        if (comptime Introspect.isCapturePointer(param_type)) continue;
 
-        if (comptime is_method and owner_type != null and helpers.isSelfParam(param_type, owner_type.?)) continue;
+        if (comptime is_method and owner_type != null and Helpers.isSelfParam(param_type, owner_type.?)) continue;
 
-        const arg_info = helpers.argDocInfo(T.args, arg_index);
+        const arg_info = Helpers.argDocInfo(T.args, arg_index);
         arg_index += 1;
 
         if (comptime param_type == Mapper.VarArgs) {
             try doc.parameters.append(self.arena.allocator(), .{
-                .name = try helpers.persist(self, "..."),
-                .description = try helpers.persist(self, arg_info.description),
-                .type = try helpers.persist(self, "any"),
+                .name = try Helpers.persist(self, "..."),
+                .description = try Helpers.persist(self, arg_info.description),
+                .type = try Helpers.persist(self, "any"),
             });
             continue;
         }
 
         try doc.parameters.append(self.arena.allocator(), .{
-            .name = try helpers.persist(self, arg_info.name),
-            .description = try helpers.persist(self, arg_info.description),
-            .type = try helpers.displayTypeName(self, param_type, .parameter),
+            .name = try Helpers.persist(self, arg_info.name),
+            .description = try Helpers.persist(self, arg_info.description),
+            .type = try Helpers.displayTypeName(self, param_type, .parameter),
         });
     }
 }
 
 /// Populates the return type list of a `Function` doc from the wrapper's return
 /// type tuple.
-fn collectFunctionReturns(self: *Docs, doc: *Function, comptime ReturnType: type) !void {
-    const count = comptime introspect.typeListCount(ReturnType);
+fn collectFunctionReturns(self: *Generator, doc: *Function, comptime ReturnType: type) !void {
+    const count = comptime Introspect.typeListCount(ReturnType);
     inline for (0..count) |index| {
-        try doc.returns.append(self.arena.allocator(), try helpers.displayTypeName(self, introspect.typeListAt(ReturnType, index), .return_value));
+        try doc.returns.append(self.arena.allocator(), try Helpers.displayTypeName(self, Introspect.typeListAt(ReturnType, index), .return_value));
     }
 }
 
 /// Collects the variant values of a tagged union or enum into an `Alias` doc.
 ///
-/// For `strEnum` types, each variant is a string literal. For plain enums, each
+/// For `StrEnum` types, each variant is a string literal. For plain enums, each
 /// variant is an integer value. For union fields, each variant can be a named table
 /// type (with a custom variant name) or an inline table shape. Named variant tables
 /// are pushed to the classes list.
-fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
+fn collectAliasValues(self: *Generator, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
     const variant_descs = comptime Metadata.variantDescriptionsOf(T);
     switch (@typeInfo(T)) {
         .@"enum" => {
@@ -364,7 +361,7 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
                     try std.fmt.allocPrint(self.arena.allocator(), "{d}", .{field.value});
                 try doc.values.append(self.arena.allocator(), .{
                     .type = type_str,
-                    .description = try helpers.persist(self, ""),
+                    .description = try Helpers.persist(self, ""),
                 });
             }
         },
@@ -375,10 +372,10 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
 
                 if (comptime vinfo.name) |variant_name| {
                     if (!self.class_map.contains(variant_name)) {
-                        try self.class_map.put(try helpers.persist(self, variant_name), {});
+                        try self.class_map.put(try Helpers.persist(self, variant_name), {});
                         var variant_doc = Table{
-                            .name = try helpers.persist(self, variant_name),
-                            .description = try helpers.persist(self, vdesc),
+                            .name = try Helpers.persist(self, variant_name),
+                            .description = try Helpers.persist(self, vdesc),
                             .fields = .empty,
                             .operators = .empty,
                         };
@@ -387,13 +384,13 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
                     }
                     try doc.values.append(self.arena.allocator(), .{
                         .type = try std.fmt.allocPrint(self.arena.allocator(), "{{ {s}: {s} }}", .{ field.name, variant_name }),
-                        .description = try helpers.persist(self, vdesc),
+                        .description = try Helpers.persist(self, vdesc),
                     });
                 } else {
-                    const field_type_name = try helpers.displayTypeName(self, field.type, .field);
+                    const field_type_name = try Helpers.displayTypeName(self, field.type, .field);
                     try doc.values.append(self.arena.allocator(), .{
                         .type = try std.fmt.allocPrint(self.arena.allocator(), "{{ {s}: {s} }}", .{ field.name, field_type_name }),
-                        .description = try helpers.persist(self, vdesc),
+                        .description = try Helpers.persist(self, vdesc),
                     });
                     try maybeRecurseReferencedType(self, field.type, recurse_nested);
                 }
@@ -404,21 +401,21 @@ fn collectAliasValues(self: *Docs, doc: *Alias, comptime T: type, comptime recur
 }
 
 /// Recursively collects doc entries for types referenced in a function's parameters
-/// and return types.
-fn recurseFunctionTypes(self: *Docs, comptime T: type, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
-    const fn_info = trampoline.fnTypeInfo(T);
+/// and return Types.
+fn recurseFunctionTypes(self: *Generator, comptime T: type, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
+    const fn_info = Trampoline.fnTypeInfo(T);
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
         if (comptime param_type == *Context) continue;
-        if (comptime introspect.isCapturePointer(param_type)) continue;
-        if (comptime is_method and owner_type != null and helpers.isSelfParam(param_type, owner_type.?)) continue;
+        if (comptime Introspect.isCapturePointer(param_type)) continue;
+        if (comptime is_method and owner_type != null and Helpers.isSelfParam(param_type, owner_type.?)) continue;
         try maybeRecurseReferencedType(self, param_type, true);
     }
 
-    const count = comptime introspect.typeListCount(trampoline.nativeReturnType(T));
+    const count = comptime Introspect.typeListCount(Trampoline.nativeReturnType(T));
     inline for (0..count) |index| {
-        try maybeRecurseReferencedType(self, introspect.typeListAt(trampoline.nativeReturnType(T), index), true);
+        try maybeRecurseReferencedType(self, Introspect.typeListAt(Trampoline.nativeReturnType(T), index), true);
     }
 }
 
@@ -427,19 +424,19 @@ fn recurseFunctionTypes(self: *Docs, comptime T: type, comptime is_method: bool,
 /// Only struct, union, enum, and opaque types with `.table` / `.object` / `.ptr`
 /// strategy are recursed. Pointers to these types are dereferenced first. Arrays
 /// and slices are recursed into via their child type.
-fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_nested: bool) anyerror!void {
+fn maybeRecurseReferencedType(self: *Generator, comptime T: type, comptime recurse_nested: bool) anyerror!void {
     if (!recurse_nested) return;
 
     if (comptime Internals.isOptional(T)) {
         return maybeRecurseReferencedType(self, Internals.optionalChild(T), recurse_nested);
     }
 
-    if (comptime helpers.isTransparentTypedWrapper(T)) {
-        return maybeRecurseReferencedType(self, helpers.unwrapTransparentTypedWrapper(T), recurse_nested);
+    if (comptime Helpers.isTransparentTypedWrapper(T)) {
+        return maybeRecurseReferencedType(self, Helpers.unwrapTransparentTypedWrapper(T), recurse_nested);
     }
 
-    if (comptime helpers.isIgnoredDocType(T)) return;
-    if (comptime helpers.isTypedFunctionHandle(T)) return;
+    if (comptime Helpers.isIgnoredDocType(T)) return;
+    if (comptime Helpers.isTypedFunctionHandle(T)) return;
     if (comptime Marker.isNativeFunction(T)) return;
 
     switch (@typeInfo(T)) {
@@ -463,7 +460,7 @@ fn maybeRecurseReferencedType(self: *Docs, comptime T: type, comptime recurse_ne
 
 /// Collects the fields of a variant's inner struct into a `Table` doc.
 fn collectVariantTableFields(
-    self: *Docs,
+    self: *Generator,
     doc: *Table,
     comptime FieldType: type,
     comptime field_descs: anytype,
@@ -474,9 +471,9 @@ fn collectVariantTableFields(
             if (info.is_tuple) return;
             inline for (info.fields) |f| {
                 try doc.fields.append(self.arena.allocator(), .{
-                    .name = try helpers.persist(self, f.name),
-                    .description = try helpers.persist(self, helpers.fieldDescription(field_descs, f.name)),
-                    .type = try helpers.displayTypeName(self, f.type, .field),
+                    .name = try Helpers.persist(self, f.name),
+                    .description = try Helpers.persist(self, Helpers.fieldDescription(field_descs, f.name)),
+                    .type = try Helpers.displayTypeName(self, f.type, .field),
                 });
                 try maybeRecurseReferencedType(self, f.type, recurse_nested);
             }

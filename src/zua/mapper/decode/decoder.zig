@@ -1,16 +1,16 @@
-//! Internal decode pipeline: type-directed dispatch, trace management, and
-//! depth-aware decode variants. Exported as `Mapper.Decode.Internals` so users
-//! can access lower-level operations like `decodeAt` or `buildVarArgs` when the
-//! public API is too high-level for their use case.
+//! Internal decode pipeline with explicit trace management.
 //!
-//! - `parseTupleDepth` / `parseArgsDepth`: decode a sequence of stack values
-//! - `decodeAt` / `decodeAtDepth`: decode from a raw stack index
-//! - `decodeValueDepth`: type-directed primitive dispatch
-//! - `decodeStructDepth` / `decodeUnionDepth`: walk Lua table fields
-//! - `buildVarArgs`: collect remaining Lua arguments as primitives
+//! Every function here takes a `Trace` parameter that records the
+//! navigation path (struct field names, array indices, tuple arg
+//! positions) through nested decodes. When a field or element fails,
+//! the trace pinpoints exactly where in the value tree the error
+//! occurred.
 //!
-//! Most users should use `Mapper.Decoder.pop`, `decode`, `decodeType`, or
-//! `parseTuple` instead.
+//! Most callers should use `Mapper.Decoder.pop`, `decode`, `decodeType`,
+//! or `parseTuple` instead. These transparently allocate a trace,
+//! format the path on error, and set `ctx.err`. Only reach for this
+//! module when you need to reuse a trace across multiple decodes or
+//! handle structured errors manually.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -18,20 +18,23 @@ const lua = @import("../../../lua/lua.zig");
 const Table = @import("../../handlers/any/table.zig");
 const Function = @import("../../handlers/any/function.zig");
 const UserdataImport = @import("../../handlers/any/userdata.zig");
-const Handle = @import("../../handlers/handlers.zig").Handle;
-const Context = @import("../../state/context.zig");
+const Handle = @import("../../handlers/api.zig").Handle;
+const Context = @import("../../context.zig");
 const Meta = @import("../../shape/metadata.zig");
 
 const ObjectType = @import("../../handlers/typed/object.zig").Object;
 
-const Mapper = @import("../mapper.zig");
+const Mapper = @import("../api.zig");
 const Internals = @import("../internals.zig");
 
 const Primitive = Mapper.Primitive;
 const PrimitiveTag = Mapper.PrimitiveTag;
-const Trace = @import("tracing.zig").Trace;
-const DecodeError = @import("tracing.zig").DecodeError;
+const Tracing = @import("tracing.zig");
+const Trace = Tracing.Trace;
+const DecodeError = Tracing.DecodeError;
 
+/// Converts a comptime tuple of types or a single type into a Zig tuple
+/// type suitable for holding decoded values.
 pub fn ParseResult(comptime types: anytype) type {
     const Ty = @TypeOf(types);
     if (Ty == type) return types;
@@ -40,9 +43,8 @@ pub fn ParseResult(comptime types: anytype) type {
     return @Tuple(&field_types);
 }
 
-/// Decodes a sequence of Lua stack values into typed values, setting arg
-/// indices on the trace for each parameter. Used by the trampoline for
-/// function argument decoding.
+/// Decodes function arguments. Sets arg-position trace segments and
+/// enforces arity from the function call contract.
 pub fn parseArgsDepth(
     ctx: *Context,
     start_index: lua.StackIndex,
@@ -90,8 +92,8 @@ fn parseArgsMultiDepth(
     return values;
 }
 
-/// Decodes a sequence of Lua stack values into typed values. No arg
-/// indexing — used for return values and direct decode calls.
+/// Decodes return values and direct decode calls. Positional, no
+/// argument-level trace framing.
 pub fn parseTupleDepth(
     ctx: *Context,
     start_index: lua.StackIndex,
@@ -203,6 +205,8 @@ fn buildPrimitive(ctx: *Context, index: lua.StackIndex) !Primitive {
     };
 }
 
+/// Collects remaining Lua arguments as a `VarArgs` slice. The slice is
+/// allocated from the context arena and valid for the duration of the call.
 pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !Mapper.VarArgs {
     const arr = try ctx.arena().alloc(Primitive, count);
     for (0..count) |i| {
@@ -211,23 +215,23 @@ pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !M
     return .{ .args = arr };
 }
 
-/// Allocates a trace and decodes a Lua stack value at `index` into type `T`.
-/// This is the Internals entry point for callers that manage stack indexes.
-/// Public API users should prefer `pop`, `decode`, or `decodeType`.
+/// Internals entry point for callers that manage stack indexes directly.
 pub fn decodeAt(ctx: *Context, index: lua.StackIndex, comptime T: type) !T {
-    const tracing = @import("tracing.zig");
-    const depth = comptime tracing.maxDecodeDepth(T);
-    var segs: [depth]tracing.Segment = @splat(.empty);
-    var err: tracing.DecodeError = .{ .tag = .custom };
-    const trace = tracing.Trace{ .path = &segs, .deep = 0, .err = &err };
+    const depth = comptime Tracing.maxDecodeDepth(T);
+    var segs: [depth]Tracing.Segment = @splat(.empty);
+    var err: Tracing.DecodeError = .{ .tag = .custom };
+    const trace = Tracing.Trace{ .path = &segs, .deep = 0, .err = &err };
     return decodeAtDepth(ctx, index, T, trace);
 }
 
+/// The caller is responsible for managing the stack slot.
 pub fn decodeAtDepth(ctx: *Context, index: lua.StackIndex, comptime T: type, trace: Trace) !T {
     const prim = try buildPrimitive(ctx, index);
     return decodeValueDepth(ctx, prim, T, trace);
 }
 
+/// Checks for a user-defined decode hook before dispatching to the
+/// built-in type path. Hooks always take priority.
 pub fn decodeValueDepth(ctx: *Context, prim: Primitive, comptime T: type, trace: Trace) !T {
     if (comptime Internals.isOptional(T)) {
         if (prim == .nil) return null;

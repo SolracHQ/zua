@@ -5,12 +5,12 @@
 //! `---@alias`, `---|`). Each emitter appends to a shared `ArrayList(u8)`.
 
 const std = @import("std");
-const types = @import("types.zig");
-const Table = types.Table;
-const Function = types.Function;
-const Object = types.Object;
-const Alias = types.Alias;
-const Operator = types.Operator;
+const Types = @import("types.zig");
+const Table = Types.Table;
+const Function = Types.Function;
+const Object = Types.Object;
+const Alias = Types.Alias;
+const Operator = Types.Operator;
 
 /// Formats text using the given allocator and appends it to the output buffer.
 pub fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) !void {

@@ -5,8 +5,8 @@
 ## Release checklist
 
 - [ ] Version bumped in `build.zig.zon`
-- [ ] `CHANGELOG.md` updated with breaking, added, changed, removed, fixed categories
-- [ ] Handbook updated (`handbook/src/`) if the public API changed
-- [ ] New features include an example (`example/*.zig`)
-- [ ] New example registered in `build.zig` (`setupExamples`) and `Justfile` (`list-examples`)
-- [ ] Stub output reviewed (`just run docs`) when adding or changing ZUA_META types
+- [ ] `CHANGELOG.md` updated with the right categories
+- [ ] Handbook updated (`handbook/`) if the public API changed. `mdbook build` runs clean.
+- [ ] Examples updated or added under `example/` for new features. Examples teach users and serve as compilation tests.
+- [ ] New example registered in `build.zig` (`setupExamples`) and `Justfile` (`list-examples`) if added.
+- [ ] Stub output reviewed (`just run docs`) when adding or changing ZUA_SHAPE types.

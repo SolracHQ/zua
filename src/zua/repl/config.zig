@@ -1,14 +1,18 @@
+//! REPL configuration type exposed to Lua as an Object. Controls prompt,
+//! history, syntax highlighting colors, completion hooks, and stack
+//! trace capture for runtime errors in the interactive session.
+
 const std = @import("std");
 
-const completion = @import("completion.zig");
-const highlight = @import("highlight.zig");
+const Completion = @import("completion.zig");
+const Highlight = @import("highlight.zig");
 
-const Shape = @import("../shape/shape.zig");
+const Shape = @import("../shape/api.zig");
 const Fn = @import("../handlers/typed/fn.zig").Fn;
 const Object = @import("../handlers/typed/object.zig").Object;
 
-const Completer = completion.Completer;
-const CompletionHook = completion.CompletionHook;
+const Completer = Completion.Completer;
+const CompletionHook = Completion.CompletionHook;
 
 /// REPL configuration options.
 pub const Config = @This();
@@ -84,7 +88,7 @@ welcome_message: ?[]const u8 = null,
 stack_trace: bool = false,
 
 /// Optional per-token style hook for syntax highlighting.
-style_hook: highlight.ColorHook = null,
+style_hook: Highlight.ColorHook = null,
 
 /// When enabled, the REPL resolves chained Lua identifiers against the
 /// live runtime and completes globals, fields, and methods.
@@ -98,29 +102,29 @@ runtime_completion: bool = true,
 default_styles: bool = true,
 
 /// Per-kind style overrides. Set via repl:set_color or repl:set_style from Lua.
-style_overrides: std.EnumArray(highlight.TokenKind, ?highlight.Style) = .initFill(null),
+style_overrides: std.EnumArray(Highlight.TokenKind, ?Highlight.Style) = .initFill(null),
 
 /// Lua-side style hook called in resolveStyle, before the Zig style_hook.
 ///
 /// Receives the token kind and the token text. Returns a Style table or nil.
-lua_style_hook: ?Fn(.{ highlight.TokenKind, []const u8 }, ?highlight.Style) = null,
+lua_style_hook: ?Fn(.{ Highlight.TokenKind, []const u8 }, ?Highlight.Style) = null,
 
-/// Lua-side completion hook. Called when set, after runtime completion.
+/// Lua-side completion hook. Called when set, after runtime Completion.
 ///
 /// Receives the session `Completer` handle and the input prefix.
 lua_completion_hook: ?Fn(.{ Object(Completer), []const u8 }, void) = null,
 
 // Lua-facing methods
 
-fn setColor(self: *Config, kind: highlight.TokenKind, color: highlight.Color) void {
-    self.style_overrides.set(kind, highlight.Style{ .fg = color });
+fn setColor(self: *Config, kind: Highlight.TokenKind, color: Highlight.Color) void {
+    self.style_overrides.set(kind, Highlight.Style{ .fg = color });
 }
 
-fn setStyle(self: *Config, kind: highlight.TokenKind, style: highlight.Style) void {
+fn setStyle(self: *Config, kind: Highlight.TokenKind, style: Highlight.Style) void {
     self.style_overrides.set(kind, style);
 }
 
-fn setStyleHook(self: *Config, hook: Fn(.{ highlight.TokenKind, []const u8 }, ?highlight.Style)) void {
+fn setStyleHook(self: *Config, hook: Fn(.{ Highlight.TokenKind, []const u8 }, ?Highlight.Style)) void {
     if (self.lua_style_hook) |prev| prev.release();
     self.lua_style_hook = hook.takeOwnership();
 }

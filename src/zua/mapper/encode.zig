@@ -11,12 +11,12 @@ const lua = @import("../../lua/lua.zig");
 const Table = @import("../handlers/any/table.zig");
 const Function = @import("../handlers/any/function.zig");
 const Userdata = @import("../handlers/any/userdata.zig").Userdata;
-const Context = @import("../state/context.zig");
-const State = @import("../state/state.zig");
+const Context = @import("../context.zig");
+const State = @import("../state.zig");
 
 const Internals = @import("internals.zig");
-const Mapper = @import("mapper.zig");
-const Shape = @import("../shape/shape.zig");
+const Mapper = @import("api.zig");
+const Shape = @import("../shape/api.zig");
 const Metadata = @import("../shape/metadata.zig");
 const MetaTable = @import("../metatable.zig");
 const Marker = @import("../marker.zig");

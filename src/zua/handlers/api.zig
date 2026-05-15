@@ -5,6 +5,9 @@
 //! around Lua values that preserve stack and registry lifetime semantics while
 //! exposing a small API for safe interaction from Zig.
 
+const std = @import("std");
+const lua = @import("../../lua/lua.zig");
+
 pub const Handlers = @This();
 
 /// Ownership mode used when decoding Lua values into handle types.
@@ -13,9 +16,8 @@ pub const Handlers = @This();
 /// must be cleaned up explicitly. It is used by the `Table`, `Function`, and
 /// `Userdata` handler implementations to manage lifetime correctly across the
 /// Lua API.
-const lua = @import("../../lua/lua.zig");
-const State = @import("../state/state.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const State = @import("../state.zig");
+const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
 const Marker = @import("../marker.zig");
 
@@ -161,8 +163,8 @@ pub fn takeOwnership(value: anytype) void {
         },
         .@"union" => {
             switch (value.*) {
-                inline else => |branch| {
-                    takeOwnership(&branch);
+                inline else => |*branch| {
+                    takeOwnership(branch);
                 },
             }
         },
@@ -231,8 +233,6 @@ pub fn release(comptime T: type, value: T) void {
 fn isHandlerType(comptime T: type) bool {
     return T == Any.Table or T == Any.Function or T == Any.Userdata or Marker.isTableView(T);
 }
-
-const std = @import("std");
 
 test {
     std.testing.refAllDecls(@This());

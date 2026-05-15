@@ -5,13 +5,13 @@
 //! exposing a typed accessor for values stored in full userdata.
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
-const Context = @import("../../state/context.zig");
-const Shape = @import("../../shape/shape.zig");
+const Context = @import("../../context.zig");
+const Shape = @import("../../shape/api.zig");
 const Meta = @import("../../shape/metadata.zig");
 const MetaTable = @import("../../metatable.zig");
-const State = @import("../../state/state.zig");
+const State = @import("../../state.zig");
 const UserData = @import("../any/userdata.zig");
-const Primitive = @import("../../mapper/mapper.zig").Primitive;
+const Primitive = @import("../../mapper/api.zig").Primitive;
 const Marker = @import("../../marker.zig");
 
 /// Typed object handle for Lua full userdata values.

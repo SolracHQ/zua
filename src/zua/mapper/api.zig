@@ -1,14 +1,17 @@
-//! Module for mapping Zig and Lua Values in both directions.
+//! Encodes Zig values into Lua and decodes Lua values back into Zig.
+//! This is the central translation layer. `Encoder.push` converts a Zig
+//! value to the Lua stack, `Decoder.pop` reads it back. The translation
+//! strategy for each type comes from its `ZUA_SHAPE` metadata.
 const Mapper = @This();
 
 const std = @import("std");
 
 const lua = @import("../../lua/lua.zig");
-const Context = @import("../state/context.zig");
-const Handlers = @import("../handlers/handlers.zig");
+const Context = @import("../context.zig");
+const Handlers = @import("../handlers/api.zig");
 
 pub const Decoder = @import("decode/api.zig");
-pub const Encoder = @import("encode.zig");
+pub const Encoder = @import("encode/api.zig");
 
 /// Lua primitive type tag. Mirrors the `Primitive` union variants without
 /// carrying any payload. Useful for error reporting and type dispatch.
