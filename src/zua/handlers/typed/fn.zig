@@ -10,7 +10,7 @@ const Context = @import("../../context.zig");
 const Mapper = @import("../../mapper/api.zig");
 const Shape = @import("../../shape/api.zig");
 const Introspect = @import("../../introspect.zig");
-const Marker = @import("../../marker.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
 const Trampoline = @import("../../shape/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
@@ -89,8 +89,8 @@ pub fn Fn(comptime ins: anytype, outs: anytype) type {
             comptime {
                 const callback_type = @TypeOf(callback);
                 const is_native = @typeInfo(callback_type) == .@"fn" or
-                    Marker.isNativeFunction(callback_type) or
-                    (@typeInfo(callback_type) == .type and Marker.isNativeFunction(callback));
+                    ShapeData.isFunction(callback_type) or
+                    (@typeInfo(callback_type) == .type and ShapeData.isFunction(callback));
                 if (is_native) {
                     checkCallbackSignature(callback, ins, outs);
                 }
@@ -130,10 +130,10 @@ fn callbackWrapper(comptime callback: anytype) type {
     if (comptime @typeInfo(callback_type) == .@"fn") {
         return Shape.Fn(callback, .{});
     }
-    if (comptime Marker.isNativeFunction(callback_type)) {
+    if (comptime ShapeData.isFunction(callback_type)) {
         return callback_type;
     }
-    if (comptime @typeInfo(callback_type) == .type and Marker.isNativeFunction(callback)) {
+    if (comptime @typeInfo(callback_type) == .type and ShapeData.isFunction(callback)) {
         return callback;
     }
     @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");

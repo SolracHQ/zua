@@ -44,6 +44,20 @@ fn sumNumbers(ctx: *zua.Context, numbers_table: zua.Handlers.Any.Table) !i32 {
     return sum;
 }
 
+const Handle = opaque {
+    pub const ZUA_SHAPE = zua.Shape.Ptr(Handle, .{ .name = "Handle" });
+};
+
+fn makeHandle(ctx: *zua.Context) !*Handle {
+    const mem = try ctx.arena().alloc(u8, 1);
+    return @ptrCast(@alignCast(mem.ptr));
+}
+
+fn inspectHandle(handle: *Handle) void {
+    _ = handle;
+    std.debug.print("got opaque handle via light userdata\n", .{});
+}
+
 pub fn main(init: std.process.Init) !void {
     const state = try zua.State.init(init.gpa, init.io);
     defer state.deinit();
@@ -56,6 +70,8 @@ pub fn main(init: std.process.Init) !void {
         .create_config = zua.Shape.Fn(createConfig, .{}),
         .get_config_value = zua.Shape.Fn(getConfigValue, .{}),
         .sum_numbers = zua.Shape.Fn(sumNumbers, .{}),
+        .make_handle = zua.Shape.Fn(makeHandle, .{}),
+        .inspect_handle = zua.Shape.Fn(inspectHandle, .{}),
     });
 
     try executor.execute(&ctx, .{ .code = .{ .string =
@@ -76,5 +92,10 @@ pub fn main(init: std.process.Init) !void {
         \\-- Process array tables
         \\local numbers = {10, 20, 30, 40}
         \\print("sum_numbers({10, 20, 30, 40}):", sum_numbers(numbers))
+        \\
+        \\-- Opaque handle as light userdata (.ptr strategy)
+        \\local h = make_handle()
+        \\print("handle type:", type(h))
+        \\inspect_handle(h)
     } });
 }

@@ -4,7 +4,7 @@
 //! for closure capture pointers.
 
 const std = @import("std");
-const Meta = @import("shape/metadata.zig");
+const ShapeData = @import("shape/shape_data.zig");
 
 /// Returns whether `T` is a pointer to a closure strategy type.
 pub fn isCapturePointer(comptime T: type) bool {
@@ -12,7 +12,7 @@ pub fn isCapturePointer(comptime T: type) bool {
     const ptr = @typeInfo(T).pointer;
     if (ptr.size != .one) return false;
     const Child = ptr.child;
-    const s = Meta.strategyOf(Child);
+    const s = ShapeData.strategyOf(Child);
     return s == .closure;
 }
 

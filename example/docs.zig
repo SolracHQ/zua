@@ -54,10 +54,10 @@ const Condition = union(enum) {
     eq: i32,
     in_range: struct { min: i32, max: i32 },
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Condition, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.TypedAlias(Condition, .{}, .{
         .name = "Condition",
         .description = "Tagged union selector accepted by scan-style APIs.",
-        .variants = .{
+        .variant_descriptions = .{
             .eq = .{
                 .description = "Exact match against a single value.",
             },
@@ -78,7 +78,7 @@ const Priority = enum(u8) {
     normal,
     high,
 
-    pub const ZUA_SHAPE = zua.Shape.StrEnum(Priority, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.StrAlias(Priority, .{}, .{
         .name = "Priority",
         .description = "String-backed priority enum.",
     });
@@ -103,7 +103,7 @@ const Os = union(enum) {
     Concrete: ConcreteOs,
     Family: OsFamily,
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Os, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.TypedAlias(Os, .{}, .{
         .name = "Os",
         .description = "Operating system selector. Accepted as strings like \"linux\", \"macos\", \"unix-like\", or \"bsd-based\".",
     }).withDecode(decode).withDocs(osDocs);
@@ -240,4 +240,5 @@ pub fn main(init: std.process.Init) !void {
         .make_counter = CounterClosure{ .count = 0 },
     });
     std.debug.print("{s}", .{stubs});
+    init.gpa.free(stubs);
 }

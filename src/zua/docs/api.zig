@@ -10,8 +10,7 @@
 //! `Generator.add`, `addBinding`, and the `Entry` namespace types.
 
 const std = @import("std");
-const Meta = @import("../shape/metadata.zig");
-const Marker = @import("../marker.zig");
+const ShapeData = @import("../shape/shape_data.zig");
 const Collect = @import("collect.zig");
 const Emit = @import("emit.zig");
 const Helpers = @import("helpers.zig");
@@ -32,14 +31,15 @@ pub fn generateGlobals(allocator: std.mem.Allocator, comptime globals: anytype) 
 
     inline for (@typeInfo(@TypeOf(globals)).@"struct".fields) |field| {
         const value = @field(globals, field.name);
-        if (comptime @TypeOf(value) == type and !Marker.isNativeFunction(value)) {
+        if (comptime @TypeOf(value) == type and !ShapeData.isFunction(value)) {
             try gen.add(value);
         } else {
             try gen.addBinding(field.name, value);
         }
     }
 
-    return gen.generate();
+    const result = try gen.generate();
+    return try allocator.dupe(u8, result);
 }
 
 /// Generates Lua annotation stubs for a single value as a require-able module.
@@ -61,7 +61,7 @@ pub fn generateModule(allocator: std.mem.Allocator, comptime value: anytype, mod
     defer gen.deinit();
 
     try Collect.addType(&gen, Helpers.normalizeRootType(T), true);
-    const type_name = Meta.nameOf(Helpers.normalizeRootType(T));
+    const type_name = ShapeData.nameOf(Helpers.normalizeRootType(T));
 
     var out = std.ArrayList(u8).empty;
     try Emit.appendFmt(gen.arena.allocator(), &out, "---@meta {s}\n\n", .{module_name});

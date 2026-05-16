@@ -8,7 +8,7 @@ const Priority = enum(u8) {
     normal = 1,
     high = 2,
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Priority, .{}, .{})
+    pub const ZUA_SHAPE = zua.Shape.Alias(Priority, .{}, .{})
         .withEncode([]const u8, encodeStr)
         .withDecode(decodeStrOrInt);
 

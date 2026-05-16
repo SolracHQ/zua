@@ -13,6 +13,7 @@ const std = @import("std");
 const Internals = @import("../internals.zig");
 const ArgInfo = @import("../../shape/trampoline.zig").ArgInfo;
 const PrimitiveTag = @import("../api.zig").PrimitiveTag;
+const ShapeData = @import("../../shape/shape_data.zig");
 
 
 /// One step in a decode trace path.
@@ -143,8 +144,9 @@ pub const Trace = struct {
 /// value of the given type. The result is used to size the path buffer on
 /// the caller's stack (no heap allocation).
 ///
-/// Only `.table` strategy types contribute depth. `.object`, `.ptr`, and
-/// `.closure` types are opaque to the decoder and counted as 0.
+/// Only `.table`, `.alias`, and `.typed_alias` strategy types contribute
+/// depth. `.object`, `.ptr`, `.closure`, and `.function` types
+/// are opaque to the decoder and counted as 0.
 pub fn maxDecodeDepth(comptime types: anytype) usize {
     const Ty = @TypeOf(types);
     if (Ty == type) return depthOf(types) + 1;
@@ -200,8 +202,8 @@ pub fn formatDecodePathArg(arena: std.mem.Allocator, path: []const Segment, args
 
 fn isOpaqueType(comptime T: type) bool {
     if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"union") return false;
-    if (@hasDecl(T, "ZUA_SHAPE")) return T.ZUA_SHAPE.Strategy != .table;
-    return @typeInfo(T) == .@"union" and @typeInfo(T).@"union".tag_type == null;
+    const s = comptime ShapeData.strategyOf(T);
+    return s != .table and s != .typed_alias and s != .alias;
 }
 
 fn depthOf(comptime T: type) usize {

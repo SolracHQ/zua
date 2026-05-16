@@ -41,7 +41,7 @@ const Condition = union(enum) {
     eq: f64,
     in_range: Range,
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Condition, .{}, .{});
+    pub const ZUA_SHAPE = zua.Shape.TypedAlias(Condition, .{}, .{});
 };
 
 fn makeEqCondition(value: f64) Condition {

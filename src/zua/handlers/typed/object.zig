@@ -7,7 +7,7 @@ const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Context = @import("../../context.zig");
 const Shape = @import("../../shape/api.zig");
-const Meta = @import("../../shape/metadata.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
 const MetaTable = @import("../../metatable.zig");
 const State = @import("../../state.zig");
 const UserData = @import("../any/userdata.zig");
@@ -20,14 +20,8 @@ const Marker = @import("../../marker.zig");
 /// handler. It decodes Lua `userdata` values into a typed handle and exposes a
 /// typed `.get()` method to access the embedded `T` payload.
 pub fn Object(comptime T: type) type {
-    comptime {
-        if (@typeInfo(T) == .@"fn") {
-            @compileError("Object(T) cannot wrap function types");
-        }
-        const strategy = Meta.strategyOf(T);
-        if (strategy != .object) {
-            @compileError(@typeName(T) ++ " must use object strategy to be wrapped by Object(T)");
-        }
+    if (comptime @typeInfo(T) == .@"fn") {
+        @compileError("Object(T) cannot wrap function types");
     }
 
     return struct {
@@ -66,6 +60,8 @@ pub fn Object(comptime T: type) type {
         /// The object payload is copied into the Lua userdata block and the
         /// associated metatable is attached.
         pub fn create(state: *State, value: T) @This() {
+            if (comptime ShapeData.strategyOf(T) != .object)
+                @compileError(@typeName(T) ++ " must use object strategy to be wrapped by Object(T)");
             const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(state.luaState, @sizeOf(T))));
             ptr.* = value;
             MetaTable.attachMetatable(state, T);

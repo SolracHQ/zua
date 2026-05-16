@@ -1,61 +1,109 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-- `Docs` restructured: public API is `generateGlobals` and `generateModule`. The builder (init, add, addBinding, generate) lives in `Generator`, used inside docs hooks. Hook entry types are under `Entry` (`Docs.Entry.Alias` instead of `Docs.Alias`). Hooks receive `*Generator` instead of `*Docs`.
-- `State` and `Context` moved from `zua/state/` to `zua/` level. `Executor` moved from `zua/exec/` to `zua/` level. Single-file modules with no directory.
-- Entry point files renamed to `api.zig` across modules: `handlers/api.zig`, `mapper/api.zig`, `repl/api.zig`, `docs/api.zig`.
-- `shape/` internals extracted to `shape/internals.zig` instead of inline struct.
-- `Mapper.Encoder` restructured into `encode/api.zig` + `encode/internals.zig`. Only `push` remains public; `fillTable`, `inferArrayCapacity`, `inferRecordCapacity`, `pushLuaPrimitive` moved to `Mapper.Encoder.Internals`.
-
-### Added
-- `CONTRIBUTING.md` with conventions for public API vs Internals, module naming, single-file vs multi-file module layout, documentation style guide, and changelog categories.
-- `src/zua/marker.zig` with `Marker` enum and `markerOf(T)` introspection API. Types declare `__ZUA_MARKER` as a single `Marker` or `std.EnumSet(Marker)` to signal internal code paths. Convenience helpers (`isNativeFunction`, `isTableView`, `all`, `any`, etc.) replace ad-hoc `@hasDecl` checks throughout the codebase.
-- `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
-- `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
-- `Shape.Closure(T, callback, gc, options)`: New closure shape with optional cleanup via `gc` parameter and `ClosureOptions` for doc metadata.
-- `PrimitiveTag` enum and `Primitive.tag()`: Exposes the Lua type tag of a decoded primitive without accessing variant payloads.
-- `Mapper.Decode.Tracing` namespace with `Segment`, `DecodeError`, and `Trace` types for structured decode error reporting. Errors now carry a `tag` (wrong_type, out_of_range, etc.), `expected` type name, and `got` tag so hooks can branch on the reason instead of parsing message strings.
-- Internal utilities (low-level helpers, functions with extra comptime args, code that depends on library-only invariants like max decode depth) are now grouped under `Internals` namespaces (`Mapper.Internals`, `Mapper.Decode.Internals`, `Handlers.Any.Table.Internals`). Users never need to go deeper, but as with `Bindings`, the door is open if you need it.
-- Compile-time methods validation: `Object`, `Table`, `strEnum`, and `List` now reject non-callable method fields with a clear error naming the field, catching mistakes at the `ZUA_SHAPE` declaration site instead of deep in metatable building.
-- `Mapper.Decoder.pop(ctx, T)`: symmetric counterpart to `Encoder.push`. Reads a typed value from the top of the Lua stack and pops the slot in one call. Any handler types (`Table`, `Function`, `Userdata`) in the returned value are automatically converted to owned (registry) handles before the slot is removed. Call `.release()` on them when done. `decode`, `decodeType`, and `parseTuple` still return borrowed handles valid only during the caller's stack frame.
-- `State.pushTop()` and `State.popTop()` for save/restore stack management. Use `state.pushTop(); defer state.popTop();` around code that may push/pop values. In debug builds, each `pushTop` records the call site and `cleanup` reports any unbalanced pairs with stack traces, making Lua stack leaks detectable at shutdown.
+## 0.14.0
 
 ### Breaking
-- Overhauled the public API namespace structure. `lua` and `isocline` moved under `Bindings` (`zua.Bindings.lua`). `Encoder`, `Decoder`, and `VarArgs` moved under `Mapper` (`zua.Mapper.Decoder`). `Fn`, `Object`, and `TableView` moved under `Handlers.Typed` (`zua.Handlers.Typed.Fn`). `Table`, `Function`, and `Userdata` moved under `Handlers.Any` (`zua.Handlers.Any.Table`). `Prelude` added as a flat re-export that preserves the old flat access for users that want it.
-- `Meta` renamed to `Shape`: `src/zua/meta/` renamed to `src/zua/shape/`, module entry point renamed from `meta.zig` to `shape.zig`. All `zua.Meta.*` references must use `zua.Shape.*`. All `pub const ZUA_META` declarations must be renamed to `pub const ZUA_SHAPE`.
+
+- Overhauled the public API namespace structure. `lua` and `isocline` moved under `Bindings` (`zua.Bindings.lua`). `Encoder`, `Decoder`, and `VarArgs` moved under `Mapper` (`zua.Mapper.Decoder`). `Fn`, `Object`, and `TableView` moved under `Handlers.Typed` (`zua.Handlers.Typed.Fn`). `Table`, `Function`, and `Userdata` moved under `Handlers.Any` (`zua.Handlers.Any.Table`). `Prelude` added as a flat re-export that preserves the old flat access.
+
+- `Meta` renamed to `Shape`: `src/zua/meta/` restructured into `src/zua/shape/` as a multi-file module. All `zua.Meta.*` references must use `zua.Shape.*`. All `pub const ZUA_META` must be renamed to `pub const ZUA_SHAPE`.
+
 - `Native` absorbed into `Shape`: `Native.new(fn, error_config, doc_options)` replaced by `Shape.Fn(fn, options)`. Single `FnOptions` struct with `description`, `args`, and optional `parse_err_hook`. The `name`, `parse_err_fmt`, `zig_err_hook`, and `zig_err_fmt` fields are removed.
-- `Native.closure` and `Meta.Capture` replaced by `Shape.Closure`: `Native.closure(fn, initial, err, doc)` + `Meta.Capture(T, methods, opts)` replaced by `Shape.Closure(T, callback, gc, options)`. The struct IS the captured state. `gc` is optional (`null` or `void` for none, or a function that follows the normal method path). Closures have no methods (use `Shape.Object` for state + methods).
-- `Docs.add()` rejects callables: Only accepts `.table`, `.object`, `.ptr` types. Native functions and closures produce a compile-time error directing users to `Docs.addBinding()`.
-- `parse_err_hook` signature changed from `fn (*Context, []const u8) void` to `fn (*Context, *const Trace) void`. The hook now receives the full decode trace (path segments + structured `DecodeError`) instead of a flat message string. Use `trace.err.format(arena)` to produce the default error message, or inspect `trace.err.tag`, `trace.err.expected`, `trace.err.got` for structured branching.
-- `VarArgs` moved from `Mapper.Decoder.VarArgs` to `Mapper.VarArgs`. Update imports from `zua.Mapper.Decoder.VarArgs` to `zua.Mapper.VarArgs`.
+
+- `Native.closure` and `Meta.Capture` replaced by `Shape.Closure`: `Native.closure(fn, initial, err, doc)` + `Meta.Capture(T, methods, opts)` replaced by `Shape.Closure(T, callback, gc, options)`. The struct IS the captured state. `gc` is optional. Closures have no methods.
+
+- `MetaOptions(T, strategy)` removed. Replaced by per-strategy named types: `TableOptions(T)`, `AliasOptions(T)`, `TypedAliasOptions(T)`, `ObjectOptions`, `PtrOptions`, `OpaqueOptions`. Each has only the fields relevant for that strategy.
+
+- `MappingStrategy` now includes `.alias`, `.typed_alias`, `.function`, `.@"opaque"`. `.str_alias` merged into `.alias`. `.table` is now struct-only; tagged unions use `.typed_alias`, enums use `.alias` or `StrAlias`.
+
+- `StrEnum` renamed to `StrAlias`.
+
+- `Docs.add()` rejects callables: only `.table`, `.alias`, `.typed_alias`, `.object`, `.ptr`, `.@"opaque"` types are accepted. `.closure` and `.function` types produce a compile-time error directing to `Docs.addBinding()`.
+
+- `parse_err_hook` signature changed from `fn (*Context, []const u8) void` to `fn (*Context, *const Trace) void`. The hook receives the full decode trace instead of a flat message string.
+
+- `VarArgs` moved from `Mapper.Decoder.VarArgs` to `Mapper.VarArgs`.
+
+- `metadata.zig` renamed to `shape_data.zig`. Import bindings normalized to `ShapeData` across the codebase.
+
+- `decoder.zig` renamed to `internals.zig`. Direct imports of `decode/decoder.zig` break; go through `decode/api.zig` instead.
+
+### Added
+
+- `CONTRIBUTING.md` with conventions for public API vs Internals, module naming, single-file vs multi-file module layout, documentation style guide, and changelog categories.
+
+- `src/zua/marker.zig` with `Marker` enum and `markerOf(T)` introspection API. Types declare `__ZUA_MARKER` to signal internal code paths. Convenience helpers (`isTableView`, `all`, `any`, etc.) replace ad-hoc `@hasDecl` checks.
+
+- `__ZUA_TABLE_VIEW_TYPE = T` on `TableView(T)` for clean inner-type access without `@typeInfo` reflection.
+
+- `Object.userdataInnerType(Wrapper)` and `TableView.tableViewInnerType(Wrapper)` public helpers for extracting the inner type from transparent typed wrappers.
+
+- `Shape.Closure(T, callback, gc, options)`: new closure shape with optional cleanup via `gc` parameter.
+
+- `PrimitiveTag` enum and `Primitive.tag()`: exposes the Lua type tag of a decoded primitive without accessing variant payloads.
+
+- `Mapper.Decode.Tracing` namespace with `Segment`, `DecodeError`, and `Trace` types for structured decode error reporting. Errors carry a `tag` (wrong_type, out_of_range, etc.), `expected` type name, and `got` tag so hooks branch on the reason instead of parsing message strings.
+
+- Internal utilities grouped under `Internals` namespaces (`Mapper.Internals`, `Mapper.Decode.Internals`, `Handlers.Any.Table.Internals`). Users never need to go deeper, but the door is open.
+
+- Compile-time methods validation: `Object`, `Table`, `StrAlias`, and `List` now reject non-callable method fields with a clear error naming the field.
+
+- `Mapper.Decoder.pop(ctx, T)`: symmetric counterpart to `Encoder.push`. Reads a typed value from the top of the Lua stack and pops the slot. Handler types in the returned value are converted to owned handles before the slot is removed.
+
+- `State.pushTop()` and `State.popTop()` for save/restore stack management. In debug builds, each `pushTop` records the call site and `cleanup` reports unbalanced pairs with stack traces.
+
+- `Shape.Alias(T, methods, opts)`, `Shape.StrAlias(T, methods, opts)`, `Shape.TypedAlias(T, methods, opts)`, `Shape.Opaque(T, methods, opts)` shape helpers for enum aliases, string-backed aliases, tagged union aliases, and opaque types.
+
+- `ShapeData.isFunction(T)` and `ShapeData.trampolineOf(T)` public helpers for detecting and extracting native function trampolines.
+
+- `Docs.generateGlobals(allocator, globals)` generates stubs for a flat set of global bindings. Returns caller-owned memory that must be freed with `allocator.free`.
+
+- Structs can now declare `pub const ZUA_SHAPE = Shape.Fn(f, .{})` and be pushed as raw C functions.
 
 ### Changed
-- Consolidated all `__ZUA_*` boolean markers into `__ZUA_MARKER`:
-  - `view.zig`: `__ZUA_TABLE_VIEW = @This()` to `__ZUA_MARKER = .table_view`
-  - `object.zig`: added `__ZUA_MARKER = .userdata_wrapper`
-  - `trampoline.zig`: `__IsZuaNativeFunction` + `__IsZuaClosure` replaced by single `__ZUA_MARKER: EnumSet`
-  - `metadata.zig` `DefaultGuard`: added `__ZUA_MARKER = .default_guard`
-- `selectTrampoline` in `metatable.zig` now takes a `name` parameter so it produces a clear compile error (```method `name` is not a function```) instead of a confusing `NativeFn` failure.
-- `__ZUA_USERDATA_TYPE` and `__ZUA_TABLE_VIEW_TYPE` made private; external access uses the new `userdataInnerType`/`tableViewInnerType` helpers.
+
+- All multi-file modules now consistently follow the `api.zig` (public API) + `internals.zig` (Internals aggregator) pattern: `shape/`, `mapper/`, `handlers/`, `docs/`, `repl/`. Single-file modules (`state.zig`, `context.zig`, `executor.zig`) remain as standalone `.zig` files.
+
+- `State` and `Context` moved from `zua/state/` to `zua/` level. `Executor` moved from `zua/exec/` to `zua/` level.
+
+- `Mapper.Encoder` restructured into `encode/api.zig` + `encode/internals.zig`. Only `push` remains public; `fillTable`, `inferArrayCapacity`, `inferRecordCapacity`, `pushLuaPrimitive` moved to `Mapper.Encoder.Internals`.
+
+- `Docs` restructured: public API is `generateGlobals` and `generateModule`. The builder (`init`, `add`, `addBinding`, `generate`) lives in `Generator`, used inside docs hooks. Hook entry types are under `Entry`. Hooks receive `*Generator` instead of `*Docs`.
+
+- `selectTrampoline` in `metatable.zig` now takes a `name` parameter so it produces a clear compile error instead of a confusing `NativeFn` failure.
+
+- `__ZUA_USERDATA_TYPE` and `__ZUA_TABLE_VIEW_TYPE` made private; external access uses `userdataInnerType`/`tableViewInnerType` helpers.
+
 - `__ZuaNativeReturnType` and `__ZuaFnTypeInfo` in trampoline wrappers made private; external access uses `trampoline.nativeReturnType(T)` and `trampoline.fnTypeInfo(T)`.
-- Split `meta/helpers.zig` into `introspect.zig` (type introspection: `isTuple`, `isErrorUnion`, `typeListCount`, etc.) and `meta/internal.zig` (metadata strategy internals). The old file was removed.
-- Each strategy function (`Object`, `Table`, `Capture`, `strEnum`, `List`) now validates that `methods` is a struct and gives a clear compile error instead of failing deep in `MetaData`.
-- The old `typed/` directory was removed and its files moved to `handlers/typed/`.
-- `shape/meta.zig` renamed to `shape/shape.zig`: Module entry point renamed. Only public API is re-exported from `shape.zig`. Internal helpers (`getMeta`, `strategyOf`, `MappingStrategy` enum, etc.) are no longer visible through the public module.
-- `Docs.addBinding()` handles closures and `Shape.Fn`: Recognizes `.closure` strategy types and type-valued `Shape.Fn`, generating `---@param` / `---@return` annotations and a `function name(args) end` definition. The `*T` upvalue is excluded from closure docs.
-- Bindings skip self-references: `var_name = var_name` lines are no longer emitted.
-- Decode error messages now include the trace: when argument decoding fails, the error shows the full path to the failing field (e.g. `config.metadata.version: expected i32, got string`). Parameter names from `FnOptions.args` are used automatically. When no hook is set, the trampoline formats the trace and error into the message. When a hook is set, the hook receives the raw trace and can produce a custom message.
-- `Mapper.Decoder.decodeAt`, `decodeValue`, `decodeStruct`, and `parseTuple` now produce trace-based error messages internally. Public signatures are unchanged.
-- `Executor.eval_untyped` renamed to `Executor.evalCount`. Returns `!usize` (number of results) instead of `!void`.
-- `isOptional`, `isStringValueType`, `parseInteger`, and `parseFloat` moved from `Mapper` to `Mapper.Internals`. The old paths still work via re-export in the `Prelude`.
-- All examples updated for `VarArgs` move and new hook signature.
+
+- Split `meta/helpers.zig` into `introspect.zig` (type introspection) and `meta/internal.zig` (metadata strategy internals).
+
+- The old `typed/` directory removed, files moved to `handlers/typed/`.
+
+- `Docs.addBinding()` handles closures and `Shape.Fn`: recognizes `.closure` strategy types and type-valued `Shape.Fn`, generating `---@param` / `---@return` annotations and a `function name(args) end` definition.
+
+- Bindings skip self-references: `var_name = var_name` lines no longer emitted.
+
+- Decode error messages include the trace path. Parameter names from `FnOptions.args` are used automatically.
+
+- `Executor.eval_untyped` renamed to `Executor.evalCount`. Returns `!usize`.
+
+- `isOptional`, `isStringValueType`, `parseInteger`, `parseFloat` moved from `Mapper` to `Mapper.Internals`. The old paths still work via re-export in the `Prelude`.
+
+- `Object(T)` strategy validation moved from type definition to `Object(T).create()` to break a circular dependency with `generatedListMethods`.
+
+- `shouldEmitAlias` checks strategy directly instead of inspecting `@typeInfo`.
+
+- Trampoline types (`makeFn`, `makeClosure`) declare `ZUA_SHAPE = @This()` for detection through `isFunction`/`trampolineOf`.
+
+- All examples updated for the new shape API.
 
 ### Removed
-- `isNativeWrapperType` helper. Replaced by `Marker.isNativeFunction(T)` from the new Marker API.
+
 - `Native` module from `root.zig` and `prelude.zig`.
 - `src/zua/meta/` and `src/zua/functions/` directories.
+- `MetaOptions(T, strategy)` function.
+- `StrEnum` shape helper.
 
 ## 0.13.0
 

@@ -11,14 +11,16 @@ const Primitive = Mapper.Primitive;
 const Handlers = @import("../handlers/api.zig");
 const Gen = @import("../docs/generator.zig").Generator;
 pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
-    return fn (*Context, T) anyerror!?ProxyType;
+    const Param = if (comptime @typeInfo(T) == .@"opaque") *T else T;
+    return fn (*Context, Param) anyerror!?ProxyType;
 }
 
 pub fn DecodeHookType(comptime T: type) type {
-    return fn (*Context, Primitive) anyerror!?T;
+    const Ret = if (comptime @typeInfo(T) == .@"opaque") *T else T;
+    return fn (*Context, Primitive) anyerror!?Ret;
 }
 
-pub fn DocsHookType(comptime _: type) type {
+pub fn DocsHookType() type {
     return fn (*Gen) anyerror!void;
 }
 
@@ -181,9 +183,9 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
             return .{ next, elem };
         }
 
-        pub fn iter(self: Handlers.Any.Userdata) struct {
-            Trampoline.makeFn(iget, false, .{}),
-            Handlers.Any.Userdata,
+        pub fn iter(self: Handlers.Typed.Object(L)) struct {
+            Trampoline.ShapeFn(iget, false, .{}),
+            Handlers.Typed.Object(L),
             ?usize,
         } {
             return .{ .{}, self, 0 };
@@ -205,7 +207,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
     const ListGen = generatedListMethods(L, getElements);
     break :blk .{
-        .get = Trampoline.makeFn(ListGen.get, false, .{
+        .get = Trampoline.ShapeFn(ListGen.get, false, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
@@ -213,14 +215,14 @@ pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @
         }){},
         .__index = ListGen.__index,
         .__len = ListGen.__len,
-        .iter = Trampoline.makeFn(ListGen.iter, false, .{
+        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
 }) {
     const ListGen = generatedListMethods(L, getElements);
     return .{
-        .get = Trampoline.makeFn(ListGen.get, false, .{
+        .get = Trampoline.ShapeFn(ListGen.get, false, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
@@ -228,7 +230,7 @@ pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @
         }){},
         .__index = ListGen.__index,
         .__len = ListGen.__len,
-        .iter = Trampoline.makeFn(ListGen.iter, false, .{
+        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };

@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
-const Meta = @import("shape/metadata.zig");
+const ShapeData = @import("shape/shape_data.zig");
 const Shape = @import("shape/api.zig");
 const Marker = @import("marker.zig");
 const State = @import("state.zig");
@@ -36,7 +36,7 @@ pub fn attachMetatable(state: *State, comptime T: type) void {
 /// - state: The global Zua state owning the Lua VM.
 /// - T: The type whose metatable is being constructed.
 pub fn buildMetatable(state: *State, comptime T: type) void {
-    const strategy = Meta.strategyOf(T);
+    const strategy = ShapeData.strategyOf(T);
 
     lua.createTable(state.luaState, 0, 4);
     const mt_index = lua.absIndex(state.luaState, -1);
@@ -46,7 +46,7 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
         lua.setField(state.luaState, mt_index, "__name");
     }
 
-    const methods = comptime Meta.methodsOf(T);
+    const methods = comptime ShapeData.methodsOf(T);
     if (methodCount(T) == 0) return;
 
     const methods_type = @TypeOf(methods);
@@ -97,11 +97,11 @@ pub fn buildMetatable(state: *State, comptime T: type) void {
 fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 
-    if (comptime Marker.isNativeFunction(method_fn_type)) {
+    if (comptime ShapeData.isFunction(method_fn_type)) {
         return method_fn_type.trampoline();
     }
 
-    if (comptime @typeInfo(method_fn_type) == .type and Marker.isNativeFunction(method_fn)) {
+    if (comptime @typeInfo(method_fn_type) == .type and ShapeData.isFunction(method_fn)) {
         return method_fn.trampoline();
     }
 
@@ -117,7 +117,7 @@ fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.
 /// the named method when the key matches, otherwise falls through to the
 /// custom handler.
 fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
-    const methods = comptime Meta.methodsOf(T);
+    const methods = comptime ShapeData.methodsOf(T);
     const methods_type = comptime @TypeOf(methods);
     const custom_trampoline = comptime selectTrampoline(@field(methods, "__index"), "__index").?;
 
@@ -154,7 +154,7 @@ fn combinedIndexTrampoline(comptime T: type) lua.CFunction {
 
 /// Returns the total number of methods declared on `T`.
 fn methodCount(comptime T: type) i32 {
-    const methods = comptime Meta.methodsOf(T);
+    const methods = comptime ShapeData.methodsOf(T);
     return @intCast(@typeInfo(@TypeOf(methods)).@"struct".fields.len);
 }
 
@@ -162,7 +162,7 @@ fn methodCount(comptime T: type) i32 {
 ///
 /// This determines whether a separate `__index` table needs to be built.
 fn regularMethodCount(comptime T: type) i32 {
-    const methods = comptime Meta.methodsOf(T);
+    const methods = comptime ShapeData.methodsOf(T);
     comptime var count: i32 = 0;
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         if (!std.mem.startsWith(u8, field.name, "__")) count += 1;

@@ -14,7 +14,7 @@ const Alias = Types.Alias;
 const Context = @import("../context.zig");
 const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
-const Metadata = @import("../shape/metadata.zig");
+const ShapeData = @import("../shape/shape_data.zig");
 const Helpers = @import("helpers.zig");
 const Introspect = @import("../introspect.zig");
 const Trampoline = @import("../shape/trampoline.zig");
@@ -47,7 +47,7 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
     }
 
     const cache_key = @typeName(Normalized);
-    const meta_info = comptime Metadata.getMeta(Normalized);
+    const meta_info = comptime ShapeData.getShape(Normalized);
 
     if (meta_info.DocsHook) |hook| {
         if (self.class_map.contains(cache_key)) return;
@@ -61,8 +61,8 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
         try self.alias_map.put(try Helpers.persist(self, cache_key), {});
 
         var doc = Alias{
-            .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
-            .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
+            .name = try Helpers.persist(self, ShapeData.nameOf(Normalized)),
+            .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
             .values = .empty,
         };
         try collectAliasValues(self, &doc, Normalized, recurse_nested);
@@ -70,20 +70,21 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
         return;
     }
 
-    switch (Metadata.strategyOf(Normalized)) {
+    switch (ShapeData.strategyOf(Normalized)) {
+        .alias, .typed_alias, .function, .default => unreachable,
         .table => {
             if (self.class_map.contains(cache_key)) return;
             try self.class_map.put(try Helpers.persist(self, cache_key), {});
 
             var doc = Table{
-                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, ShapeData.nameOf(Normalized)),
+                .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
                 .fields = .empty,
                 .operators = .empty,
             };
 
-            try collectTableFields(self, &doc, Normalized, Metadata.attributeDescriptionsOf(Normalized), recurse_nested);
-            try collectMethods(self, &doc.operators, Metadata.methodsOf(Normalized), Normalized, recurse_nested);
+            try collectTableFields(self, &doc, Normalized, ShapeData.attributeDescriptionsOf(Normalized), recurse_nested);
+            try collectMethods(self, &doc.operators, ShapeData.methodsOf(Normalized), Normalized, recurse_nested);
             try self.classes.append(self.arena.allocator(), doc);
         },
         .object, .ptr => {
@@ -91,22 +92,22 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
             try self.object_map.put(try Helpers.persist(self, cache_key), {});
 
             var doc = Object{
-                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, ShapeData.nameOf(Normalized)),
+                .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
                 .operators = .empty,
             };
 
-            try collectMethods(self, &doc.operators, Metadata.methodsOf(Normalized), Normalized, recurse_nested);
+            try collectMethods(self, &doc.operators, ShapeData.methodsOf(Normalized), Normalized, recurse_nested);
             try self.objects.append(self.arena.allocator(), doc);
         },
         .closure => {
-            const trampoline_type = Metadata.closureTrampolineType(Normalized).?;
+            const trampoline_type = comptime ShapeData.getShape(Normalized);
 
             if (self.functions.contains(cache_key)) return;
 
             var doc = Function{
-                .name = try Helpers.persist(self, Metadata.nameOf(Normalized)),
-                .description = try Helpers.persist(self, Metadata.descriptionOf(Normalized)),
+                .name = try Helpers.persist(self, ShapeData.nameOf(Normalized)),
+                .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
             };
 
             try collectFunctionParameters(self, &doc, trampoline_type, false, null);
@@ -138,8 +139,9 @@ pub fn addWrappedFunction(
     display_name: []const u8,
     cache_key: []const u8,
 ) !void {
-    if (comptime !Marker.isNativeFunction(T)) {
-        @compileError("Docs.addWrappedFunction expects a native function wrapper type");
+    const ShapeT = comptime ShapeData.getShape(T);
+    if (comptime ShapeT.Strategy != .function and ShapeT.Strategy != .closure) {
+        @compileError("Docs.addWrappedFunction expects a native function or closure wrapper type");
     }
 
     if (self.functions.contains(cache_key)) return;
@@ -172,7 +174,7 @@ fn collectTableFields(
             if (info.is_tuple) return;
 
             inline for (info.fields) |field| {
-                if (comptime Marker.isNativeFunction(field.type)) {
+                if (comptime ShapeData.isFunction(field.type)) {
                     if (self.functions.getPtr(field.name)) |existing| {
                         try existing.field_of.append(self.arena.allocator(), .{
                             .owner = try Helpers.persist(self, owner_name),
@@ -229,7 +231,7 @@ fn collectMethods(
     comptime owner_type: type,
     comptime recurse_nested: bool,
 ) anyerror!void {
-    const owner_name = Metadata.nameOf(owner_type);
+    const owner_name = ShapeData.nameOf(owner_type);
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         if (comptime std.mem.startsWith(u8, field.name, "__")) {
             const op_name = field.name[2..];
@@ -303,6 +305,7 @@ fn collectFunctionParameters(
     comptime is_method: bool,
     comptime owner_type: ?type,
 ) !void {
+    const ShapeT = comptime ShapeData.getShape(T);
     const fn_info = Trampoline.fnTypeInfo(T);
     comptime var arg_index: usize = 0;
 
@@ -314,7 +317,7 @@ fn collectFunctionParameters(
 
         if (comptime is_method and owner_type != null and Helpers.isSelfParam(param_type, owner_type.?)) continue;
 
-        const arg_info = Helpers.argDocInfo(T.args, arg_index);
+        const arg_info = Helpers.argDocInfo(ShapeT.args, arg_index);
         arg_index += 1;
 
         if (comptime param_type == Mapper.VarArgs) {
@@ -350,10 +353,10 @@ fn collectFunctionReturns(self: *Generator, doc: *Function, comptime ReturnType:
 /// type (with a custom variant name) or an inline table shape. Named variant tables
 /// are pushed to the classes list.
 fn collectAliasValues(self: *Generator, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
-    const variant_descs = comptime Metadata.variantDescriptionsOf(T);
+    const variant_descs = comptime ShapeData.variantDescriptionsOf(T);
     switch (@typeInfo(T)) {
         .@"enum" => {
-            const is_str_enum = comptime Metadata.proxyTypeOf(T) == []const u8;
+            const is_str_enum = comptime ShapeData.proxyTypeOf(T) == []const u8;
             inline for (std.meta.fields(T)) |field| {
                 const type_str = if (comptime is_str_enum)
                     try std.fmt.allocPrint(self.arena.allocator(), "'{s}'", .{field.name})
@@ -437,11 +440,11 @@ fn maybeRecurseReferencedType(self: *Generator, comptime T: type, comptime recur
 
     if (comptime Helpers.isIgnoredDocType(T)) return;
     if (comptime Helpers.isTypedFunctionHandle(T)) return;
-    if (comptime Marker.isNativeFunction(T)) return;
+    if (comptime ShapeData.isFunction(T)) return;
 
     switch (@typeInfo(T)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {
-            const strategy = comptime Metadata.strategyOf(T);
+            const strategy = comptime ShapeData.strategyOf(T);
             if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure) {
                 try addType(self, T, true);
             }

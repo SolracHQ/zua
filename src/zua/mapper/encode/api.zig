@@ -17,9 +17,8 @@ pub const Internals = @import("internals.zig");
 
 const Mapper = @import("../api.zig");
 const Shape = @import("../../shape/api.zig");
-const Metadata = @import("../../shape/metadata.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
 const MetaTable = @import("../../metatable.zig");
-const Marker = @import("../../marker.zig");
 const MapperInternals = @import("../internals.zig");
 
 const Primitive = Mapper.Primitive;
@@ -57,9 +56,9 @@ pub fn push(ctx: *Context, value: anytype) !void {
         return Internals.pushLuaPrimitive(ctx, value);
     }
 
-    const native_fn: type = if (T == type) value else T;
-    if (comptime Marker.isNativeFunction(native_fn)) {
-        lua.pushCFunction(ctx.state.luaState, native_fn.trampoline());
+    const actual_type: type = if (T == type) value else T;
+    if (comptime ShapeData.trampolineOf(actual_type)) |tramp| {
+        lua.pushCFunction(ctx.state.luaState, tramp);
         return;
     }
 
@@ -67,10 +66,9 @@ pub fn push(ctx: *Context, value: anytype) !void {
         return try push(ctx, Shape.Fn(value, .{}));
     }
 
-    // Check for custom encode hook first
-    if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
-        const meta = comptime Metadata.getMeta(T);
-        if (try meta.EncodeHook(ctx, value)) |encoded| {
+    const shape = comptime ShapeData.getShape(T);
+    if (shape.EncodeHook) |hook| {
+        if (try hook(ctx, value)) |encoded| {
             return push(ctx, encoded);
         }
     }
@@ -96,7 +94,7 @@ pub fn push(ctx: *Context, value: anytype) !void {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
         },
         .@"enum", .@"struct", .@"union" => {
-            const strategy = comptime Metadata.strategyOf(T);
+            const strategy = comptime ShapeData.strategyOf(T);
 
             if (comptime strategy == .object) {
                 const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
@@ -106,11 +104,15 @@ pub fn push(ctx: *Context, value: anytype) !void {
             }
 
             if (comptime strategy == .closure) {
-                const tramp = Metadata.closureTrampolineType(T).?;
                 const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
                 ptr.* = value;
                 MetaTable.attachMetatable(ctx.state, T);
-                lua.pushCClosure(ctx.state.luaState, tramp.trampoline(), 1);
+                lua.pushCClosure(ctx.state.luaState, shape.trampoline(), 1);
+                return;
+            }
+
+            if (comptime strategy == .function) {
+                lua.pushCFunction(ctx.state.luaState, T.ZUA_SHAPE.trampoline());
                 return;
             }
 
@@ -118,14 +120,14 @@ pub fn push(ctx: *Context, value: anytype) !void {
                 @compileError(std.fmt.comptimePrint("Cannot push {s} with .ptr strategy by value: the pointer address would be lost. Return a *{s} instead. (Custom encode hooks do not yet support pointer types; if you need this feature, please open an issue.)", .{ @typeName(T), @typeName(T) }));
             }
 
-            if (comptime @typeInfo(T) == .@"enum") {
+            if (comptime strategy == .alias) {
                 lua.pushInteger(ctx.state.luaState, @intFromEnum(value));
                 return;
-            } else {
-                lua.createTable(ctx.state.luaState, Internals.inferArrayCapacity(value), Internals.inferRecordCapacity(value));
-                const nested = Table.fromStack(ctx.state, -1);
-                try Internals.fillTable(ctx, nested, value);
             }
+
+            lua.createTable(ctx.state.luaState, Internals.inferArrayCapacity(value), Internals.inferRecordCapacity(value));
+            const nested = Table.fromStack(ctx.state, -1);
+            try Internals.fillTable(ctx, nested, value);
 
             MetaTable.attachMetatable(ctx.state, T);
         },
@@ -140,8 +142,8 @@ pub fn push(ctx: *Context, value: anytype) !void {
                     return;
                 }
 
-                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum") {
-                    const strategy = comptime Metadata.strategyOf(Pointee);
+                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum" or @typeInfo(Pointee) == .@"opaque") {
+                    const strategy = comptime ShapeData.strategyOf(Pointee);
 
                     if (strategy == .object) {
                         @compileError(std.fmt.comptimePrint("Cannot push *{s} where {s} uses .object strategy: the metatable and identity would be lost. Return {s} by value instead to preserve metatable behavior and enable proper method dispatch.", .{ @typeName(Pointee), @typeName(Pointee), @typeName(Pointee) }));

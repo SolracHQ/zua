@@ -17,7 +17,7 @@ const RawTable = @import("../handlers/any/table.zig").Table;
 const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
-const MetaData = @import("../shape/metadata.zig");
+const ShapeData = @import("../shape/shape_data.zig");
 const Marker = @import("../marker.zig");
 const Object = @import("../handlers/typed/object.zig");
 const TableView = @import("../handlers/typed/table_view.zig");
@@ -60,7 +60,7 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
     if (Normalized == Mapper.VarArgs) return persist(self, "any");
 
     if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
-    if (comptime Marker.isNativeFunction(Normalized)) return persist(self, "function");
+    if (comptime ShapeData.isFunction(Normalized)) return persist(self, "function");
     if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
     return switch (@typeInfo(Normalized)) {
@@ -82,13 +82,13 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
             if (ptr.size == .one) {
                 const child = ptr.child;
                 if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
-                    break :blk try persist(self, MetaData.nameOf(child));
+                    break :blk try persist(self, ShapeData.nameOf(child));
                 }
             }
 
             break :blk try persist(self, @typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, MetaData.nameOf(Normalized)),
+        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, ShapeData.nameOf(Normalized)),
         else => persist(self, @typeName(Normalized)),
     };
 }
@@ -146,7 +146,8 @@ pub fn persist(self: *Generator, text: []const u8) ![]const u8 {
 
 /// Returns the description string from a `Shape.Fn` or closure wrapper type.
 pub fn nativeFnDesc(comptime T: type) []const u8 {
-    return T.description;
+    const S = comptime ShapeData.getShape(T);
+    return S.description;
 }
 
 /// Wraps a Zig function or native function type into a documentation-ready
@@ -155,8 +156,8 @@ pub fn nativeFnDesc(comptime T: type) []const u8 {
 pub fn wrapMethod(comptime method_value: anytype) type {
     const T = @TypeOf(method_value);
     if (comptime @typeInfo(T) == .@"fn") return Shape.Fn(method_value, .{});
-    if (comptime Marker.isNativeFunction(T)) return T;
-    if (comptime @typeInfo(T) == .type and Marker.isNativeFunction(method_value)) return method_value;
+    if (comptime ShapeData.isFunction(T)) return T;
+    if (comptime @typeInfo(T) == .type and ShapeData.isFunction(method_value)) return method_value;
     @compileError("method docs only support Zig functions or Shape.Fn wrappers");
 }
 
@@ -172,22 +173,9 @@ pub fn normalizeRootType(comptime T: type) type {
     return T;
 }
 
-/// Determines whether a type should be emitted as an `---@alias` instead of a
-/// `---@class`.
-///
-/// Returns `true` for tagged unions (discriminated unions with an explicit
-/// tag) and for enums whose proxy type is `[]const u8`.
-///
-/// Arguments:
-/// - T: The Zig type to check.
-///
-/// Returns:
-/// - bool: `true` if the type should be emitted as an alias.
 pub fn shouldEmitAlias(comptime T: type) bool {
-    if (MetaData.strategyOf(T) != .table) return false;
-    return switch (@typeInfo(T)) {
-        .@"union" => |info| info.tag_type != null,
-        .@"enum" => true,
+    return switch (ShapeData.strategyOf(T)) {
+        .alias, .typed_alias => true,
         else => false,
     };
 }

@@ -4,10 +4,6 @@
 
 const std = @import("std");
 pub const Marker = enum {
-    /// `NativeFn` trampoline wrapper. The encoder pushes it as a raw `lua_CFunction`.
-    native_function,
-    /// `Closure` trampoline wrapper. The encoder pushes it as a `lua_CClosure` with the capture in upvalue 1.
-    native_closure,
     /// `TableView(T)` transparent wrapper over a table-strategy type.
     /// Handlers and docs treat it as a transparent typed wrapper.
     table_view,
@@ -73,16 +69,6 @@ pub fn new(comptime markers: []const Marker) std.EnumSet(Marker) {
         }
         return set;
     }
-}
-
-/// Returns `true` if `T` has the `native_function` marker.
-pub fn isNativeFunction(comptime T: type) bool {
-    return comptime markerOf(T).contains(.native_function);
-}
-
-/// Returns `true` if `T` has the `native_closure` marker.
-pub fn isNativeClosure(comptime T: type) bool {
-    return comptime markerOf(T).contains(.native_closure);
 }
 
 /// Returns `true` if `T` has the `table_view` marker.

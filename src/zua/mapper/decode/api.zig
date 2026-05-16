@@ -21,7 +21,7 @@ const Primitive = @import("../api.zig").Primitive;
 const Handlers = @import("../../handlers/api.zig");
 
 pub const Tracing = @import("tracing.zig");
-pub const Internals = @import("decoder.zig");
+pub const Internals = @import("internals.zig");
 pub const ParseResult = Internals.ParseResult;
 
 /// Tagged union that carries either a decoded value or a structured error

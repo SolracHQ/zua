@@ -45,6 +45,26 @@ const Counter = struct {
 };
 
 /// Each call increments `count` by `step` and returns the new value.
+
+// --- ZUA_SHAPE wrapping a function ---
+//
+// A struct can declare itself as a callable by setting ZUA_SHAPE to
+// `Shape.Fn(...)`. The struct acts like the function when pushed to
+// Lua, but can also carry compile-time metadata.
+
+/// Doubles its input. Pushed as a raw C function, not a closure.
+const Double = struct {
+    pub const ZUA_SHAPE = zua.Shape.Fn(double, .{
+        .description = "Doubles a number.",
+        .args = &.{
+            .{ .name = "x", .description = "Value to double." },
+        },
+    });
+    fn double(x: i32) i32 {
+        return x * 2;
+    }
+};
+
 // --- VarArgs ---
 
 /// Sums all Lua number arguments passed in. Demonstrates VarArgs.
@@ -145,6 +165,7 @@ pub fn main(init: std.process.Init) !void {
         .describe_args = zua.Shape.Fn(describeArgs, .{}),
         .counter_by_one = Counter{ .count = 0, .step = 1 },
         .counter_by_ten = Counter{ .count = 0, .step = 10 },
+        .double = Double{},
     };
 
     try state.addGlobals(&ctx, module);
@@ -187,6 +208,10 @@ pub fn main(init: std.process.Init) !void {
         \\print("counter_by_ten:", counter_by_ten())  -- 20
         \\-- The two counters are independent
         \\print("counter_by_one:", counter_by_one())  -- 4  (unaffected by by_ten calls)        \\
+        \\-- ZUA_SHAPE with Shape.Fn: struct pushed as a raw function
+        \\print("\nFunction via ZUA_SHAPE:")
+        \\print("double(21) =", double(21))
+        \\
         \\-- VarArgs: capture remaining Lua arguments as []Primitive
         \\print("\nVarArgs:")
         \\print("sum_all(1, 2, 3, 4, 5) =", sum_all(1, 2, 3, 4, 5))

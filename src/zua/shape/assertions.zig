@@ -3,7 +3,7 @@
 //! methods, or strategies that are incompatible or malformed.
 
 const std = @import("std");
-const Marker = @import("../marker.zig");
+const ShapeData = @import("shape_data.zig");
 
 /// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
 ///
@@ -35,10 +35,10 @@ pub fn assertValidMethods(comptime methods: anytype) void {
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         const T = field.type;
         if (comptime @typeInfo(T) == .@"fn") continue;
-        if (comptime Marker.isNativeFunction(T)) continue;
+        if (comptime ShapeData.isFunction(T)) continue;
         if (comptime @typeInfo(T) == .type) {
             const val = @field(methods, field.name);
-            if (Marker.isNativeFunction(val)) continue;
+            if (ShapeData.isFunction(val)) continue;
         }
         @compileError("method `" ++ field.name ++ "` must be a Zig function or Shape.Fn/Closure wrapper, got " ++ @typeName(T));
     }

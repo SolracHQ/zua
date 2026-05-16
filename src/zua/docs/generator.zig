@@ -11,7 +11,7 @@ const RawFunction = @import("../handlers/any/function.zig").Function;
 const RawTable = @import("../handlers/any/table.zig").Table;
 const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/api.zig");
-const Meta = @import("../shape/metadata.zig");
+const ShapeData = @import("../shape/shape_data.zig");
 const Marker = @import("../marker.zig");
 const Internals = @import("internals.zig");
 const Helpers = Internals.Helpers;
@@ -60,13 +60,15 @@ pub fn deinit(self: *Generator) void {
 /// Documents a type. Only `.table`, `.object`, and `.ptr` strategies are
 /// accepted. Functions and closures must use `addBinding` instead.
 pub fn add(self: *Generator, comptime T: type) !void {
-    if (comptime Marker.isNativeFunction(T)) {
+    if (comptime ShapeData.isFunction(T)) {
         @compileError("use addBinding instead of add for Shape.Fn wrappers");
     }
-    const strategy = Meta.strategyOf(T);
+    const strategy = ShapeData.strategyOf(T);
     switch (strategy) {
-        .table, .object, .ptr => return Collect.addType(self, Helpers.normalizeRootType(T), true),
+        .table, .alias, .typed_alias, .object, .ptr => return Collect.addType(self, Helpers.normalizeRootType(T), true),
         .closure => @compileError("closures require addBinding, not add"),
+        .function => @compileError("function types require addBinding, not add"),
+        .default => unreachable,
     }
 }
 
@@ -75,7 +77,7 @@ pub fn add(self: *Generator, comptime T: type) !void {
 pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
-    if (comptime T == type and Marker.isNativeFunction(value)) {
+    if (comptime T == type and ShapeData.isFunction(value)) {
         try Collect.addWrappedFunction(self, value, false, null, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
@@ -84,7 +86,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
         return;
     }
 
-    if (comptime Marker.isNativeFunction(T)) {
+    if (comptime ShapeData.isFunction(T)) {
         try Collect.addWrappedFunction(self, T, false, null, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
@@ -93,8 +95,8 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
         return;
     }
 
-    if (comptime @typeInfo(T) == .@"struct" and Meta.strategyOf(T) == .closure) {
-        try Collect.addWrappedFunction(self, Meta.closureTrampolineType(T).?, false, null, name, name);
+    if (comptime @typeInfo(T) == .@"struct" and ShapeData.strategyOf(T) == .closure) {
+        try Collect.addWrappedFunction(self, T, false, null, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -106,7 +108,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     const kind: Types.RefKind = if (comptime Helpers.shouldEmitAlias(Helpers.normalizeRootType(T))) .alias else .class;
     try self.bindings.append(self.arena.allocator(), .{
         .var_name = try Helpers.persist(self, name),
-        .ref = .{ .kind = kind, .key = try Helpers.persist(self, Meta.nameOf(Helpers.normalizeRootType(T))) },
+        .ref = .{ .kind = kind, .key = try Helpers.persist(self, ShapeData.nameOf(Helpers.normalizeRootType(T))) },
     });
 }
 

@@ -20,7 +20,7 @@ const Function = @import("../../handlers/any/function.zig");
 const UserdataImport = @import("../../handlers/any/userdata.zig");
 const Handle = @import("../../handlers/api.zig").Handle;
 const Context = @import("../../context.zig");
-const Meta = @import("../../shape/metadata.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
 
 const ObjectType = @import("../../handlers/typed/object.zig").Object;
 
@@ -162,7 +162,7 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .pointer => |p| p.child,
         else => T,
     };
-    const strategy = comptime Meta.strategyOf(Pointee);
+    const strategy = comptime ShapeData.strategyOf(Pointee);
     switch (strategy) {
         .object, .closure => {
             const raw = switch (prim) {
@@ -277,9 +277,8 @@ pub fn decodeValueDepth(ctx: *Context, prim: Primitive, comptime T: type, trace:
         };
     }
 
-    if (comptime @typeInfo(T) == .@"struct" or @typeInfo(T) == .@"union" or @typeInfo(T) == .@"enum") {
-        const meta = comptime Meta.getMeta(T);
-        if (try meta.DecodeHook(ctx, prim)) |decoded| return decoded;
+    if (comptime ShapeData.getShape(T).DecodeHook) |hook| {
+        if (try hook(ctx, prim)) |decoded| return decoded;
     }
 
     return switch (comptime @typeInfo(T)) {
@@ -353,7 +352,7 @@ fn decodePointer(
 ) !T {
     if (ptr_info.size == .one) {
         const Pointee = ptr_info.child;
-        if (comptime @typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union") {
+        if (comptime @typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"opaque") {
             return decodeHostPtr(T, prim, ctx);
         }
     }
@@ -387,10 +386,14 @@ fn decodePointer(
 }
 
 fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context, trace: Trace) !T {
-    const strategy = comptime Meta.strategyOf(T);
+    const strategy = comptime ShapeData.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
+    }
+
+    if (comptime strategy == .function) {
+        @compileError(@typeName(T) ++ " uses .function strategy and cannot be decoded from Lua");
     }
 
     if (comptime T == Table) return switch (prim) {
@@ -420,7 +423,7 @@ fn decodeStructValue(comptime T: type, prim: Primitive, ctx: *Context, trace: Tr
 }
 
 fn decodeUnionValue(comptime T: type, prim: Primitive, ctx: *Context, trace: Trace) !T {
-    const strategy = comptime Meta.strategyOf(T);
+    const strategy = comptime ShapeData.strategyOf(T);
 
     if (comptime strategy == .object or strategy == .ptr) {
         return (try decodeHostPtr(*T, prim, ctx)).*;
