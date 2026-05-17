@@ -202,8 +202,11 @@ pub fn formatDecodePathArg(arena: std.mem.Allocator, path: []const Segment, args
 
 fn isOpaqueType(comptime T: type) bool {
     if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"union") return false;
-    const s = comptime ShapeData.strategyOf(T);
-    return s != .table and s != .typed_alias and s != .alias;
+    if (comptime @hasDecl(T, "ZUA_SHAPE")) {
+        const s = ShapeData.strategyOf(T);
+        return s != .table and s != .typed_alias and s != .alias;
+    }
+    return @typeInfo(T) == .@"union" and @typeInfo(T).@"union".tag_type == null;
 }
 
 fn depthOf(comptime T: type) usize {

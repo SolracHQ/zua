@@ -40,11 +40,17 @@ pub fn emitTableStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc:
     try appendFmt(allocator, out, "local {s} = {{}}\n", .{doc.name});
 }
 
-/// Emits an opaque object stub as an `---@class` declaration. Objects have no
-/// `---@field` annotations since they are opaque from Lua's perspective.
-/// The object binding always emits `local Name = {}`.
+/// Emits an object stub as an `---@class` declaration with `---@field`
+/// annotations for `Shape.Modifier.Field` / `Shape.Modifier.Value` marked fields.
 pub fn emitObjectStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Object) !void {
     try appendFmt(allocator, out, "---@class {s}\n", .{doc.name});
+    for (doc.fields.items) |field| {
+        if (field.description.len > 0) {
+            try appendFmt(allocator, out, "---@field {s} {s} # {s}\n", .{ field.name, field.type, field.description });
+        } else {
+            try appendFmt(allocator, out, "---@field {s} {s}\n", .{ field.name, field.type });
+        }
+    }
     for (doc.operators.items) |op| {
         if (op.param_type) |pt| {
             try appendFmt(allocator, out, "---@operator {s}({s}): {s}\n", .{ op.name, pt, op.return_type });

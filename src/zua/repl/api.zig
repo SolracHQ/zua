@@ -7,7 +7,6 @@
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const Mapper = @import("../mapper/api.zig");
-const Handlers = @import("../handlers/api.zig");
 const State = @import("../state.zig").State;
 const Context = @import("../context.zig").Context;
 const Executor = @import("../executor.zig").Executor;
@@ -101,7 +100,10 @@ fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *const C
         try printMessage(state, "Error: ", msg);
         return;
     };
-    try printResults(ctx, count);
+    printResults(ctx, count) catch |err| {
+        const msg = ctx.err orelse @errorName(err);
+        try printMessage(state, "Error: ", msg);
+    };
 }
 
 fn tryWrapAsExpression(ctx: *Context, source: []const u8) !?[]const u8 {
@@ -133,23 +135,8 @@ fn printResults(ctx: *Context, count: usize) !void {
         if (!first) try writer.interface.print(", ", .{});
         first = false;
 
-        const prim = try Mapper.Decoder.pop(ctx, Mapper.Primitive);
-        defer Handlers.release(Mapper.Primitive, prim);
-        switch (prim) {
-            .nil => try writer.interface.print("nil", .{}),
-            .boolean => |b| {
-                const s = if (b) "true" else "false";
-                try writer.interface.print("{s}", .{s});
-            },
-            .integer => |i| try writer.interface.print("{d}", .{i}),
-            .float => |f| try writer.interface.print("{e}", .{f}),
-            .string => |s| try writer.interface.print("\"{s}\"", .{s}),
-            .table => try writer.interface.print("table", .{}),
-            .function => try writer.interface.print("function", .{}),
-            .light_userdata => try writer.interface.print("userdata:light", .{}),
-            .userdata => try writer.interface.print("userdata", .{}),
-            .handle => try writer.interface.print("handle", .{}),
-        }
+        const str = try Mapper.Decoder.Internals.popString(ctx);
+        try writer.interface.print("{s}", .{str});
     }
     try writer.interface.print("\n", .{});
     try writer.interface.flush();

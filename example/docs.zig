@@ -205,6 +205,21 @@ const CounterClosure = struct {
     }
 };
 
+const Region = struct {
+    pub const ZUA_SHAPE = zua.Shape.Object(Region, .{
+        .__tostring = toString,
+    }, .{ .name = "Region" });
+
+    start: zua.Shape.Modifier.Value(u64, .{ .description = "Start address." }),
+    end: zua.Shape.Modifier.Value(u64, .{ .description = "End address." }),
+    hits: zua.Shape.Modifier.Field(u32, .{ .description = "Hit counter." }),
+
+    fn toString(ctx: *zua.Context, self: *Region) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "Region(0x{x}, 0x{x}, hits={})", .{ self.start.value, self.end.value, self.hits.value }) catch
+            try ctx.failTyped([]const u8, "out of memory");
+    }
+};
+
 pub fn main(init: std.process.Init) !void {
     const stubs = try zua.Docs.generateGlobals(init.gpa, .{
         .Os = Os,
@@ -214,6 +229,7 @@ pub fn main(init: std.process.Init) !void {
         .Vector2 = Vector2,
         .Logger = Logger,
         .Analytics = Analytics,
+        .Region = Region,
         .make_vector = zua.Shape.Fn(makeVector, .{
             .description = "Construct a new Vector2 value.",
             .args = &.{

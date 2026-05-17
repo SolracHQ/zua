@@ -215,6 +215,21 @@ pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !M
     return .{ .args = arr };
 }
 
+/// Pops a value from the top of the Lua stack and returns its string
+/// representation using Lua's `tostring`. The stack slot is removed.
+pub fn popString(ctx: *Context) ![]const u8 {
+    if (lua.valueType(ctx.state.luaState, -1) == .nil) {
+        lua.pop(ctx.state.luaState, 1);
+        return "nil";
+    }
+    const raw = lua.toDisplayString(ctx.state.luaState, -1) orelse {
+        lua.pop(ctx.state.luaState, 1);
+        return ctx.failTyped([]const u8, "tostring failed");
+    };
+    lua.pop(ctx.state.luaState, 2);
+    return ctx.arena().dupe(u8, raw);
+}
+
 /// Internals entry point for callers that manage stack indexes directly.
 pub fn decodeAt(ctx: *Context, index: lua.StackIndex, comptime T: type) !T {
     const depth = comptime Tracing.maxDecodeDepth(T);

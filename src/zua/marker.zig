@@ -12,6 +12,10 @@ pub const Marker = enum {
     userdata_wrapper,
     /// `MetaData` fallback wrapper that distinguishes explicit `ZUA_SHAPE` declarations from default metadata.
     default_guard,
+    /// `Field(T, opts)` Readable and writable object field.
+    object_field,
+    /// `Value(T, opts)` Read-only object field.
+    object_value,
 };
 
 /// Returns the set of markers declared on `T`.

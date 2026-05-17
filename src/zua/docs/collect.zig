@@ -19,6 +19,7 @@ const Helpers = @import("helpers.zig");
 const Introspect = @import("../introspect.zig");
 const Trampoline = @import("../shape/trampoline.zig");
 const Marker = @import("../marker.zig");
+const Modifier = @import("../shape/modifier.zig");
 
 /// Walks a Zig type and inserts its documentation into the generator's lists.
 ///
@@ -94,9 +95,11 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
             var doc = Object{
                 .name = try Helpers.persist(self, ShapeData.nameOf(Normalized)),
                 .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
+                .fields = .empty,
                 .operators = .empty,
             };
 
+            try collectObjectFields(self, &doc, Normalized, recurse_nested);
             try collectMethods(self, &doc.operators, ShapeData.methodsOf(Normalized), Normalized, recurse_nested);
             try self.objects.append(self.arena.allocator(), doc);
         },
@@ -216,6 +219,28 @@ fn collectTableFields(
             }
         },
         else => {},
+    }
+}
+
+/// Collects `Shape.Modifier.Field` and `Shape.Modifier.Value` marked fields from an object-strategy
+/// type into `---@field` annotations.
+fn collectObjectFields(
+    self: *Generator,
+    doc: *Object,
+    comptime T: type,
+    comptime recurse_nested: bool,
+) !void {
+    inline for (@typeInfo(T).@"struct".fields) |field| {
+        if (comptime !Modifier.isFieldOrValue(field.type)) continue;
+
+        const InnerType = comptime Modifier.innerType(field.type);
+        const opts = comptime Modifier.fieldOpts(field.type);
+        try doc.fields.append(self.arena.allocator(), .{
+            .name = try Helpers.persist(self, field.name),
+            .description = try Helpers.persist(self, opts.description),
+            .type = try Helpers.displayTypeName(self, InnerType, .field),
+        });
+        try maybeRecurseReferencedType(self, InnerType, recurse_nested);
     }
 }
 

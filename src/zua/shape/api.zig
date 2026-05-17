@@ -22,6 +22,8 @@ pub const EncodeHookType = Internals.Helpers.EncodeHookType;
 pub const DecodeHookType = Internals.Helpers.DecodeHookType;
 pub const DocsHookType = Internals.Helpers.DocsHookType;
 
+pub const Modifier = @import("modifier.zig");
+
 /// Declare `T` as an `.object` shape.
 ///
 /// Object types are represented as full userdata in Lua and expose

@@ -79,10 +79,12 @@ pub const Alias = struct {
     values: std.ArrayList(AliasValue),
 };
 
-/// Doc node for an object or pointer type. Opaque from Lua's perspective.
+/// Doc node for an object or pointer type. Emitted as an `---@class` with
+/// `---@field` annotations for `Shape.Field` / `Shape.Value` marked fields.
 pub const Object = struct {
     name: []const u8,
     description: []const u8,
+    fields: std.ArrayList(Field),
     operators: std.ArrayList(Operator),
 };
 
