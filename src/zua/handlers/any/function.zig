@@ -83,7 +83,7 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
 /// const fn_handle = Function.create(state, my_native_callback);
 /// const fn_handle = Function.create(state, zua.Shape.Fn(my_callback, .{}));
 /// ```
-pub fn create(state: *State, callback: anytype) Function {
+pub fn create(state: *State, comptime callback: anytype) Function {
     const CallbackType = @TypeOf(callback);
 
     if (comptime @typeInfo(CallbackType) == .@"fn" or ShapeData.isFunction(CallbackType)) {

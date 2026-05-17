@@ -93,19 +93,20 @@ pub fn create(state: *State, array_capacity: i32, record_capacity: i32) Table {
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
+/// - ctx: The current call context used for encoding and error reporting.
 /// - value: The Zig value to convert into a Lua table.
 ///
 /// Returns:
-/// - Table: A stack-owned handle for the converted Lua table.
+/// - !Table: A stack-owned handle for the converted Lua table, or an error.
 ///
 /// Example:
 /// ```zig
-/// const tbl = Table.from(state, .{ .x = 1, .y = 2 });
+/// const tbl = try Table.from(state, ctx, .{ .x = 1, .y = 2 });
 /// defer tbl.release();
 /// ```
-pub fn from(state: *State, value: anytype) Table {
+pub fn from(state: *State, ctx: *Context, value: anytype) !Table {
     const table = Table.create(state, Mapper.Encoder.Internals.inferArrayCapacity(value), Mapper.Encoder.Internals.inferRecordCapacity(value));
-    Mapper.Encoder.Internals.fillTable(table, value);
+    try Mapper.Encoder.Internals.fillTable(ctx, table, value);
     return table;
 }
 

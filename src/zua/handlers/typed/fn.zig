@@ -16,7 +16,7 @@ const Trampoline = @import("../../shape/trampoline.zig");
 /// Typed wrapper over a raw Lua `Function` handle.
 ///
 /// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while preserving the expected argument and return shapes. The wrapper implements `ZUA_SHAPE` so it can be encoded to and decoded from Lua values using the normal metadata pipeline.
-pub fn Fn(comptime ins: anytype, outs: anytype) type {
+pub fn Fn(comptime ins: anytype, comptime outs: anytype) type {
     return struct {
         /// Metadata used to encode and decode this typed function wrapper.
         pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withEncode(Function, encode).withDecode(decode);

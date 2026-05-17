@@ -62,6 +62,8 @@
 
 - Structs can now declare `pub const ZUA_SHAPE = Shape.Fn(f, .{})` and be pushed as raw C functions.
 
+- `src/test/` restructured to mirror the public API layout (`core/`, `handlers/any/`, `handlers/typed/`, `mapper/decode/`, `shape/`, `docs/`). Tests cover State, Context, Executor, Handlers (Any.Function, Any.Table, Any.Userdata, Typed.Fn, Typed.Object, Typed.TableView, ownership), Shape (Fn, Closure, Table, Object, Ptr, List, Alias, StrAlias, TypedAlias, Modifier), Mapper.Decode (primitives, structs, errors, VarArgs, pop, failTyped), and Docs stub generation. Test environment setup extracted into `src/test/helpers.zig`.
+
 ### Changed
 
 - All multi-file modules now consistently follow the `api.zig` (public API) + `internals.zig` (Internals aggregator) pattern: `shape/`, `mapper/`, `handlers/`, `docs/`, `repl/`. Single-file modules (`state.zig`, `context.zig`, `executor.zig`) remain as standalone `.zig` files.
@@ -99,6 +101,10 @@
 - Trampoline types (`makeFn`, `makeClosure`) declare `ZUA_SHAPE = @This()` for detection through `isFunction`/`trampolineOf`.
 
 - All examples updated for the new shape API.
+
+### Fixed
+
+- `Handlers.Any.Table.from(state, value)` now requires a `ctx` parameter and returns `!Table`. The previous implementation called `fillTable` without the required `*Context` argument, which caused a compile error. Detected by the new test suite.
 
 ### Removed
 

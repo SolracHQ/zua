@@ -1,3 +1,3 @@
 test {
-    _ = @import("test/decode_errors.zig");
+    _ = @import("test/root.zig");
 }
