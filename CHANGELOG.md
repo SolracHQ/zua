@@ -56,6 +56,8 @@
 
 - `ShapeData.isFunction(T)` and `ShapeData.trampolineOf(T)` public helpers for detecting and extracting native function trampolines.
 
+- `Shape.Modifier.Field(T, opts)` and `Shape.Modifier.Value(T, opts)` for exposing struct fields as readable or writable from Lua without getter/setter methods. Object-strategy types with marked fields get automatic `__index` and `__newindex` handling through the metatable.
+
 - `Docs.generateGlobals(allocator, globals)` generates stubs for a flat set of global bindings. Returns caller-owned memory that must be freed with `allocator.free`.
 
 - Structs can now declare `pub const ZUA_SHAPE = Shape.Fn(f, .{})` and be pushed as raw C functions.
