@@ -77,7 +77,7 @@ pub const Primitive =
     /// Returns:
     /// - T: The decoded value, or an error if decoding fails.
     pub fn decode(self: Primitive, ctx: *Context, comptime T: type) !T {
-        return Decoder.decodeValue(ctx, self, T);
+        return Decoder.decode(ctx, self, T);
     }
 };
 

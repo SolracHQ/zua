@@ -9,12 +9,15 @@ const State = @import("../../state.zig");
 const Context = @import("../../context.zig").Context;
 const ShapeData = @import("../../shape/shape_data.zig");
 const MetaTable = @import("../../metatable.zig");
+const Marker = @import("../../marker.zig").Marker;
 
 /// Errors returned by function calls.
 pub const Error = error{Failed};
 
 /// Handle to a Lua function with three ownership modes: borrowed, stack_owned, or registry_owned.
 pub const Function = @This();
+
+pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
 /// Global Zua state pointer used to access the Lua VM and allocators.
 /// This pointer is borrowed by the handle and is not owned by `Function`.

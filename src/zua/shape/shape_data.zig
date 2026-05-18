@@ -15,7 +15,7 @@ const Mapper = @import("../mapper/api.zig");
 const Primitive = Mapper.Primitive;
 const Context = @import("../context.zig");
 const Assertions = @import("./assertions.zig");
-const Marker = @import("../marker.zig");
+const Marker = @import("../marker.zig").Marker;
 const Trampoline = @import("./trampoline.zig");
 
 pub const MappingStrategy = enum {
@@ -153,7 +153,7 @@ pub fn Shape(
 /// - type: A struct type with a single `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` constant.
 pub fn DefaultGuard(comptime T: type) type {
     return struct {
-        pub const __ZUA_MARKER = Marker.Marker.default_guard;
+        pub const __ZUA_MARKER = Marker.default_guard;
         const __ZUA_DEFAULT_GUARD_ORIGINAL_TYPE = T;
     };
 }

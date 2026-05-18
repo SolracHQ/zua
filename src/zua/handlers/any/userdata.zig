@@ -10,6 +10,9 @@ const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Handle = @import("../api.zig").Handle;
 const State = @import("../../state.zig");
+const Marker = @import("../../marker.zig").Marker;
+
+pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
 state: *State,
 handle: Handle,

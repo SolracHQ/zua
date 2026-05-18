@@ -10,12 +10,15 @@ const Context = @import("../../context.zig").Context;
 const State = @import("../../state.zig");
 const Function = @import("function.zig");
 const Userdata = @import("userdata.zig").Userdata;
+const Marker = @import("../../marker.zig").Marker;
 
 /// Errors returned by typed table reads.
 pub const Error = error.Failed;
 
 /// Handle to a Lua table with three ownership modes: borrowed, stack_owned, or registry_owned.
 pub const Table = @This();
+
+pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
 /// Global Zua state pointer used to access the Lua VM and allocators.
 /// This pointer is borrowed by the handle and is not owned by `Table`.

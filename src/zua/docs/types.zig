@@ -18,6 +18,7 @@ pub const Operator = struct {
     name: []const u8,
     param_type: ?[]const u8,
     return_type: []const u8,
+    description: []const u8,
 };
 
 /// A single field belonging to a table or variant struct.

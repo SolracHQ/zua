@@ -6,6 +6,7 @@
 //! exposing a small API for safe interaction from Zig.
 
 const std = @import("std");
+const Marker = @import("../marker.zig").Marker;
 const lua = @import("../../lua/lua.zig");
 
 pub const Handlers = @This();
@@ -19,7 +20,6 @@ pub const Handlers = @This();
 const State = @import("../state.zig");
 const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
-const Marker = @import("../marker.zig");
 
 pub const Handle = union(enum) {
     /// The handle references a Lua value on the current stack frame.
@@ -35,6 +35,8 @@ pub const Handle = union(enum) {
     /// This mode is used for values that need to survive beyond the current
     /// Lua stack frame.
     registry_owned: c_int,
+
+    pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
     /// Creates a registry-owned copy of this handle.
     ///
@@ -112,28 +114,14 @@ pub const Handle = union(enum) {
     }
 };
 
-/// Unbound Lua value handles. `Any.Table` works with any Lua table, `Any.Function` with any
-/// Lua function, `Any.Userdata` with any Lua userdata. They provide typed operations (get/set/call)
-/// but are not bound to a specific Zig type like the wrappers in `Typed`.
-///
-/// > NOTE: even though `get` and `set` accept any type at the call site, the decode and encode
-/// > paths are comptime-generated from the requested type. There is no runtime dispatch, no boxing,
-/// > and no overhead compared to calling the encoder or decoder directly.
-pub const Any = struct {
-    pub const Table = @import("any/table.zig");
-    pub const Function = @import("any/function.zig");
-    pub const Userdata = @import("any/userdata.zig");
-};
+pub const Any = @import("any/api.zig");
 
 /// Typed wrappers over Lua values that are bound to a specific Zig type.
 /// `Typed.Fn(ins, outs)` wraps a Lua function with typed arguments and returns.
 /// `Typed.Object(T)` wraps a Lua userdata containing a `T` payload.
+/// `Typed.Closure(T)` wraps a closure upvalue containing a `T` payload.
 /// `Typed.TableView(T)` wraps a Lua table as a typed mutable view of `T`.
-pub const Typed = struct {
-    pub const Fn = @import("typed/fn.zig").Fn;
-    pub const Object = @import("typed/object.zig").Object;
-    pub const TableView = @import("typed/table_view.zig").TableView;
-};
+pub const Typed = @import("typed/api.zig");
 
 /// Recursively takes ownership of any handler values within `value`.
 ///
@@ -231,7 +219,7 @@ pub fn release(comptime T: type, value: T) void {
 }
 
 fn isHandlerType(comptime T: type) bool {
-    return T == Any.Table or T == Any.Function or T == Any.Userdata or Marker.isTableView(T);
+    return Marker.any(T, &.{.raw_handle}) or Marker.isTableView(T);
 }
 
 test {

@@ -49,6 +49,27 @@ pub fn build(b: *std.Build) void {
     run_cmd.step.dependOn(b.getInstallStep());
 
     setupExamples(b, module, target, optimize);
+    setupVecmathExample(b, module, target, optimize);
+}
+
+fn setupVecmathExample(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const vecmath_mod = b.createModule(.{
+        .root_source_file = b.path("examples/vecmath/vecmath.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zua", .module = module },
+        },
+    });
+
+    const lib = b.addLibrary(.{ .name = "vecmath", .linkage = .dynamic, .root_module = vecmath_mod });
+    lib.root_module.link_libc = true;
+
+    const install_lib = b.addInstallArtifact(lib, .{});
+    b.getInstallStep().dependOn(&install_lib.step);
+
+    const vecmath_step = b.step("example-vecmath", "Build the vecmath example dylib");
+    vecmath_step.dependOn(&install_lib.step);
 }
 
 fn setupExamples(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -58,39 +79,11 @@ fn setupExamples(b: *std.Build, module: *std.Build.Module, target: std.Build.Res
 
     const run_mod_tests = b.addRunArtifact(mod_tests);
 
-    const vecmath_module = b.createModule(.{
-        .root_source_file = b.path("example/dylib/vecmath.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "zua", .module = module },
-        },
-    });
-
-    const lib = b.addLibrary(.{ .name = "vecmath", .linkage = .dynamic, .root_module = vecmath_module });
-    lib.root_module.link_libc = true;
-
-    const install_lib = b.addInstallArtifact(lib, .{});
-    b.getInstallStep().dependOn(&install_lib.step);
-
-    const vecmath_step = b.step("vecmath", "Build vecmath dynamic library");
-    vecmath_step.dependOn(&install_lib.step);
-
     const examples = [_]struct {
         name: []const u8,
         path: []const u8,
     }{
-        .{ .name = "example-docs", .path = "example/docs.zig" },
-        .{ .name = "example-introduction", .path = "example/introduction.zig" },
-        .{ .name = "example-functions", .path = "example/functions.zig" },
-        .{ .name = "example-data-structures", .path = "example/data-structures.zig" },
-        .{ .name = "example-custom-types", .path = "example/custom-types.zig" },
-        .{ .name = "example-guided-tour", .path = "example/guided-tour.zig" },
-        .{ .name = "example-object-slices", .path = "example/object-slices.zig" },
-        .{ .name = "example-nested-handle-ownership", .path = "example/nested-handle-ownership.zig" },
-        .{ .name = "example-custom-hooks", .path = "example/custom-hooks.zig" },
-        .{ .name = "example-repl", .path = "example/repl.zig" },
-        .{ .name = "example-iterable", .path = "example/iterable.zig" },
+        .{ .name = "example-app-config", .path = "examples/app-config/app-config.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");
@@ -109,7 +102,15 @@ fn setupExamples(b: *std.Build, module: *std.Build.Module, target: std.Build.Res
         exe.root_module.link_libc = true;
         examples_step.dependOn(&exe.step);
 
+        const build_step_name = b.fmt("{s}", .{example.name});
+        const build_step_desc = b.fmt("Build {s}", .{example.name});
+        const build_step = b.step(build_step_name, build_step_desc);
+        build_step.dependOn(&exe.step);
+
         const run_cmd = b.addRunArtifact(exe);
+        if (b.args) |args| {
+            run_cmd.addArgs(args);
+        }
         const run_step_name = b.fmt("run-{s}", .{example.name});
         const run_step_desc = b.fmt("Run {s}", .{example.name});
         const run_step = b.step(run_step_name, run_step_desc);

@@ -1,0 +1,6 @@
+local vm = require("vecmath")
+local stubs = vm.docs()
+local file = io.open("vecmath.d.lua", "w")
+file:write(stubs)
+file:close()
+print("stubs written to vecmath.d.lua (" .. #stubs .. " bytes)")

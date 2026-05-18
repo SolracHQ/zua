@@ -10,6 +10,7 @@ const lua = @import("../../../lua/lua.zig");
 const Table = @import("../../handlers/any/table.zig");
 const Function = @import("../../handlers/any/function.zig");
 const Userdata = @import("../../handlers/any/userdata.zig").Userdata;
+const UpValue = @import("../../handlers/any/upvalue.zig");
 const Context = @import("../../context.zig");
 const State = @import("../../state.zig");
 
@@ -75,6 +76,12 @@ pub fn push(ctx: *Context, value: anytype) !void {
 
     if (comptime T == Table or T == Function or T == Userdata) {
         Internals.pushHandle(ctx, value.handle);
+        return;
+    }
+
+    if (comptime T == UpValue) {
+        Internals.pushHandle(ctx, value.handle);
+        lua.pushCClosure(ctx.state.luaState, value.cfunction, 1);
         return;
     }
 

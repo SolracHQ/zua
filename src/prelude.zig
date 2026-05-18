@@ -11,9 +11,11 @@ pub const Handlers = @import("zua/handlers/api.zig");
 pub const Table = Handlers.Any.Table;
 pub const Function = Handlers.Any.Function;
 pub const Userdata = Handlers.Any.Userdata;
+pub const UpValue = Handlers.Any.UpValue;
 
 pub const Fn = Handlers.Typed.Fn;
 pub const Object = Handlers.Typed.Object;
+pub const Closure = Handlers.Typed.Closure;
 pub const TableView = Handlers.Typed.TableView;
 
 pub const Mapper = @import("zua/mapper/api.zig");

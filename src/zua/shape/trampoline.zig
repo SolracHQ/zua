@@ -14,6 +14,8 @@ const Context = @import("../context.zig");
 const ShapeData = @import("shape_data.zig");
 const HookTypes = @import("helpers.zig");
 const Primitive = @import("../mapper/api.zig").Primitive;
+const Marker = @import("../marker.zig").Marker;
+const UpValue = @import("../handlers/any/upvalue.zig");
 
 /// Describes one parameter of a Zig function for Lua annotation generation.
 ///
@@ -148,7 +150,7 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
             var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
             if (comptime hasContext) call_args[0] = ctx;
             inline for (types, 0..) |_, i| {
-                call_args[comptime @intFromBool(hasContext) + i] = decoded[i];
+                call_args[comptime @as(usize, @intFromBool(hasContext)) + i] = decoded[i];
             }
             if (comptime hasVarArgs(function_info)) {
                 call_args[function_info.params.len - 1] = try buildVarArgsFor(ctx, function_info, decodedParameterCount());
@@ -174,7 +176,7 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
         }
 
         fn decodedParameterCount() usize {
-            const base: usize = function_info.params.len - @intFromBool(hasContext);
+            const base: usize = function_info.params.len - @as(usize, @intFromBool(hasContext));
             return if (comptime hasVarArgs(function_info)) base - 1 else base;
         }
     };
@@ -275,9 +277,16 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
             if (comptime has_context) call_args[0] = ctx;
             const raw_ptr = lua.toUserdata(ctx.state.luaState, lua.upvalueIndex(1)) orelse
                 @panic("closure upvalue 1 is nil, capture was not pushed");
-            call_args[comptime upvalue_param_index] = @ptrCast(@alignCast(raw_ptr));
+            const UpvalueParam = comptime cb_info.params[upvalue_param_index].type.?;
+            if (comptime Marker.isClosureWrapper(UpvalueParam)) {
+                lua.pushValue(ctx.state.luaState, lua.upvalueIndex(1));
+                const uv = UpValue.fromStack(ctx.state, -1, comptime ShapeData.getShape(T).trampoline());
+                call_args[comptime upvalue_param_index] = UpvalueParam{ .handle = uv };
+            } else {
+                call_args[comptime upvalue_param_index] = @ptrCast(@alignCast(raw_ptr));
+            }
             inline for (types, 0..) |_, i| {
-                call_args[comptime @intFromBool(has_context) + 1 + i] = decoded[i];
+                call_args[comptime @as(usize, @intFromBool(has_context)) + 1 + i] = decoded[i];
             }
             if (comptime hasVarArgs(cb_info)) {
                 call_args[cb_info.params.len - 1] = try buildVarArgsFor(ctx, cb_info, decodedParameterCount());
@@ -304,7 +313,7 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
         }
 
         fn decodedParameterCount() usize {
-            const base: usize = cb_info.params.len - (@intFromBool(has_context) + 1);
+            const base: usize = cb_info.params.len - (@as(usize, @intFromBool(has_context)) + 1);
             return if (comptime hasVarArgs(cb_info)) base - 1 else base;
         }
     };
@@ -317,9 +326,10 @@ fn validateClosureCallback(comptime T: type, comptime info: std.builtin.Type.Fn,
     }
     const param_type = info.params[up_index].type orelse
         @compileError("Closure callback parameter at index " ++ std.fmt.comptimePrint("{d}", .{up_index}) ++ " has no type");
+    if (comptime Marker.isClosureWrapper(param_type)) return;
     const ptr_info = @typeInfo(param_type);
     if (ptr_info != .pointer or ptr_info.pointer.size != .one or ptr_info.pointer.child != T) {
-        @compileError("Closure callback parameter at index " ++ std.fmt.comptimePrint("{d}", .{up_index}) ++ " must be *" ++ @typeName(T));
+        @compileError("Closure callback parameter at index " ++ std.fmt.comptimePrint("{d}", .{up_index}) ++ " must be *" ++ @typeName(T) ++ " or Closure(" ++ @typeName(T) ++ ")");
     }
 }
 

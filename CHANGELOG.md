@@ -30,6 +30,14 @@
 
 ### Added
 
+- Docs emitter now supports multiline descriptions: `emitDescription` splits descriptions on `\n` and emits one `-- {line}` per segment. Applied to table, object, alias, and function stubs. Operator, field, and parameter descriptions stay on the same `# {s}` line.
+
+- `Handlers.Any.UpValue` handler wrapping a CClosure upvalue (userdata) together with its C function pointer. The encoder recognises `UpValue` and pushes a CClosure that reuses the existing upvalue instead of creating a new one. This enables zero-copy passing of closures through middleware chains and other call-again patterns.
+
+- `Handlers.Typed.Closure(T)` typed wrapper over a closure upvalue, modelled on `Object(T)`. `self.get()` returns `*T` (the closure's captured state). The first parameter of a closure callback can now be `Closure(T)` instead of `*T`; when it is, the closure can pass itself as a Lua function argument without copying the upvalue on every round-trip.
+
+- `Marker.closure_wrapper` marker and `isClosureWrapper(T)` helper for detecting `Closure(T)` in the encoder dispatcher and closure trampoline.
+
 - `CONTRIBUTING.md` with conventions for public API vs Internals, module naming, single-file vs multi-file module layout, documentation style guide, and changelog categories.
 
 - `src/zua/marker.zig` with `Marker` enum and `markerOf(T)` introspection API. Types declare `__ZUA_MARKER` to signal internal code paths. Convenience helpers (`isTableView`, `all`, `any`, etc.) replace ad-hoc `@hasDecl` checks.
@@ -102,9 +110,19 @@
 
 - All examples updated for the new shape API.
 
+- Closure trampoline `callFunction` now checks the upvalue parameter type: if it is `Closure(T)` the upvalue userdata is wrapped in a typed handle instead of being passed as a raw `*T`. `validateClosureCallback` also accepts `Closure(T)` as an alternative to `*T`.
+
+- Encoder `push` now handles `UpValue` as a recognised handler type, on par with `Table`, `Function`, and `Userdata`. When encoding an `UpValue`, the encoder pushes the underlying userdata and then a CClosure consuming it.
+
 ### Fixed
 
 - `Handlers.Any.Table.from(state, value)` now requires a `ctx` parameter and returns `!Table`. The previous implementation called `fillTable` without the required `*Context` argument, which caused a compile error. Detected by the new test suite.
+
+- `@intFromBool` returns `u1` and `u1 + 1` overflows when the result is `2`. Added `@as(usize, ...)` to all three `@intFromBool` call sites in `trampoline.zig` (the function decoded-parameter-count, the closure decoded-parameter-count, and the closure inline-for loop that skips the upvalue slot). This was latent because no closure callback previously used both `has_context = true` and a custom upvalue parameter type.
+
+- `Primitive.decode` called `Decoder.decodeValue` which does not exist; the public function is `Decoder.decode`. Fixed the call and added tests under `src/test/mapper/decode/primitives.zig` that cover `Primitive.decode` for integer, string, float, boolean, and nil-to-optional paths so this does not regress.
+
+- Docs generator `collectMethods` was skipping all parameters that match the owner type, not just self. For methods like `add(Vec2, Vec2)` the second Vec2 was also removed, producing `add()` instead of `add(Vec2)`. Only the first parameter (self) should be skipped.
 
 ### Removed
 

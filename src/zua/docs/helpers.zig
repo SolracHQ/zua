@@ -18,7 +18,7 @@ const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
 const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
 const ShapeData = @import("../shape/shape_data.zig");
-const Marker = @import("../marker.zig");
+const Marker = @import("../marker.zig").Marker;
 const Object = @import("../handlers/typed/object.zig");
 const TableView = @import("../handlers/typed/table_view.zig");
 
@@ -120,9 +120,13 @@ pub fn functionHandleSignature(self: *Generator, comptime T: type) ![]const u8 {
 
     if (comptime @typeInfo(T.Result) == .@"struct") {
         try out.appendSlice(self.arena.allocator(), ": ");
-        inline for (@typeInfo(T.Result).@"struct".fields, 0..) |field, index| {
-            if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-            try out.appendSlice(self.arena.allocator(), try displayTypeName(self, field.type, .return_value));
+        if (comptime @typeInfo(T.Result).@"struct".is_tuple) {
+            inline for (@typeInfo(T.Result).@"struct".fields, 0..) |field, index| {
+                if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
+                try out.appendSlice(self.arena.allocator(), try displayTypeName(self, field.type, .return_value));
+            }
+        } else {
+            try out.appendSlice(self.arena.allocator(), try displayTypeName(self, T.Result, .return_value));
         }
     }
 
@@ -254,7 +258,8 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns:
 /// - bool: `true` if the type should be ignored.
 pub fn isIgnoredDocType(comptime T: type) bool {
-    return T == *Context or T == Context or T == Mapper.Primitive or T == Handlers.Handle or T == Handlers.Any.Userdata or T == Handlers.Any.Function;
+    if (comptime Marker.any(T, &.{.docs_ignore})) return true;
+    return T == *Context or T == Context or T == Mapper.Primitive;
 }
 
 /// Looks up a field description from a `ZUA_SHAPE` attribute descriptions

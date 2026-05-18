@@ -3,7 +3,7 @@
 //! `Shape.Modifier.Field(T, opts)` and `Shape.Modifier.Value(T, opts)` mark
 //! struct fields as readable (Value) or readable and writable (Field) from Lua.
 
-const Marker = @import("../marker.zig");
+const Marker = @import("../marker.zig").Marker;
 
 /// Options for `Shape.Modifier.Field` and `Shape.Modifier.Value`.
 pub const FieldOpts = struct {
@@ -13,7 +13,7 @@ pub const FieldOpts = struct {
 /// Declare a struct field as readable and writable from Lua.
 pub fn Field(comptime T: type, comptime opts: FieldOpts) type {
     return struct {
-        pub const __ZUA_MARKER = Marker.Marker.object_field;
+        pub const __ZUA_MARKER = Marker.object_field;
         pub const __ZUA_FIELD_TYPE = T;
         pub const __ZUA_FIELD_OPTS = opts;
         value: T,
@@ -23,7 +23,7 @@ pub fn Field(comptime T: type, comptime opts: FieldOpts) type {
 /// Declare a struct field as read-only from Lua.
 pub fn Value(comptime T: type, comptime opts: FieldOpts) type {
     return struct {
-        pub const __ZUA_MARKER = Marker.Marker.object_value;
+        pub const __ZUA_MARKER = Marker.object_value;
         pub const __ZUA_FIELD_TYPE = T;
         pub const __ZUA_FIELD_OPTS = opts;
         value: T,

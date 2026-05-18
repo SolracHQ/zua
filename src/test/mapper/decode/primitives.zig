@@ -38,3 +38,50 @@ test "safe divide succeeds with valid inputs" {
     } });
     try testing.expectEqual(@as(f64, 5.0), result);
 }
+
+test "Primitive.decode integer" {
+    var test_env = try helpers.setup();
+    defer test_env.deinit();
+
+    const prim = zua.Mapper.Primitive{ .integer = 42 };
+    const value = try prim.decode(&test_env.ctx, i32);
+    try testing.expectEqual(@as(i32, 42), value);
+}
+
+test "Primitive.decode string" {
+    var test_env = try helpers.setup();
+    defer test_env.deinit();
+
+    const prim = zua.Mapper.Primitive{ .string = "hello" };
+    const value = try prim.decode(&test_env.ctx, []const u8);
+    try testing.expectEqualStrings("hello", value);
+}
+
+test "Primitive.decode float" {
+    var test_env = try helpers.setup();
+    defer test_env.deinit();
+
+    const prim = zua.Mapper.Primitive{ .float = 3.14 };
+    const value = try prim.decode(&test_env.ctx, f64);
+    try testing.expectApproxEqAbs(@as(f64, 3.14), value, 1e-9);
+}
+
+test "Primitive.decode nil to optional" {
+    var test_env = try helpers.setup();
+    defer test_env.deinit();
+
+    const prim = zua.Mapper.Primitive{ .nil = {} };
+    const value = try prim.decode(&test_env.ctx, ?i32);
+    try testing.expectEqual(@as(?i32, null), value);
+}
+
+test "Primitive.decode boolean" {
+    var test_env = try helpers.setup();
+    defer test_env.deinit();
+
+    const prim = zua.Mapper.Primitive{ .boolean = false };
+    const value = try prim.decode(&test_env.ctx, bool);
+    try testing.expectEqual(false, value);
+}
+
+
