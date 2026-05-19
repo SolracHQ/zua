@@ -223,24 +223,50 @@ fn collectTableFields(
 }
 
 /// Collects `Shape.Modifier.Field` and `Shape.Modifier.Value` marked fields from an object-strategy
-/// type into `---@field` annotations.
+/// type into `---@field` annotations. Fn-valued fields are promoted to function entries so the
+/// Docs generator registers their signature instead of emitting an opaque `---@field`.
 fn collectObjectFields(
     self: *Generator,
     doc: *Object,
     comptime T: type,
     comptime recurse_nested: bool,
 ) !void {
+    const owner_name = doc.name;
     inline for (@typeInfo(T).@"struct".fields) |field| {
         if (comptime !Modifier.isFieldOrValue(field.type)) continue;
 
         const InnerType = comptime Modifier.innerType(field.type);
-        const opts = comptime Modifier.fieldOpts(field.type);
-        try doc.fields.append(self.arena.allocator(), .{
-            .name = try Helpers.persist(self, field.name),
-            .description = try Helpers.persist(self, opts.description),
-            .type = try Helpers.displayTypeName(self, InnerType, .field),
-        });
-        try maybeRecurseReferencedType(self, InnerType, recurse_nested);
+        if (comptime ShapeData.isFunction(InnerType)) {
+            const cache_key = field.name;
+            if (self.functions.getPtr(cache_key)) |existing| {
+                try existing.field_of.append(self.arena.allocator(), .{
+                    .owner = try Helpers.persist(self, owner_name),
+                    .field_name = try Helpers.persist(self, field.name),
+                });
+            } else {
+                var func_doc = Function{
+                    .name = try Helpers.persist(self, field.name),
+                    .description = try Helpers.persist(self, Helpers.nativeFnDesc(InnerType)),
+                    .field_of = .empty,
+                };
+                try func_doc.field_of.append(self.arena.allocator(), .{
+                    .owner = try Helpers.persist(self, owner_name),
+                    .field_name = try Helpers.persist(self, field.name),
+                });
+                try collectFunctionParameters(self, &func_doc, InnerType, false, null);
+                try collectFunctionReturns(self, &func_doc, Trampoline.nativeReturnType(InnerType));
+                try self.functions.put(try Helpers.persist(self, cache_key), func_doc);
+            }
+            if (recurse_nested) try recurseFunctionTypes(self, InnerType, false, null);
+        } else {
+            const opts = comptime Modifier.fieldOpts(field.type);
+            try doc.fields.append(self.arena.allocator(), .{
+                .name = try Helpers.persist(self, field.name),
+                .description = try Helpers.persist(self, opts.description),
+                .type = try Helpers.displayTypeName(self, InnerType, .field),
+            });
+            try maybeRecurseReferencedType(self, InnerType, recurse_nested);
+        }
     }
 }
 
@@ -476,7 +502,7 @@ fn maybeRecurseReferencedType(self: *Generator, comptime T: type, comptime recur
     switch (@typeInfo(T)) {
         .@"struct", .@"union", .@"enum", .@"opaque" => {
             const strategy = comptime ShapeData.strategyOf(T);
-            if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure) {
+            if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure or strategy == .alias or strategy == .typed_alias) {
                 try addType(self, T, true);
             }
         },

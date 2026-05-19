@@ -84,6 +84,7 @@ fn setupExamples(b: *std.Build, module: *std.Build.Module, target: std.Build.Res
         path: []const u8,
     }{
         .{ .name = "example-app-config", .path = "examples/app-config/app-config.zig" },
+        .{ .name = "example-process-inspector", .path = "examples/process-inspector/process-inspector.zig" },
     };
 
     const examples_step = b.step("examples", "Build example programs");

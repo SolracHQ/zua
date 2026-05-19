@@ -9,12 +9,14 @@ case "${1:-all}" in
         zig build examples
         zig build example-vecmath
         zig build example-app-config
+        zig build example-process-inspector
         ;;
     all)
         zig build test
         zig build examples
         zig build example-vecmath
         zig build example-app-config
+        zig build example-process-inspector
         ;;
     *)
         echo "usage: $0 [test|examples|all]" >&2

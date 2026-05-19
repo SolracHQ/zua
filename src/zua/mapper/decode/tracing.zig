@@ -236,6 +236,7 @@ fn depthOf(comptime T: type) usize {
             }
             return max;
         },
+        .optional => |opt| return depthOf(opt.child),
         else => return 0,
     }
 }

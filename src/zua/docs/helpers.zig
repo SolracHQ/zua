@@ -21,6 +21,8 @@ const ShapeData = @import("../shape/shape_data.zig");
 const Marker = @import("../marker.zig").Marker;
 const Object = @import("../handlers/typed/object.zig");
 const TableView = @import("../handlers/typed/table_view.zig");
+const Trampoline = @import("../shape/trampoline.zig");
+const Introspect = @import("../introspect.zig");
 
 /// Produces a human-readable Lua type string for a Zig type.
 ///
@@ -59,8 +61,12 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
     if (Normalized == Mapper.Primitive) return persist(self, "any");
     if (Normalized == Mapper.VarArgs) return persist(self, "any");
 
-    if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
-    if (comptime ShapeData.isFunction(Normalized)) return persist(self, "function");
+    if (comptime @typeInfo(Normalized) == .@"fn") {
+        return fnTypeToStub(self, Normalized);
+    }
+    if (comptime ShapeData.isFunction(Normalized)) {
+        return fnTypeToStub(self, Normalized);
+    }
     if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
     return switch (@typeInfo(Normalized)) {
@@ -71,7 +77,14 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
         .optional => |optional| displayTypeName(self, optional.child, ctx),
         .array => |array| blk: {
             const child_name = try displayTypeName(self, array.child, ctx);
-            break :blk try std.fmt.allocPrint(self.arena.allocator(), "{s}[]", .{child_name});
+            var out = std.ArrayList(u8).empty;
+            try out.append(self.arena.allocator(), '[');
+            for (0..array.len) |i| {
+                if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
+                try out.appendSlice(self.arena.allocator(), child_name);
+            }
+            try out.append(self.arena.allocator(), ']');
+            break :blk out.toOwnedSlice(self.arena.allocator());
         },
         .pointer => |ptr| blk: {
             if (ptr.size == .slice) {
@@ -353,5 +366,45 @@ pub fn structToAliasShape(self: *Generator, comptime T: type) ![]const u8 {
         try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
     }
     try out.appendSlice(self.arena.allocator(), " }");
+    return out.toOwnedSlice(self.arena.allocator());
+}
+
+/// Renders a function type (plain Zig fn or ShapeFn) as `fun(arg0: T, ...): R`,
+/// skipping Context and capture pointer parameters.
+fn fnTypeToStub(self: *Generator, comptime T: type) ![]const u8 {
+    const fn_info: std.builtin.Type.Fn = if (comptime @typeInfo(T) == .@"fn")
+        @typeInfo(T).@"fn"
+    else
+        Trampoline.fnTypeInfo(T);
+
+    const ret_type: type = if (comptime @typeInfo(T) == .@"fn") blk: {
+        break :blk if (fn_info.return_type) |r| @Tuple(&.{r}) else @Tuple(&.{});
+    } else Trampoline.nativeReturnType(T);
+
+    var out = std.ArrayList(u8).empty;
+    try out.appendSlice(self.arena.allocator(), "fun(");
+    comptime var arg_index: usize = 0;
+    inline for (fn_info.params) |param| {
+        const param_type = param.type orelse continue;
+        if (comptime param_type == *Context) continue;
+        if (comptime Introspect.isCapturePointer(param_type)) continue;
+        if (arg_index > 0) try out.appendSlice(self.arena.allocator(), ", ");
+        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index});
+        const type_str = try displayTypeName(self, param_type, .parameter);
+        try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, type_str });
+        arg_index += 1;
+    }
+    try out.appendSlice(self.arena.allocator(), ")");
+
+    const count = comptime Introspect.typeListCount(ret_type);
+    if (count > 0) {
+        try out.appendSlice(self.arena.allocator(), ": ");
+        inline for (0..count) |i| {
+            if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
+            const type_str = try displayTypeName(self, Introspect.typeListAt(ret_type, i), .return_value);
+            try out.appendSlice(self.arena.allocator(), type_str);
+        }
+    }
+
     return out.toOwnedSlice(self.arena.allocator());
 }

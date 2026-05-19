@@ -4,7 +4,8 @@ set -euo pipefail
 list_examples() {
     printf '%s\n' \
         vecmath \
-        app-config
+        app-config \
+        process-inspector
 }
 
 fzf_args=(--prompt='zua example> ' --height=40% --reverse)

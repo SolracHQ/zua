@@ -14,9 +14,9 @@ const Region = struct {
 
 fn makeRegion() Region {
     return .{
-        .start = .{ .value = 0x1000 },
-        .end = .{ .value = 0x2000 },
-        .hits = .{ .value = 0 },
+        .start = .new(0x1000),
+        .end = .new(0x2000),
+        .hits = .new(0),
     };
 }
 

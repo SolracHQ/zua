@@ -17,6 +17,10 @@ pub fn Field(comptime T: type, comptime opts: FieldOpts) type {
         pub const __ZUA_FIELD_TYPE = T;
         pub const __ZUA_FIELD_OPTS = opts;
         value: T,
+
+        pub fn new(value: T) @This() {
+            return .{ .value = value };
+        }
     };
 }
 
@@ -27,6 +31,10 @@ pub fn Value(comptime T: type, comptime opts: FieldOpts) type {
         pub const __ZUA_FIELD_TYPE = T;
         pub const __ZUA_FIELD_OPTS = opts;
         value: T,
+
+        pub fn new(value: T) @This() {
+            return .{ .value = value };
+        }
     };
 }
 
