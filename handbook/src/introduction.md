@@ -1,69 +1,33 @@
 # Introduction
 
-zua is a Zig toolkit for Lua interop. The goal is simple: write ordinary Zig functions and types, pass them to Lua, and have them just work without thinking about the stack.
+If you have ever tried to call Zig code from Lua, you know the pattern. You push arguments onto the Lua stack, call a function, pop results back. Every new function means writing the same push and pop dance again. Change a struct and you chase down every push and pop that touches it. It turns your binding layer into write-only code: you write it once, and from that point on you dread touching it because any change means fixing all the glue code. It is like writing everything twice.
 
-The Lua C API is powerful but exhausting. After enough files full of `lua_push`, `lua_pop`, and `lua_settop`, adding a new function means reconstructing a mental model of stack positions that resets every time you step away. zua replaces that with a pipeline: Zig values encode to Lua values, Lua values decode back to Zig types, and the mapping is resolved at compile time from the type itself. No registration calls, no runtime reflection. A function is just another value: zua wraps it and generates the encode and decode paths for it at comptime, so you pass values back and forth between Zig and Lua and the boundary mostly disappears.
+zua generates that glue code at compile time. You write ordinary Zig functions and types, pass them to Lua, and zua handles the stack for you. Change a struct field, the push and pop logic updates with it. Add a new function, the encode and decode paths are generated from the type itself. No registration calls, no runtime reflection, no stack bookkeeping outside of a few specific cases.
 
-Stack management, longjmp safety, arena allocation inside callbacks, all handled automatically.
+## What this book does
 
-The hooks matter. Encoding and decoding are open to customization at any point without touching the library. If a type needs special handling on the way in or out, you declare it once and the rest of the pipeline picks it up. Same for metamethods, `__gc`, `__tostring`, custom error formats. You customize behavior by describing it, not by patching code.
+The book follows three real projects from an empty Zig file to a complete Lua API. Each project lives in its own part. You pick the project closest to what you are building and follow that part. Concepts are introduced only when the project needs them, explained through the decision that made them necessary. Each chapter adds one piece and you see the whole thing grow.
 
-This is a personal project. It started because I nearly abandoned a Lua-scripted tool of mine after the binding layer grew into several files of push and pop calls that I could no longer follow a week after writing them. Every feature in zua exists because I faced a real pain without it. If you hit a bug or a missing use case, please open an issue, I will be glad to help.
+I wanted something like Crafting Interpreters for zua. I know I am not even near to be mentioned in the same phrase as that book, but I love how it teaches by building. That is what I am trying to do here. Follow its shadow.
 
-## What this handbook covers
+## The three projects
 
-Each chapter adds capability on top of the previous one. You can read straight through or jump to the chapter that covers what you need. Most chapters are self-contained: concepts are repeated where necessary so you can start wherever you like.
+### vecmath
 
-### Setup
-`State`, `Context`, `Executor`, running Lua code from Zig.
+A Lua math library distributed as a shared library that Lua loads with `require("vecmath")`. You build Vec2 and Vec3 types with arithmetic operators, a lerp function, transform matrices, and docs generation. This project stays almost entirely in the table strategy, mostly for didactic purposes.
 
-### First function
-arguments, return values, error messages.
+You build a Lua module that Lua loads with `require`. You write Vec2 and Vec3 as plain Zig structs and expose them as Lua tables. You add methods, operator overloads, iteration, and editor stubs so script authors get autocomplete.
 
-### Context and arena
-the call allocator, string lifetimes, when to use the arena vs the state allocator.
+### app-config
 
-### Errors
-`ctx.fail`, `ctx.failWithFmt`, catching errors from Zig, stack tracebacks.
+A Zig application that creates and owns the Lua VM, registers globals, and runs a user script that configures a mock HTTP server. You build an AppConfig decoder, an App builder with chainable methods, route handlers as Lua callbacks, and a stateful middleware closure.
 
-### Structured data
-structs as tables, optional fields, nested structs, building tables from Zig.
+You build a Zig program that owns the Lua VM. Lua scripts configure a mock HTTP server. You decode config tables with optional fields and flexible address formats. You store Lua callbacks as route handlers and middleware. You manage memory with `__gc` and build a stateful middleware chain using closures.
 
-### Strategies
-`.table`, `.object`, `.ptr`, `zua.Meta.List` for sequence-like userdata with `__index`, `__len`, and iteration, what each one is for and when to use which.
+### process-inspector
 
-### Methods and ZUA_META
-attaching functions to types, `self` variants, metamethods.
+A Zig application with a built-in REPL that exposes a mock process memory inspection API. You build a process list, memory regions, scan entries, typed memory selectors, and a live interactive shell.
 
-### Lifecycle and __gc
-when Lua collects objects and how to clean up owned resources.
+You build a REPL-driven tool that exposes process lists, memory regions, and scan entries as typed Lua objects. You filter results, write back to memory, and get autocompletion in the shell. Lua is the frontend, Zig is the backend.
 
-### Encode and decode hooks
-custom type conversions, `strEnum`, `withEncode`, `withDecode`.
 
-### Handles and ownership
-borrowed, stack-owned, registry-owned, what each means in practice.
-
-### Table and Function handles
-`zua.Handlers.Any.Table`, `zua.Handlers.Any.Function`, when you hold vs borrow.
-
-### Object handles
-`zua.Handlers.Typed.Object(T)`, `zua.Handlers.Any.Userdata`, `Handlers.takeOwnership`.
-
-### Closures
-`Meta.Capture`, `Native.closure`, partial application with captured Lua callbacks.
-
-### VarArgs and Primitive
-variadic functions, inspecting raw Lua values, `decodeValue`.
-
-### Docs generation
-`zua.Docs`, `generateModule`, editor stubs for script authors.
-
-### Shared libraries
-`State.libState`, writing `luaopen_*` exports, loading with `require`.
-
-### REPL
-the built-in interactive shell, history, completion, syntax highlighting.
-
-> [!NOTE]
-> The handbook assumes you know what a pointer is, what comptime means, and what an allocator does. On the Lua side, basic syntax and data types are enough. Concepts specific to zua are explained as they come up.

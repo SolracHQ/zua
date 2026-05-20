@@ -1,20 +1,10 @@
 # Summary
 
-- [Introduction](./introduction.md)
-- [Setup](./setup.md)
-- [First function](./first-function.md)
-- [Context and arena](./context-and-arena.md)
-- [Errors](./errors.md)
-- [Structured data](./structured-data.md)
-- [Strategies](./strategies.md)
-- [Methods and ZUA_META](./methods.md)
-- [Lifecycle and __gc](./lifecycle.md)
-- [Encode and decode hooks](./hooks.md)
-- [Handles and ownership](./ownership.md)
-- [Table and Function handles](./table-function-handles.md)
-- [Object handles](./object-handles.md)
-- [Closures](./closures.md)
-- [VarArgs and Primitive](./varargs.md)
-- [Docs generation](./docs.md)
-- [Shared libraries](./shared-libraries.md)
-- [REPL](./repl.md)
+[Introduction](./introduction.md)
+
+# vecmath
+
+- [What we are building](./vecmath/overview.md)
+- [Setting up the project](./vecmath/setup.md)
+- [First functions](./vecmath/first-functions.md)
+- [Shaping data](./vecmath/shaping-data.md)
