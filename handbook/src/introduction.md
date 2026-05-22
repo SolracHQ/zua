@@ -14,20 +14,14 @@ I wanted something like Crafting Interpreters for zua. I know I am not even near
 
 ### vecmath
 
-A Lua math library distributed as a shared library that Lua loads with `require("vecmath")`. You build Vec2 and Vec3 types with arithmetic operators, a lerp function, transform matrices, and docs generation. This project stays almost entirely in the table strategy, mostly for didactic purposes.
-
-You build a Lua module that Lua loads with `require`. You write Vec2 and Vec3 as plain Zig structs and expose them as Lua tables. You add methods, operator overloads, iteration, and editor stubs so script authors get autocomplete.
+A Lua math library distributed as a shared library that Lua loads with `require("vecmath")`. You write Vec2 and Vec3 as plain Zig structs and expose them as Lua tables with methods, operator overloads, iteration, and editor stubs. This project stays almost entirely in the table strategy, mostly for didactic purposes.
 
 ### app-config
 
-A Zig application that creates and owns the Lua VM, registers globals, and runs a user script that configures a mock HTTP server. You build an AppConfig decoder, an App builder with chainable methods, route handlers as Lua callbacks, and a stateful middleware closure.
-
-You build a Zig program that owns the Lua VM. Lua scripts configure a mock HTTP server. You decode config tables with optional fields and flexible address formats. You store Lua callbacks as route handlers and middleware. You manage memory with `__gc` and build a stateful middleware chain using closures.
+A Zig program that owns the Lua VM and runs a user script to configure a mock HTTP server. You decode config tables with optional fields and flexible address formats, store Lua callbacks as route handlers and middleware, manage memory with `__gc`, and build a stateful middleware chain using closures.
 
 ### process-inspector
 
-A Zig application with a built-in REPL that exposes a mock process memory inspection API. You build a process list, memory regions, scan entries, typed memory selectors, and a live interactive shell.
-
-You build a REPL-driven tool that exposes process lists, memory regions, and scan entries as typed Lua objects. You filter results, write back to memory, and get autocompletion in the shell. Lua is the frontend, Zig is the backend.
+A REPL-driven tool that exposes process lists, memory regions, and scan entries as typed Lua objects. You filter results, write back to memory, and get autocompletion in the shell. Lua is the frontend, Zig is the backend.
 
 

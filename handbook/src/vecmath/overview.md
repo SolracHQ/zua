@@ -1,8 +1,8 @@
 # What we are building
 
-We are building a vector library for Lua. Our implementation will be modest but expressive enough to be useful under certain contexts. We will keep the surface small: addition, subtraction, scalar multiplication, equality, length, dot product, cross product, normalization, and linear interpolation. Plus a simple 3x3 transform system with identity, rotation, scale, and apply.
+We are building a vector library for Lua. It will be modest but expressive enough to be useful under certain contexts. I am keeping the surface small: addition, subtraction, scalar multiplication, equality, length, dot product, cross product, normalization, and linear interpolation. Plus a simple 3x3 transform system with identity, rotation, scale, and apply.
 
-We are not building a full-featured math library. There will be no quaternions, no matrix4x4, no SVD decomposition, no GPU integration. Just vectors and transforms, enough to move things around in 2D and 3D space.
+Just vectors and transforms, enough to move things around in 2D and 3D space. Quaternions, matrix4x4, SVD decomposition, GPU integration are out of scope, but they would follow the same pattern. If you want to expand this into a full-featured math library, that would be incredible.
 
 > [!NOTE]
 > I chose a vector library because the idea is to build something that looks like a native Lua value. Vectors let us talk about operators, methods, and plain data in a natural way without the examples feeling artificial.

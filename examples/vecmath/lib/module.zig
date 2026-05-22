@@ -26,7 +26,9 @@ const vec2 = struct {
             .{ .name = "y", .description = "Vertical component." },
         },
     });
-    fn impl(x: f64, y: f64) Vec2 { return .{ .x = x, .y = y }; }
+    fn impl(x: f64, y: f64) Vec2 {
+        return .{ .x = .new(x), .y = .new(y) };
+    }
 };
 
 const vec3 = struct {
@@ -38,7 +40,9 @@ const vec3 = struct {
             .{ .name = "z", .description = "Z component." },
         },
     });
-    fn impl(x: f64, y: f64, z: f64) Vec3 { return .{ .x = x, .y = y, .z = z }; }
+    fn impl(x: f64, y: f64, z: f64) Vec3 {
+        return .{ .x = .new(x), .y = .new(y), .z = .new(z) };
+    }
 };
 
 const lerp = struct {
@@ -51,7 +55,7 @@ const lerp = struct {
         },
     });
     fn impl(a: Vec2, b: Vec2, t: f64) Vec2 {
-        return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
+        return .{ .x = .new(a.x.value + (b.x.value - a.x.value) * t), .y = .new(a.y.value + (b.y.value - a.y.value) * t) };
     }
 };
 
@@ -110,8 +114,8 @@ const apply = struct {
     });
     fn impl(t: Transform, v: Vec2) Vec2 {
         return .{
-            .x = t[0][0] * v.x + t[0][1] * v.y + t[0][2],
-            .y = t[1][0] * v.x + t[1][1] * v.y + t[1][2],
+            .x = .new(t[0][0] * v.x.value + t[0][1] * v.y.value + t[0][2]),
+            .y = .new(t[1][0] * v.x.value + t[1][1] * v.y.value + t[1][2]),
         };
     }
 };

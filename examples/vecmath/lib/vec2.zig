@@ -1,14 +1,15 @@
 const std = @import("std");
 const zua = @import("zua");
 
-// Vec2 is a table-strategy type using Shape.Table.
+// Vec2 is an object-strategy type using Shape.Object.
 //
-// Shape.Table maps Zig struct fields to Lua table keys. When a Vec2 is
-// returned from Zig, zua creates a Lua table with x and y fields. When
+// Shape.Object stores the value as Lua userdata. Lua holds a pointer to it
+// and fields are accessible through Modifier.Field markers. When a Vec2 is
+// returned from Zig, zua creates a Lua userdata holding the struct. When
 // a Vec2 is received from Lua (as a function argument), zua reads the
-// table's x and y fields and decodes them into the struct.
+// userdata's inner struct fields and decodes them.
 //
-// Methods are declared in the Shape.Table call as a method set.
+// Methods are declared in the Shape.Object call as a method set.
 // __-prefixed names become Lua metamethods (__add, __sub, etc.).
 // Non-prefixed names become regular methods callable with :method().
 //
@@ -16,16 +17,14 @@ const zua = @import("zua");
 // .description and .args are consumed by the Docs stub generator.
 
 pub const Vec2 = struct {
-    // Table strategy fields map 1:1 to Lua table keys at comptime.
-    // zua reads the field names and types directly from the struct
-    // declaration. No registration or runtime reflection needed.
-    x: f64,
-    y: f64,
+    // Modifier.Field marks struct fields as readable and writable from Lua.
+    // zua generates __index and __newindex entries in the metatable so Lua
+    // can access v.x and v.y = 5 directly.
+    x: zua.Shape.Modifier.Field(f64, .{ .description = "X component." }),
+    y: zua.Shape.Modifier.Field(f64, .{ .description = "Y component." }),
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Vec2, .{
         // __add and __sub take two Vec2 values and return a new one.
-        // Both the metamethod (__add) and the named form (.add) are
-        // registered so users can write either a + b or a:add(b).
         .__add = zua.Shape.Fn(add, .{
             .description = "Component-wise addition.",
             .args = &.{
@@ -51,8 +50,8 @@ pub const Vec2 = struct {
         // Shape.Fn is not used here. A bare fn reference is enough when
         // no documentation metadata is needed.
         .__eq = eq,
-        // Named methods use :notation from Lua. zua injects self as the
-        // first parameter automatically based on the function signature.
+        // Named methods use :notation from Lua. zua injects the userdata
+        // pointer for the self parameter automatically.
         .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
         .dot = zua.Shape.Fn(dot, .{
             .description = "Dot product.",
@@ -64,43 +63,38 @@ pub const Vec2 = struct {
         .__tostring = toString,
     }, .{ .name = "vec2" });
 
-    // Functions are plain Zig functions. Parameters and return values are
-    // normal Zig types (Vec2, f64, bool, etc.). No special ceremony is
-    // needed. zua reads the function signature at comptime and generates
-    // the encode/decode paths automatically.
-    //
-    // Handlers.* are only needed when you want in-place mutation of a Lua
-    // value or access without copying. For value types like Vec2, plain
-    // structs are all you need.
+    // Object methods receive *const Vec2 (a pointer to the struct inside the
+    // userdata). The .value field on Modifier.Field holds the inner f64.
+    // Returning a Vec2 creates a new userdata automatically.
 
-    fn add(a: Vec2, b: Vec2) Vec2 {
-        return .{ .x = a.x + b.x, .y = a.y + b.y };
+    fn add(self: *const Vec2, other: *const Vec2) Vec2 {
+        return .{ .x = .new(self.x.value + other.x.value), .y = .new(self.y.value + other.y.value) };
     }
 
-    fn sub(a: Vec2, b: Vec2) Vec2 {
-        return .{ .x = a.x - b.x, .y = a.y - b.y };
+    fn sub(self: *const Vec2, other: *const Vec2) Vec2 {
+        return .{ .x = .new(self.x.value - other.x.value), .y = .new(self.y.value - other.y.value) };
     }
 
-    fn mul(self: Vec2, factor: f64) Vec2 {
-        return .{ .x = self.x * factor, .y = self.y * factor };
+    fn mul(self: *const Vec2, factor: f64) Vec2 {
+        return .{ .x = .new(self.x.value * factor), .y = .new(self.y.value * factor) };
     }
 
-    fn eq(a: Vec2, b: Vec2) bool {
-        return a.x == b.x and a.y == b.y;
+    fn eq(a: *const Vec2, b: *const Vec2) bool {
+        return a.x.value == b.x.value and a.y.value == b.y.value;
     }
 
-    fn length(self: Vec2) f64 {
-        return @sqrt(self.x * self.x + self.y * self.y);
+    fn length(self: *const Vec2) f64 {
+        return @sqrt(self.x.value * self.x.value + self.y.value * self.y.value);
     }
 
-    fn dot(a: Vec2, b: Vec2) f64 {
-        return a.x * b.x + a.y * b.y;
+    fn dot(a: *const Vec2, b: *const Vec2) f64 {
+        return a.x.value * b.x.value + a.y.value * b.y.value;
     }
 
-    fn normalize(self: Vec2) Vec2 {
-        const len = @sqrt(self.x * self.x + self.y * self.y);
-        if (len == 0) return .{ .x = 0, .y = 0 };
-        return .{ .x = self.x / len, .y = self.y / len };
+    fn normalize(self: *const Vec2) Vec2 {
+        const len = @sqrt(self.x.value * self.x.value + self.y.value * self.y.value);
+        if (len == 0) return Vec2{ .x = .new(0), .y = .new(0) };
+        return .{ .x = .new(self.x.value / len), .y = .new(self.y.value / len) };
     }
 
     // ctx is not special to __tostring. Any function exposed via zua can
@@ -108,8 +102,8 @@ pub const Vec2 = struct {
     // Here we use ctx.arena() to allocate the formatted string. The arena
     // lives for the duration of the Lua callback and is freed after it
     // returns.
-    fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
-        return std.fmt.allocPrint(ctx.arena(), "vec2({d}, {d})", .{ self.x, self.y }) catch
+    fn toString(ctx: *zua.Context, self: *const Vec2) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "vec2({d}, {d})", .{ self.x.value, self.y.value }) catch
             ctx.failTyped([]const u8, "oom");
     }
 };

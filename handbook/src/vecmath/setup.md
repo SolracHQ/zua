@@ -94,7 +94,7 @@ Then we initialize the zua state with `State.libState`. This attaches zua to an 
 > [!NOTE]
 > Use the name of your library as the state suffix. Since `require("name")` only loads a module once per Lua state, that name is effectively unique. But there is a deeper reason: the state holds the mapping from Zig type to metatable. If two libraries use the same type name, there will be a silent collision. One metatable gets attached to the wrong type, values get cast to the wrong type, and bad things happen :3.
 
-Now we initialize the Context. The context is required everywhere in the zua API. Do not worry about it too much for now. This is the only one you will write by hand in this project. Inside callback functions, zua provides it automatically. For now, it just holds the error message in case `push` fails (even if pushing a string can never really fail).
+Now we initialize the Context. The context is required everywhere in the zua API. Do not worry about it too much for now. This is the only one you will write by hand in this project. Inside callback functions, zua provides it automatically. Pin it in your head, it will save us later. For now, it just holds the error message in case `push` fails (even if pushing a string can never really fail).
 
 Finally we return `1`, telling Lua that we pushed one return value.
 

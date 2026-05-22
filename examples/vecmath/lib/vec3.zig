@@ -1,9 +1,9 @@
 const std = @import("std");
 const zua = @import("zua");
 
-// Vec3 is the same table-strategy pattern as Vec2 with an extra component.
+// Vec3 is the same object-strategy pattern as Vec2 with an extra component.
 //
-// The ZUA_SHAPE follows the same Shape.Table pattern. The main difference
+// The ZUA_SHAPE follows the same Shape.Object pattern. The main difference
 // is the cross product method (only meaningful in 3D) and the three-field
 // struct.
 //
@@ -11,13 +11,11 @@ const zua = @import("zua");
 // produces proper ---@param annotations.
 
 pub const Vec3 = struct {
-    // Table strategy fields map 1:1 to Lua table keys at comptime.
-    // zua reads field names and types directly from the struct decl.
-    x: f64,
-    y: f64,
-    z: f64,
+    x: zua.Shape.Modifier.Field(f64, .{ .description = "X component." }),
+    y: zua.Shape.Modifier.Field(f64, .{ .description = "Y component." }),
+    z: zua.Shape.Modifier.Field(f64, .{ .description = "Z component." }),
 
-    pub const ZUA_SHAPE = zua.Shape.Table(Vec3, .{
+    pub const ZUA_SHAPE = zua.Shape.Object(Vec3, .{
         .__add = zua.Shape.Fn(add, .{
             .description = "Component-wise addition.",
             .args = &.{
@@ -54,53 +52,63 @@ pub const Vec3 = struct {
         .__tostring = toString,
     }, .{ .name = "vec3" });
 
-    // Functions are plain Zig functions. Parameters and return values are
-    // normal Zig types. zua reads the signature at comptime and generates
-    // the encode/decode paths automatically. Handlers.* are only needed
-    // for in-place mutation or no-copy access.
+    // Object methods receive *const Vec3 (a pointer to the struct inside the
+    // userdata). The .value field on Modifier.Field holds the inner f64.
 
-    fn add(a: Vec3, b: Vec3) Vec3 {
-        return .{ .x = a.x + b.x, .y = a.y + b.y, .z = a.z + b.z };
-    }
-
-    fn sub(a: Vec3, b: Vec3) Vec3 {
-        return .{ .x = a.x - b.x, .y = a.y - b.y, .z = a.z - b.z };
-    }
-
-    fn mul(self: Vec3, factor: f64) Vec3 {
-        return .{ .x = self.x * factor, .y = self.y * factor, .z = self.z * factor };
-    }
-
-    fn eq(a: Vec3, b: Vec3) bool {
-        return a.x == b.x and a.y == b.y and a.z == b.z;
-    }
-
-    fn length(self: Vec3) f64 {
-        return @sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
-    }
-
-    fn dot(a: Vec3, b: Vec3) f64 {
-        return a.x * b.x + a.y * b.y + a.z * b.z;
-    }
-
-    fn cross(a: Vec3, b: Vec3) Vec3 {
+    fn add(self: *const Vec3, other: *const Vec3) Vec3 {
         return .{
-            .x = a.y * b.z - a.z * b.y,
-            .y = a.z * b.x - a.x * b.z,
-            .z = a.x * b.y - a.y * b.x,
+            .x = .new(self.x.value + other.x.value),
+            .y = .new(self.y.value + other.y.value),
+            .z = .new(self.z.value + other.z.value),
         };
     }
 
-    fn normalize(self: Vec3) Vec3 {
-        const len = @sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
-        if (len == 0) return .{ .x = 0, .y = 0, .z = 0 };
-        return .{ .x = self.x / len, .y = self.y / len, .z = self.z / len };
+    fn sub(self: *const Vec3, other: *const Vec3) Vec3 {
+        return .{
+            .x = .new(self.x.value - other.x.value),
+            .y = .new(self.y.value - other.y.value),
+            .z = .new(self.z.value - other.z.value),
+        };
+    }
+
+    fn mul(self: *const Vec3, factor: f64) Vec3 {
+        return .{
+            .x = .new(self.x.value * factor),
+            .y = .new(self.y.value * factor),
+            .z = .new(self.z.value * factor),
+        };
+    }
+
+    fn eq(a: *const Vec3, b: *const Vec3) bool {
+        return a.x.value == b.x.value and a.y.value == b.y.value and a.z.value == b.z.value;
+    }
+
+    fn length(self: *const Vec3) f64 {
+        return @sqrt(self.x.value * self.x.value + self.y.value * self.y.value + self.z.value * self.z.value);
+    }
+
+    fn dot(a: *const Vec3, b: *const Vec3) f64 {
+        return a.x.value * b.x.value + a.y.value * b.y.value + a.z.value * b.z.value;
+    }
+
+    fn cross(a: *const Vec3, b: *const Vec3) Vec3 {
+        return .{
+            .x = .new(a.y.value * b.z.value - a.z.value * b.y.value),
+            .y = .new(a.z.value * b.x.value - a.x.value * b.z.value),
+            .z = .new(a.x.value * b.y.value - a.y.value * b.x.value),
+        };
+    }
+
+    fn normalize(self: *const Vec3) Vec3 {
+        const len = @sqrt(self.x.value * self.x.value + self.y.value * self.y.value + self.z.value * self.z.value);
+        if (len == 0) return Vec3{ .x = .new(0), .y = .new(0), .z = .new(0) };
+        return Vec3{ .x = .new(self.x.value / len), .y = .new(self.y.value / len), .z = .new(self.z.value / len) };
     }
 
     // ctx is not special to __tostring. Any function exposed via zua can
     // have ctx as the first parameter if it needs to query the context.
-    fn toString(ctx: *zua.Context, self: Vec3) ![]const u8 {
-        return std.fmt.allocPrint(ctx.arena(), "vec3({d}, {d}, {d})", .{ self.x, self.y, self.z }) catch
+    fn toString(ctx: *zua.Context, self: *const Vec3) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "vec3({d}, {d}, {d})", .{ self.x.value, self.y.value, self.z.value }) catch
             ctx.failTyped([]const u8, "oom");
     }
 };
