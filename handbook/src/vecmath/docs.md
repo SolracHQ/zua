@@ -2,9 +2,7 @@
 
 At this point we have a pretty decent library. But if you play with it you probably noticed an inconvenience: the LSP is not giving you any autocompletion at all. That is pretty obvious if we think about it. Lua only sees a machine code file with zero information about what your library does. We need to help Lua with that, and zua has exactly the tool for that.
 
-The Lua language server supports definition-only files, where you define the shape of your library with zero code. zua provides a module to autogenerate this documentation.
-
-But too much talk. As Linux Torvalds says, talk is cheap, show me the code:
+The Lua language server supports definition-only files, where you define the shape of your library with zero code. zua provides a module to autogenerate this documentation. But too much talk. As Linux Torvalds says, talk is cheap, show me the code:
 
 ```zig
 fn docs_fn(ctx: *zua.Context) ![]const u8 {
@@ -81,13 +79,10 @@ function Vecmath.docs() end
 return Vecmath
 ```
 
-Lets analyze what we are getting here. First `---@meta vecmath`. `@meta` means this file does not contain any executable code, only definitions. Any executable code in this file would be a warning. The name after `meta` means this file will apply over any `require` to this name.
+Save those stubs to a file and open it in your editor. The autocompletion works. But look closely at the function signatures: `arg1`, `arg2`, `arg3`. Not exactly helpful. And the classes have no descriptions. That is all the information zua had to work with, because Zig doc comments do not survive to comptime. The empty `.{}` arguments we have been leaving on every Shape call are where that information goes.
 
-Then we see that we declare two classes for Vec2 and Vec3. Lua does not really have types. Instead Lua annotates a table with a class definition, a name, which attributes it has, which operators, and which functions. If any other annotation refers to that class, Lua understands it will return something with the same contract the class defines.
-
-The `Vec2:name()` syntax is sugar for `function Vec2.name(self: Vec2)`.
-
-The `return Vecmath` at the end is saying that whatever `require` returns will match the contract of this value.
+> [!NOTE]
+> `---@meta vecmath` means the file is definitions only and applies to `require("vecmath")`. Class declarations are Lua's way of defining a table shape with its fields, operators, and methods. `return Vecmath` at the end is a contract saying whatever `require` returns matches this class.
 
 Now write a script to save the stubs to a file:
 
@@ -100,16 +95,12 @@ file:close()
 print("stubs written to vecmath.d.lua (" .. #stubs .. " bytes)")
 ```
 
-Your editor will start showing autocompletion, guessing the result types of operations, and a better experience in general. But you will also notice something awkward: the types have no descriptions, neither the functions. And `arg1`, `arg2` is confusing. But yeah, that is all the information zua has. Even if you add doc comments to types and functions, they are not carried by Zig's doc comments at comptime.
-
-So there is no other option? There is. That is where the `.{}` we left on Shapes will start being useful.
-
 > [!WARNING]
 > If your editor does not automatically recognize the `.d.lua` file, you must configure your `.luarc.json`. Unfortunately that is out of the scope of the book, but the information is widely spread on the internet.
 
 ## Shape options
 
-Along the road to reach this point we left several empty `.{}` on Shape variants, the second `.{}` in `Table` and the only one on `Fn`. I promised to explain it later and I am here to achieve my promises. Anyways it is nothing fancy, it is just the configuration struct, a very common pattern in Zig libraries where the function accepts a struct with defined defaults. You pass whatever configuration you want to override. In the case of Shape configuration it is mostly for documentation.
+Every `.{}` we left empty along the way was a small debt. Time to pay it back.
 
 Lets start fixing the function argx issue first, since it is the more confusing piece. Everything else has a name, only args has default ones.
 
@@ -148,7 +139,7 @@ zua.Shape.Table(Vec2, .{...}, .{
 
 The `.name` sets the class name in stubs. Remember the note in the methods chapter about `arg1: expected f64, got table` being unhelpful? With `.args` on the functions, that error turns into `x: expected f64, got string`.
 
-The options struct is generated based on the struct fields, so it checks at comptime that the field names match. Rename `x` to `x_coord` in Vec2 and `field_descriptions` breaks at compile time. Docs cannot go stale without you knowing.
+One more thing worth knowing: if you rename `x` to `x_coord` in Vec2 and forget to update `field_descriptions`, it breaks at compile time. Docs cannot go stale without you knowing about it.
 
 Now update Vecmath with all this. Add `ZUA_SHAPE` back with the module name, and wrap the functions with `Fn` options:
 
@@ -195,6 +186,102 @@ local Vec2 = {}
 function vecmath.vec2(x, y) end
 ```
 
+Now we have the module level documentation solved. But if you look deeper, we are not done yet. The vector methods still have `arg1` and so on.
+
+## How to document methods
+
+Documenting methods works the same way as module functions. You can do it inline, right there in the method map:
+
+```zig
+.__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
+.dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
+```
+
+For metamethods only description is needed, Lua already knows their arguments. For regular methods you add `.args` to name the parameters.
+
+The disadvantage of this approach is that the shape becomes dense and hard to read, especially in cases where you host several methods. At the same time it is the simplest, just modify slightly what we currently have.
+
+Or you can pull the methods out into their own constant:
+
+```zig
+const methods = .{
+    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
+    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
+    ...
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
+```
+
+This separates the method documentation from the shape, keeping a cleaner structure, separating the data documentation from the behavior documentation. But it still has the problem that the docs are outside the function.
+
+Or if you want each method to carry its own documentation, declare it as its own struct with a `ZUA_SHAPE`:
+
+```zig
+const add = struct {
+    pub const ZUA_SHAPE = zua.Shape.Fn(impl, .{ .description = "Component-wise addition." });
+    fn impl(a: Vec2, b: Vec2) Vec2 { ... }
+};
+```
+
+This is the cleanest approach, the docs live along the functions. But it is the most verbose by far, it makes the whole type dense to read. The method map stays clean with just `.__add = add` without `Shape.Fn` noise. You can combine approaches if you want, but I really do not recommend it because it gets confusing fast what is documented and what is not.
+
+> [!NOTE]
+> The reason there are multiple forms is the difference between Zig and Lua regarding functions. For Lua a function is a value. For Zig a function is a declaration, and declarations can only exist inside a container. `Shape.Fn` adapts to both: inside a `Table` or `Object` you use already declared functions, and inside functions you cannot declare other functions so you use the struct form.
+
+I prefer the extracted constant approach, keeps `ZUA_SHAPE` short and the methods section is its own block. But I understand those who prefer the struct approach because it keeps the documentation tied to the implementation.
+
+Using my preference the Vec2 and Vec3 methods constants will look something like this.
+
+> [!NOTE]
+> It will vary a lot depending on what you prefer. The content of the docs will be the same but the way you write it will vary.
+
+```zig
+const methods = .{
+    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
+    .__sub = zua.Shape.Fn(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = zua.Shape.Fn(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = zua.Shape.Fn(eq, .{ .description = "Equality comparison." }),
+    .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
+    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = zua.Shape.Fn(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__tostring = toString,
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
+
+// ... rest of the struct stays the same ...
+
+const methods = .{
+    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
+    .__sub = zua.Shape.Fn(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = zua.Shape.Fn(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = zua.Shape.Fn(eq, .{ .description = "Equality comparison." }),
+    .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
+    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .cross = zua.Shape.Fn(cross, .{ .description = "Cross product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = zua.Shape.Fn(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__tostring = toString,
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec3, methods, .{ ... });
+```
+
+Run the docs script again and the stubs now include descriptions for methods:
+
+```lua
+-- Dot product.
+---@param b Vec2 # Right vector.
+---@return number
+function Vec2:dot(b) end
+
+-- Euclidean norm.
+---@return number
+function Vec2:length() end
+
+-- Unit vector, returns zeros if length is zero.
+---@return Vec2
+function Vec2:normalize() end
+```
+
 Now we have a complete generated docs. I know it is a bit verbose, but it looks way better and believe me your Lua users will thank you. It will also serve you since now you will be able to test without needing to read the Zig code, and even better it will be in sync with your code. If you rename a field it will tell you are trying to document something that does not exist. And if you do not need docs, just leave `.{}`, nobody will complain.
-
-
