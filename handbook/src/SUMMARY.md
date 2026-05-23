@@ -11,3 +11,4 @@
 - [Methods and metamethods](./vecmath/methods-and-metamethods.md)
 - [Modules](./vecmath/modules.md)
 - [Docs](./vecmath/docs.md)
+- [Objects](./vecmath/objects.md)

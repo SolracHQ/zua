@@ -133,3 +133,77 @@ print(b:cross(vm.vec3(0, 1, 0)))
 ```
 
 As you can see it returns a table. The table has our two functions, and we can still use them to generate vectors with all their methods. And we still have the same single push, I promise no stack playing, and as promised that is the only push we will do in the whole project.
+
+## More module functions
+
+Before we move on there is some unfinished business. A vector math library without `lerp`, transforms, and matrix application is not much of a vector math library. None of this teaches anything new about zua, but you need it to have a complete example to follow along with.
+
+The only thing worth pointing out is `Transform`:
+
+```zig
+const Transform = [3][3]f64;
+```
+
+A fixed-size array maps to a Lua table with integer keys, same as a struct maps to a table with field names. Nested arrays become nested tables. `[3][3]f64` arrives in Lua as `{{1,0,0},{0,1,0},{0,0,1}}` with no extra work. Keep that in mind whenever you need to pass matrix-like data.
+
+The rest is just math. Add these to `lib/module.zig`:
+
+```zig
+fn lerp_fn(a: Vec2, b: Vec2, t: f64) Vec2 {
+    return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
+}
+
+fn identity_fn() Transform {
+    return .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
+}
+
+fn rotate_fn(t: Transform, angle: f64) Transform {
+    const c = @cos(angle);
+    const s = @sin(angle);
+    return .{
+        .{ t[0][0] * c + t[0][1] * s, -t[0][0] * s + t[0][1] * c, t[0][2] },
+        .{ t[1][0] * c + t[1][1] * s, -t[1][0] * s + t[1][1] * c, t[1][2] },
+        .{ t[2][0] * c + t[2][1] * s, -t[2][0] * s + t[2][1] * c, t[2][2] },
+    };
+}
+
+fn scale_fn(t: Transform, factor: f64) Transform {
+    return .{
+        .{ t[0][0] * factor, t[0][1] * factor, t[0][2] * factor },
+        .{ t[1][0] * factor, t[1][1] * factor, t[1][2] * factor },
+        .{ t[2][0] * factor, t[2][1] * factor, t[2][2] * factor },
+    };
+}
+
+fn apply_fn(t: Transform, v: Vec2) Vec2 {
+    return .{
+        .x = t[0][0] * v.x + t[0][1] * v.y + t[0][2],
+        .y = t[1][0] * v.x + t[1][1] * v.y + t[1][2],
+    };
+}
+```
+
+Register them in `Vecmath`:
+
+```zig
+pub const Vecmath = struct {
+    vec2: zua.Shape.Fn(vec2_fn, .{}) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{}) = .{},
+    lerp: zua.Shape.Fn(lerp_fn, .{}) = .{},
+    identity: zua.Shape.Fn(identity_fn, .{}) = .{},
+    rotate: zua.Shape.Fn(rotate_fn, .{}) = .{},
+    scale: zua.Shape.Fn(scale_fn, .{}) = .{},
+    apply: zua.Shape.Fn(apply_fn, .{}) = .{},
+};
+```
+
+And use them from Lua:
+
+```lua
+local mid = vm.lerp(a, b, 0.5)
+print(mid.x, mid.y)
+
+local t = vm.rotate(vm.scale(vm.identity(), 2), math.pi / 4)
+local rotated = vm.apply(t, a)
+print(rotated.x, rotated.y)
+```

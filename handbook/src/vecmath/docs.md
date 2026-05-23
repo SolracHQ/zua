@@ -144,6 +144,8 @@ One more thing worth knowing: if you rename `x` to `x_coord` in Vec2 and forget 
 Now update Vecmath with all this. Add `ZUA_SHAPE` back with the module name, and wrap the functions with `Fn` options:
 
 ```zig
+const Transform = [3][3]f64;
+
 const Vecmath = struct {
     pub const ZUA_SHAPE = zua.Shape.Table(Vecmath, .{}, .{
         .name = "vecmath",
@@ -162,6 +164,38 @@ const Vecmath = struct {
             .{ .name = "x", .description = "X component." },
             .{ .name = "y", .description = "Y component." },
             .{ .name = "z", .description = "Z component." },
+        },
+    }) = .{},
+    lerp: zua.Shape.Fn(lerp_fn, .{
+        .description = "Linearly interpolate between two Vec2 values.",
+        .args = &.{
+            .{ .name = "a", .description = "Starting vector." },
+            .{ .name = "b", .description = "Ending vector." },
+            .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+        },
+    }) = .{},
+    identity: zua.Shape.Fn(identity_fn, .{
+        .description = "Create an identity 3x3 transform matrix.",
+    }) = .{},
+    rotate: zua.Shape.Fn(rotate_fn, .{
+        .description = "Rotate a transform matrix around the Z axis.",
+        .args = &.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "angle", .description = "Rotation angle in radians." },
+        },
+    }) = .{},
+    scale: zua.Shape.Fn(scale_fn, .{
+        .description = "Uniformly scale a transform matrix.",
+        .args = &.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "factor", .description = "Scale factor." },
+        },
+    }) = .{},
+    apply: zua.Shape.Fn(apply_fn, .{
+        .description = "Apply a transform to a Vec2.",
+        .args = &.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "v", .description = "Vector to transform." },
         },
     }) = .{},
     docs: zua.Shape.Fn(docs_fn, .{
