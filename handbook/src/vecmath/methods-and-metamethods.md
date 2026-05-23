@@ -61,7 +61,27 @@ Notice `__mul` takes a Vec2 and an `f64`, not two Vec2s. Lua passes the right op
 
 `__eq` returns `bool`, not Vec2. Each metamethod has its own return contract: `__add` returns the same type, `__eq` returns a boolean, `__tostring` returns a string. zua does not enforce this. You just write the Zig function with the return type that makes sense, and zua encodes it.
 
-Register them in the method map alongside `__tostring`:
+Now add the named methods too. Same pattern:
+
+```zig
+fn length(self: Vec2) f64 {
+    return @sqrt(self.x * self.x + self.y * self.y);
+}
+
+fn dot(a: Vec2, b: Vec2) f64 {
+    return a.x * b.x + a.y * b.y;
+}
+
+fn normalize(self: Vec2) Vec2 {
+    const len = @sqrt(self.x * self.x + self.y * self.y);
+    if (len == 0) return .{ .x = 0, .y = 0 };
+    return .{ .x = self.x / len, .y = self.y / len };
+}
+```
+
+These work the same way, they just use `:` syntax instead of operators.
+
+Register everything in the method map alongside `__tostring`:
 
 ```zig
 pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{

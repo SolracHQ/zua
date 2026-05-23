@@ -83,13 +83,13 @@ fn vec3_fn(x: f64, y: f64, z: f64) Vec3 {
 }
 
 pub const Vecmath = struct {
-    vec2: @TypeOf(vec2_fn) = vec2_fn,
-    vec3: @TypeOf(vec3_fn) = vec3_fn,
+    vec2: zua.Shape.Fn(vec2_fn, .{}) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{}) = .{},
 };
 ```
 
 > [!NOTE]
-> `@TypeOf(vec2_fn)` looks horrible, I know. We will fix it in the next chapter.
+> Yes, another empty `.{}`. You might be wondering what that is for and what `Shape.Fn` even is. All that will be explained in the next chapter.
 
 Vecmath is a plain struct with no `ZUA_SHAPE`. The default strategy for Zig structs is a Lua table, and zua pushes each field as a Lua callable automatically. You could add more functions here and they would just appear as new fields in the module table.
 
@@ -118,10 +118,12 @@ The entry point just imports the module and pushes it. Everything else lives in 
 
 ## Using it from Lua
 
-Build and test:
+Lets see if it works with this example:
 
 ```lua
 local vm = require("vecmath")
+
+print(vm)
 
 local a = vm.vec2(3, 4)
 local b = vm.vec3(1, 2, 3)
@@ -130,4 +132,4 @@ print(a:length(), b:length())
 print(b:cross(vm.vec3(0, 1, 0)))
 ```
 
-`require("vecmath")` returns the module table. `vm.vec2` and `vm.vec3` are both available.
+As you can see it returns a table. The table has our two functions, and we can still use them to generate vectors with all their methods. And we still have the same single push, I promise no stack playing, and as promised that is the only push we will do in the whole project.
