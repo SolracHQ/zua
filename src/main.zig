@@ -61,7 +61,7 @@ fn runRepl(init: std.process.Init) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    var conf: zua.Object(zua.Repl.Config) = .create(state, .{ .history_path = "zua_repl_history.txt" });
+    var conf: zua.Handlers.Typed.Object(zua.Repl.Config) = .create(state, .{ .history_path = "zua_repl_history.txt" });
     defer conf.release();
 
     try state.addGlobals(&ctx, .{ .repl = conf });
@@ -91,47 +91,50 @@ fn evalExpr(init: std.process.Init, source: []const u8) !void {
     var ctx = zua.Context.init(state);
     defer ctx.deinit();
 
-    const previous_top = zua.lua.getTop(state.luaState);
-    defer zua.lua.setTop(state.luaState, previous_top);
-
     var executor: zua.Executor = .{};
-    executor.eval_untyped(&ctx, .{ .code = .{ .string = source } }) catch {
+    const results = executor.eval(&ctx, zua.Mapper.VarArgs, .{ .code = .{ .string = source } }) catch {
         const msg = ctx.err orelse "unknown error";
         try printMessage(state, "Error: ", msg);
         return;
     };
-    try printResults(state, previous_top);
+    try printValues(state, results.args);
 }
 
-fn generateDocs(init: std.process.Init) !void {
-    var generator = zua.Docs.init(init.gpa);
-    defer generator.deinit();
-    try generator.addBinding("repl", zua.Repl.Config{});
-    const stubs = try generator.generate();
-    std.debug.print("{s}", .{stubs});
-}
-
-fn printResults(state: *zua.State, previous_top: zua.lua.StackIndex) !void {
+fn printValues(state: *zua.State, values: []const zua.Mapper.Primitive) !void {
     var stdout_buffer: [4096]u8 = undefined;
     var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
-    const top = zua.lua.getTop(state.luaState);
-    if (top == previous_top) return;
 
     var first = true;
-    var index: zua.lua.StackIndex = previous_top + 1;
-    while (index <= top) : (index += 1) {
+    for (values) |prim| {
         if (!first) try writer.interface.print(", ", .{});
         first = false;
 
-        const abs = zua.lua.absIndex(state.luaState, index);
-        if (zua.lua.toDisplayString(state.luaState, abs)) |v| {
-            try writer.interface.print("{s}", .{v});
-        } else {
-            try writer.interface.print("{s}", .{zua.lua.typeName(state.luaState, zua.lua.valueType(state.luaState, abs))});
+        switch (prim) {
+            .nil => try writer.interface.print("nil", .{}),
+            .boolean => |b| {
+                const s = if (b) "true" else "false";
+                try writer.interface.print("{s}", .{s});
+            },
+            .integer => |i| try writer.interface.print("{d}", .{i}),
+            .float => |f| try writer.interface.print("{e}", .{f}),
+            .string => |s| try writer.interface.print("\"{s}\"", .{s}),
+            .table => try writer.interface.print("table", .{}),
+            .function => try writer.interface.print("function", .{}),
+            .light_userdata => try writer.interface.print("userdata:light", .{}),
+            .userdata => try writer.interface.print("userdata", .{}),
+            .handle => try writer.interface.print("handle", .{}),
         }
     }
     try writer.interface.print("\n", .{});
     try writer.interface.flush();
+}
+
+fn generateDocs(init: std.process.Init) !void {
+    var generator = zua.Docs.Generator.init(init.gpa);
+    defer generator.deinit();
+    try generator.addBinding("repl", zua.Repl.Config{});
+    const stubs = try generator.generate();
+    std.debug.print("{s}", .{stubs});
 }
 
 fn printMessage(state: *zua.State, prefix: []const u8, message: []const u8) !void {

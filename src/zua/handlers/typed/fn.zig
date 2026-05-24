@@ -1,0 +1,173 @@
+//! Typed function wrappers for raw Lua functions.
+//!
+//! `zua.Fn(ins, outs)` provides a statically typed wrapper around a raw Lua
+//! `Function` handle. It can be stored in Zig values and passed through the Lua
+//! API while preserving the expected argument and return shapes.
+
+const std = @import("std");
+const Function = @import("../any/function.zig");
+const Context = @import("../../context.zig");
+const Mapper = @import("../../mapper/api.zig");
+const Shape = @import("../../shape/api.zig");
+const Introspect = @import("../../introspect.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
+const Trampoline = @import("../../shape/trampoline.zig");
+
+/// Typed wrapper over a raw Lua `Function` handle.
+///
+/// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while preserving the expected argument and return shapes. The wrapper implements `ZUA_SHAPE` so it can be encoded to and decoded from Lua values using the normal metadata pipeline.
+pub fn Fn(comptime ins: anytype, comptime outs: anytype) type {
+    return struct {
+        /// Metadata used to encode and decode this typed function wrapper.
+        pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withEncode(Function, encode).withDecode(decode);
+        pub const Args = Mapper.Decoder.ParseResult(ins);
+        pub const Result = Mapper.Decoder.ParseResult(outs);
+
+        /// Underlying raw Lua function handle.
+        function: Function,
+
+        /// Converts the typed wrapper into the raw `Function` handle for Lua.
+        ///
+        /// This is used by the encoder when a `Fn(ins, outs)` value is returned to
+        /// or stored in Lua. It preserves the existing function ownership mode.
+        fn encode(_: *Context, self: @This()) !?Function {
+            return self.function;
+        }
+
+        /// Decodes a Lua function primitive into the typed wrapper.
+        ///
+        /// The hook path is intentionally minimal: only actual Lua functions are
+        /// accepted, and any other Lua value fails with `expected function`.
+        fn decode(ctx: *Context, prim: Mapper.Primitive) !?@This() {
+            return switch (prim) {
+                .function => |f| @This().from(f),
+                else => ctx.failTyped(?@This(), "expected function"),
+            };
+        }
+
+        /// Calls the wrapped Lua function with typed arguments and decodes the result.
+        ///
+        /// The `args` parameter is already parsed by `Mapper.Decoder` and may be a
+        /// single value or a tuple. This method forwards the arguments to the raw
+        /// function handle and returns the decoded `outs` result.
+        ///
+        /// Example:
+        /// ```zig
+        /// fn delegateSum(ctx: *zua.Context, sum: zua.Fn(.{i32, i32}, i32), a: i32, b: i32) !i32 {
+        ///     return sum.call(ctx, .{a, b});
+        /// }
+        /// ```
+        pub fn call(self: @This(), ctx: *Context, args: Args) !Result {
+            switch (comptime @typeInfo(Args)) {
+                .void => {
+                    return self.function.call(ctx, .{}, outs);
+                },
+                .@"struct" => |info| {
+                    if (info.is_tuple) {
+                        return self.function.call(ctx, args, outs);
+                    } else {
+                        return self.function.call(ctx, .{args}, outs);
+                    }
+                },
+                else => {
+                    return self.function.call(ctx, .{args}, outs);
+                },
+            }
+        }
+
+        /// Constructs a typed wrapper from an existing raw Lua `Function` handle.
+        pub fn from(function: Function) @This() {
+            return .{ .function = function };
+        }
+
+        /// Creates a typed wrapper from a pushable Lua callback value.
+        ///
+        /// This convenience helper accepts existing raw function handles or
+        /// typed callback wrappers such as `NativeFn`/`Closure` and returns a typed
+        /// `Fn(ins, outs)` handle for use in Zig values.
+        pub fn create(ctx: *Context, callback: anytype) @This() {
+            comptime {
+                const callback_type = @TypeOf(callback);
+                const is_native = @typeInfo(callback_type) == .@"fn" or
+                    ShapeData.isFunction(callback_type) or
+                    (@typeInfo(callback_type) == .type and ShapeData.isFunction(callback));
+                if (is_native) {
+                    checkCallbackSignature(callback, ins, outs);
+                }
+            }
+            try Mapper.Encoder.push(ctx, callback);
+            return .{ .function = Function.fromStack(ctx.state, -1) };
+        }
+
+        /// Creates a new typed wrapper owning the same underlying Lua function.
+        ///
+        /// The returned wrapper duplicates the raw function handle so both the
+        /// original and the new wrapper remain valid.
+        pub fn owned(self: @This()) @This() {
+            return .{ .function = self.function.owned() };
+        }
+
+        /// Converts the wrapper into an owned function handle anchored in the Lua registry.
+        ///
+        /// This is useful when the callback needs to be stored beyond the current Lua
+        /// stack frame. The returned wrapper owns the registry reference.
+        pub fn takeOwnership(self: @This()) @This() {
+            return .{ .function = self.function.takeOwnership() };
+        }
+
+        /// Releases the wrapped raw function handle.
+        ///
+        /// For registry-owned handles this unrefs the function. For stack-owned
+        /// handles this removes the function slot from the Lua stack.
+        pub fn release(self: @This()) void {
+            self.function.release();
+        }
+    };
+}
+
+fn callbackWrapper(comptime callback: anytype) type {
+    const callback_type = @TypeOf(callback);
+    if (comptime @typeInfo(callback_type) == .@"fn") {
+        return Shape.Fn(callback, .{});
+    }
+    if (comptime ShapeData.isFunction(callback_type)) {
+        return callback_type;
+    }
+    if (comptime @typeInfo(callback_type) == .type and ShapeData.isFunction(callback)) {
+        return callback;
+    }
+    @compileError("Fn.create expects a Zig function or a NativeFn/Closure wrapper for signature validation");
+}
+
+fn checkCallbackSignature(comptime callback: anytype, comptime ins: anytype, comptime outs: anytype) void {
+    const wrapper_t = callbackWrapper(callback);
+    const actual_args = wrapper_t.decodedParameterTypes();
+    const expected_args = ins;
+    const actual_count = Introspect.typeListCount(actual_args);
+    const expected_count = Introspect.typeListCount(expected_args);
+    if (comptime actual_count != expected_count) @compileError("Fn.create: callback argument count mismatch: expected " ++ @typeName(expected_count) ++ " args, got " ++ @typeName(actual_count));
+    inline for (0..actual_count) |i| {
+        const actual = Introspect.typeListAt(actual_args, i);
+        const expected = Introspect.typeListAt(expected_args, i);
+        if (comptime actual != expected) @compileError("Fn.create: callback argument #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
+            " expected " ++ @typeName(expected) ++
+            ", got " ++ @typeName(actual));
+    }
+
+    const actual_return = Trampoline.nativeReturnType(wrapper_t);
+    const expected_return = outs;
+    const actual_return_count = Introspect.typeListCount(actual_return);
+    const expected_return_count = Introspect.typeListCount(expected_return);
+    if (comptime actual_return_count != expected_return_count) @compileError("Fn.create: callback return count mismatch: expected " ++ @typeName(expected_return_count) ++ " return values, got " ++ @typeName(actual_return_count));
+    inline for (0..actual_return_count) |i| {
+        const actual = Introspect.typeListAt(actual_return, i);
+        const expected = Introspect.typeListAt(expected_return, i);
+        if (comptime actual != expected) @compileError("Fn.create: callback return #" ++ std.fmt.comptimePrint("{d}", .{i}) ++
+            " expected " ++ @typeName(expected) ++
+            ", got " ++ @typeName(actual));
+    }
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}

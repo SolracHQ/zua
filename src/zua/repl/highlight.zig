@@ -4,15 +4,15 @@
 //! understood by isocline's ic_highlight_formatted. The output string
 //! must match the raw input character-for-character outside of the tags.
 const std = @import("std");
-const isocline = @import("../../isocline/isocline.zig");
-const lexer = @import("lexer.zig");
-const Config = @import("config.zig");
-const Context = @import("../state/context.zig");
 const lua = @import("../../lua/lua.zig");
-const Meta = @import("../meta/meta.zig");
-const Mapper = @import("../mapper/mapper.zig");
+const isocline = @import("../../isocline/isocline.zig");
+const Lexer = @import("lexer.zig");
+const Config = @import("config.zig");
+const Context = @import("../context.zig");
+const Shape = @import("../shape/api.zig");
+const Mapper = @import("../mapper/api.zig");
 
-const Primitive = Mapper.Decoder.Primitive;
+const Primitive = Mapper.Primitive;
 
 // Token kinds
 
@@ -27,7 +27,7 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_META = Meta.strEnum(TokenKind, .{}, .{
+    pub const ZUA_SHAPE = Shape.StrAlias(TokenKind, .{}, .{
         .name = "TokenKind",
         .description = "Token kinds recognized by the REPL syntax highlighter.",
     });
@@ -42,7 +42,7 @@ pub const TokenKind = enum {
 /// .ansi256 uses the 256-color xterm palette.
 /// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Rgb = struct {
-    pub const ZUA_META = Meta.Table(Rgb, .{}, .{
+    pub const ZUA_SHAPE = Shape.Table(Rgb, .{}, .{
         .name = "Rgb",
         .description = "24-bit RGB color with separate red, green, and blue channels.",
     });
@@ -58,7 +58,7 @@ pub const Color = union(enum) {
     ansi256: u8,
     rgb: Rgb,
 
-    pub const ZUA_META = Meta.Table(Color, .{}, .{
+    pub const ZUA_SHAPE = Shape.TypedAlias(Color, .{}, .{
         .name = "Color",
         .description = "ANSI or RGB color value used by a Style. Accepted forms: ANSI int, #rrggbb hex string, named color string, or {r,g,b} table.",
     }).withDecode(decodeColor);
@@ -148,7 +148,7 @@ fn ansiFromName(name: []const u8) ?u8 {
 
 /// A renderable style combining colors and text attributes.
 pub const Style = struct {
-    pub const ZUA_META = Meta.Table(Style, .{}, .{
+    pub const ZUA_SHAPE = Shape.Table(Style, .{}, .{
         .name = "Style",
         .description = "Style with foreground/background color and text attributes.",
         .field_descriptions = .{
@@ -223,8 +223,8 @@ pub fn highlightCallbackC(
     arg: ?*anyopaque,
 ) callconv(.c) void {
     const hs: *HighlightState = @ptrCast(@alignCast(arg orelse return));
-    const previous_top = lua.getTop(hs.ctx.state.luaState);
-    defer lua.setTop(hs.ctx.state.luaState, previous_top);
+    hs.ctx.state.pushTop();
+    defer hs.ctx.state.popTop();
     const source = std.mem.span(input);
     const formatted = process(hs.ctx, source, &hs.config.style_overrides, hs.config) orelse return;
     defer hs.ctx.arena().free(formatted);
@@ -234,7 +234,7 @@ pub fn highlightCallbackC(
 
 // Internal helpers
 
-fn tokenKindFromLexer(kind: lexer.TokenKind) ?TokenKind {
+fn tokenKindFromLexer(kind: Lexer.TokenKind) ?TokenKind {
     return switch (kind) {
         .keyword => .keyword,
         .keyword_value => .keyword_value,
@@ -308,7 +308,7 @@ pub fn process(
     config: *const Config,
 ) ?[]const u8 {
     const arena = ctx.arena();
-    var tokens = lexer.lex(arena, source) catch return null;
+    var tokens = Lexer.lex(arena, source) catch return null;
     defer tokens.deinit(arena);
 
     // Pre-size: bbcode tags can add ~30 bytes per token in the worst case.

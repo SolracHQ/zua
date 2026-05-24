@@ -1,0 +1,155 @@
+//! Interactive Lua REPL for Zua backed by isocline.
+//!
+//! This module exposes an embedded REPL that evaluates each line against an
+//! existing Zua `State`. Every command runs in a fresh `Context`, so scratch
+//! allocations are reclaimed before the next input.
+
+const std = @import("std");
+const lua = @import("../../lua/lua.zig");
+const Mapper = @import("../mapper/api.zig");
+const State = @import("../state.zig").State;
+const Context = @import("../context.zig").Context;
+const Executor = @import("../executor.zig").Executor;
+const Object = @import("../handlers/typed/object.zig").Object;
+
+pub const Highlight = @import("highlight.zig");
+pub const Completion = @import("completion.zig");
+pub const isocline = @import("../../isocline/isocline.zig");
+
+pub const Repl = @This();
+
+// Exported helpers and callback types used by REPL clients.
+pub const Completer = Completion.Completer;
+pub const CompletionHook = Completion.CompletionHook;
+
+const HighlightState = Highlight.HighlightState;
+
+pub const Config = @import("config.zig");
+
+/// Runs the interactive Zua REPL session using the provided `State`.
+///
+/// The REPL supports optional history persistence, syntax highlighting, and
+/// tab Completion. Each entered line is evaluated in a fresh `Context`, which
+/// ensures temporary allocations are reclaimed between commands.
+pub fn run(state: *State, config: *const Config) !void {
+    if (config.history_path) |path| {
+        isocline.setHistory(path, config.history_max);
+    }
+
+    const welcome_message = std.mem.trim(u8, config.welcome_message orelse "Lua REPL with Zua\nUse shift+tab for multiline input\nUse ctrl+d to exit\n", " \t\r\n");
+    try printMessage(state, "", welcome_message);
+
+    // Highlight state lives on the stack; isocline holds a pointer for the
+    // duration of the session. ctx is set each readline cycle before the call.
+    var hl_state = HighlightState{
+        .ctx = undefined,
+        .config = config,
+    };
+
+    isocline.setDefaultHighlighter(Highlight.highlightCallbackC, &hl_state);
+    defer isocline.setDefaultHighlighter(null, null);
+
+    // Completion state with a session-scoped Completer as a zua Object.
+    var comp_state = Completion.CompletionState{
+        .config = config,
+        .ctx = undefined,
+        .completer = blk: {
+            const initial = Completion.Completer{
+                ._env = null,
+                ._ctx = undefined,
+            };
+            break :blk Object(Completion.Completer).create(state, initial).takeOwnership();
+        },
+    };
+    isocline.setDefaultCompleter(Completion.completionCallbackC, &comp_state);
+    defer comp_state.completer.release();
+    defer isocline.setDefaultCompleter(null, null);
+
+    while (true) {
+        var ctx = Context.init(state);
+        defer ctx.deinit();
+
+        hl_state.ctx = &ctx;
+        comp_state.ctx = &ctx;
+
+        const line = isocline.readline(config.prompt) orelse break;
+        defer isocline.freeMemory(@ptrCast(@constCast(line.ptr)));
+
+        const source = std.mem.trim(u8, line, " \t\r\n");
+        if (source.len == 0) continue;
+
+        try evalSource(state, &ctx, source, config);
+    }
+}
+
+// Evaluation
+
+/// Evaluate a single REPL source line.
+fn evalSource(state: *State, ctx: *Context, source: []const u8, config: *const Config) !void {
+    const wrapped = try tryWrapAsExpression(ctx, source);
+    const load_source = wrapped orelse source;
+    var executor: Executor = .{};
+    const exec_config = Executor.Config{
+        .code = .{ .string = load_source },
+        .stack_trace = if (config.stack_trace) .arena else .no,
+        .take_error_ownership = false,
+    };
+
+    const count = executor.evalCount(ctx, exec_config) catch {
+        const msg = ctx.err orelse "unknown error";
+        try printMessage(state, "Error: ", msg);
+        return;
+    };
+    printResults(ctx, count) catch |err| {
+        const msg = ctx.err orelse @errorName(err);
+        try printMessage(state, "Error: ", msg);
+    };
+}
+
+fn tryWrapAsExpression(ctx: *Context, source: []const u8) !?[]const u8 {
+    const trimmed_source = std.mem.trim(u8, source, " \t\r\n");
+    if (trimmed_source.len == 0) return null;
+
+    ctx.state.pushTop();
+    defer ctx.state.popTop();
+
+    const wrapped = try std.fmt.allocPrintSentinel(ctx.arena(), "return {s}", .{trimmed_source}, 0);
+    lua.loadString(ctx.state.luaState, wrapped) catch |err| {
+        return switch (err) {
+            error.Syntax => null,
+            else => err,
+        };
+    };
+    return wrapped;
+}
+
+// Output helpers
+
+/// Print all values returned by the last Lua expression or statement.
+fn printResults(ctx: *Context, count: usize) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var writer = std.Io.File.Writer.init(.stdout(), ctx.state.io, stdout_buffer[0..]);
+
+    var first = true;
+    for (0..count) |_| {
+        if (!first) try writer.interface.print(", ", .{});
+        first = false;
+
+        const str = try Mapper.Decoder.Internals.popString(ctx);
+        try writer.interface.print("{s}", .{str});
+    }
+    try writer.interface.print("\n", .{});
+    try writer.interface.flush();
+}
+
+/// Print a single REPL message line using a local temporary writer buffer.
+fn printMessage(state: *State, prefix: []const u8, message: []const u8) !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var writer = std.Io.File.Writer.init(.stdout(), state.io, stdout_buffer[0..]);
+    try writer.interface.print("{s}{s}\n", .{ prefix, message });
+    try writer.interface.flush();
+}
+
+test {
+    std.testing.refAllDecls(@This());
+}

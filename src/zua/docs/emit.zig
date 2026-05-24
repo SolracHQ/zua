@@ -5,17 +5,27 @@
 //! `---@alias`, `---|`). Each emitter appends to a shared `ArrayList(u8)`.
 
 const std = @import("std");
-const types = @import("types.zig");
-const Table = types.Table;
-const Function = types.Function;
-const Object = types.Object;
-const Alias = types.Alias;
-const Operator = types.Operator;
+const Types = @import("types.zig");
+const Table = Types.Table;
+const Function = Types.Function;
+const Object = Types.Object;
+const Alias = Types.Alias;
+const Operator = Types.Operator;
 
 /// Formats text using the given allocator and appends it to the output buffer.
 pub fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime fmt: []const u8, args: anytype) !void {
     const text = try std.fmt.allocPrint(allocator, fmt, args);
     try out.appendSlice(allocator, text);
+}
+
+/// Emits a description as one or more `-- {line}` lines.
+/// Newlines in the description become separate comment lines.
+fn emitDescription(allocator: std.mem.Allocator, out: *std.ArrayList(u8), description: []const u8) !void {
+    if (description.len == 0) return;
+    var it = std.mem.splitScalar(u8, description, '\n');
+    while (it.next()) |line| {
+        try appendFmt(allocator, out, "-- {s}\n", .{line});
+    }
 }
 
 /// Emits a Lua table stub as an `---@class` declaration with `---@field` lines.
@@ -24,10 +34,12 @@ pub fn emitTableStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc:
     try appendFmt(allocator, out, "---@class {s}\n", .{doc.name});
     for (doc.operators.items) |op| {
         if (op.param_type) |pt| {
-            try appendFmt(allocator, out, "---@operator {s}({s}): {s}\n", .{ op.name, pt, op.return_type });
+            try appendFmt(allocator, out, "---@operator {s}({s}): {s}", .{ op.name, pt, op.return_type });
         } else {
-            try appendFmt(allocator, out, "---@operator {s}: {s}\n", .{ op.name, op.return_type });
+            try appendFmt(allocator, out, "---@operator {s}: {s}", .{ op.name, op.return_type });
         }
+        if (op.description.len > 0) try appendFmt(allocator, out, " # {s}", .{op.description});
+        try out.append(allocator, '\n');
     }
     for (doc.fields.items) |field| {
         if (field.description.len > 0) {
@@ -36,29 +48,31 @@ pub fn emitTableStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc:
             try appendFmt(allocator, out, "---@field {s} {s}\n", .{ field.name, field.type });
         }
     }
-    if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+    try emitDescription(allocator, out, doc.description);
     try appendFmt(allocator, out, "local {s} = {{}}\n", .{doc.name});
 }
 
-/// Emits an opaque object stub as an `---@class` declaration. Objects have no
-/// `---@field` annotations since they are opaque from Lua's perspective.
-/// The object binding always emits `local Name = {}`.
+/// Emits an object stub as an `---@class` declaration with `---@field`
+/// annotations for `Shape.Modifier.Field` / `Shape.Modifier.Value` marked fields.
 pub fn emitObjectStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Object) !void {
+    try emitDescription(allocator, out, doc.description);
     try appendFmt(allocator, out, "---@class {s}\n", .{doc.name});
     for (doc.operators.items) |op| {
         if (op.param_type) |pt| {
-            try appendFmt(allocator, out, "---@operator {s}({s}): {s}\n", .{ op.name, pt, op.return_type });
+            try appendFmt(allocator, out, "---@operator {s}({s}): {s}", .{ op.name, pt, op.return_type });
         } else {
-            try appendFmt(allocator, out, "---@operator {s}: {s}\n", .{ op.name, op.return_type });
+            try appendFmt(allocator, out, "---@operator {s}: {s}", .{ op.name, op.return_type });
         }
+        if (op.description.len > 0) try appendFmt(allocator, out, " # {s}", .{op.description});
+        try out.append(allocator, '\n');
     }
-    if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+    try emitDescription(allocator, out, doc.description);
     try appendFmt(allocator, out, "local {s} = {{}}\n", .{doc.name});
 }
 
 /// Emits a type alias stub as an `---@alias` declaration with `---|` lines for each variant.
 pub fn emitAliasStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Alias) !void {
-    if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+    try emitDescription(allocator, out, doc.description);
     try appendFmt(allocator, out, "---@alias {s}\n", .{doc.name});
     for (doc.values.items) |value| {
         if (value.description.len > 0) {
@@ -80,7 +94,7 @@ pub fn emitFunctionStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), d
     const is_shared = doc.field_of.items.len > 0;
 
     if (!is_shared) {
-        if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+        try emitDescription(allocator, out, doc.description);
         for (doc.parameters.items) |param| {
             if (param.description.len > 0) {
                 try appendFmt(allocator, out, "---@param {s} {s} # {s}\n", .{ param.name, param.type, param.description });
@@ -94,11 +108,15 @@ pub fn emitFunctionStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), d
     }
 
     if (doc.method_of) |owner| {
-        try appendFmt(allocator, out, "function {s}:{s}(", .{ owner, doc.name });
+        if (std.mem.startsWith(u8, doc.name, "__")) {
+            try appendFmt(allocator, out, "function {s}.{s}(", .{ owner, doc.name });
+        } else {
+            try appendFmt(allocator, out, "function {s}:{s}(", .{ owner, doc.name });
+        }
     } else if (doc.field_of.items.len > 0) {
         for (doc.field_of.items, 0..) |fo, i| {
             if (i > 0) try out.appendSlice(allocator, "\n");
-            if (doc.description.len > 0) try appendFmt(allocator, out, "-- {s}\n", .{doc.description});
+            try emitDescription(allocator, out, doc.description);
             for (doc.parameters.items) |param| {
                 if (param.description.len > 0) {
                     try appendFmt(allocator, out, "---@param {s} {s} # {s}\n", .{ param.name, param.type, param.description });

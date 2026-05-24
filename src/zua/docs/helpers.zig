@@ -2,26 +2,27 @@
 //!
 //! This module provides comptime introspection helpers used by the collection
 //! phase to normalize types, extract metadata, and build display strings for
-//! Lua annotations. It re-exports several helpers from `meta/helpers.zig`.
+//! Lua annotations.
 
 const std = @import("std");
-const Docs = @import("./docs.zig");
-const emit = @import("emit.zig");
-const types = @import("types.zig");
-const DisplayContext = types.DisplayContext;
-const Context = @import("../state/context.zig");
-const Native = @import("../functions/native.zig");
-const Handlers = @import("../handlers/handlers.zig");
-const RawFunction = @import("../handlers/function.zig").Function;
-const RawTable = @import("../handlers/table.zig").Table;
-const RawUserdata = @import("../handlers/userdata.zig").Userdata;
-const Mapper = @import("../mapper/mapper.zig");
-const Meta = @import("../meta/meta.zig");
-pub const isNativeWrapperType = @import("../meta/helpers.zig").isNativeWrapperType;
-pub const hasStructDecl = @import("../meta/helpers.zig").hasStructDecl;
-pub const isCapturePointer = @import("../meta/helpers.zig").isCapturePointer;
-pub const typeListCount = @import("../meta/helpers.zig").typeListCount;
-pub const typeListAt = @import("../meta/helpers.zig").typeListAt;
+const Generator = @import("generator.zig").Generator;
+const Emit = @import("emit.zig");
+const DisplayContext = @import("types.zig").DisplayContext;
+const Context = @import("../context.zig");
+const Shape = @import("../shape/api.zig");
+const ArgInfo = Shape.Options.ArgInfo;
+const Handlers = @import("../handlers/api.zig");
+const RawFunction = @import("../handlers/any/function.zig").Function;
+const RawTable = @import("../handlers/any/table.zig").Table;
+const RawUserdata = @import("../handlers/any/userdata.zig").Userdata;
+const Mapper = @import("../mapper/api.zig");
+const Internals = @import("../mapper/internals.zig");
+const ShapeData = @import("../shape/shape_data.zig");
+const Marker = @import("../marker.zig").Marker;
+const Object = @import("../handlers/typed/object.zig");
+const TableView = @import("../handlers/typed/table_view.zig");
+const Trampoline = @import("../shape/trampoline.zig");
+const Introspect = @import("../introspect.zig");
 
 /// Produces a human-readable Lua type string for a Zig type.
 ///
@@ -38,9 +39,9 @@ pub const typeListAt = @import("../meta/helpers.zig").typeListAt;
 ///
 /// Returns:
 /// - []const u8: Arena-allocated Lua type name string.
-pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
-    if (comptime Mapper.isOptional(T)) {
-        const child_name = try displayTypeName(self, Mapper.optionalChild(T), ctx);
+pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: DisplayContext) ![]const u8 {
+    if (comptime Internals.isOptional(T)) {
+        const child_name = try displayTypeName(self, Internals.optionalChild(T), ctx);
         return std.fmt.allocPrint(self.arena.allocator(), "{s}?", .{child_name});
     }
 
@@ -57,12 +58,16 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
     if (Normalized == RawTable) return persist(self, "table");
     if (Normalized == RawFunction) return persist(self, "function");
     if (Normalized == RawUserdata) return persist(self, "userdata");
-    if (Normalized == Mapper.Decoder.Primitive) return persist(self, "any");
-    if (Normalized == Mapper.Decoder.VarArgs) return persist(self, "any");
+    if (Normalized == Mapper.Primitive) return persist(self, "any");
+    if (Normalized == Mapper.VarArgs) return persist(self, "any");
 
-    if (comptime @typeInfo(Normalized) == .@"fn") return persist(self, "function");
-    if (comptime isNativeWrapperType(Normalized)) return persist(self, "function");
-    if (comptime Mapper.isStringValueType(Normalized)) return persist(self, "string");
+    if (comptime @typeInfo(Normalized) == .@"fn") {
+        return fnTypeToStub(self, Normalized);
+    }
+    if (comptime ShapeData.isFunction(Normalized)) {
+        return fnTypeToStub(self, Normalized);
+    }
+    if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
     return switch (@typeInfo(Normalized)) {
         .bool => persist(self, "boolean"),
@@ -72,7 +77,14 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
         .optional => |optional| displayTypeName(self, optional.child, ctx),
         .array => |array| blk: {
             const child_name = try displayTypeName(self, array.child, ctx);
-            break :blk try std.fmt.allocPrint(self.arena.allocator(), "{s}[]", .{child_name});
+            var out = std.ArrayList(u8).empty;
+            try out.append(self.arena.allocator(), '[');
+            for (0..array.len) |i| {
+                if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
+                try out.appendSlice(self.arena.allocator(), child_name);
+            }
+            try out.append(self.arena.allocator(), ']');
+            break :blk out.toOwnedSlice(self.arena.allocator());
         },
         .pointer => |ptr| blk: {
             if (ptr.size == .slice) {
@@ -83,13 +95,13 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
             if (ptr.size == .one) {
                 const child = ptr.child;
                 if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
-                    break :blk try persist(self, Meta.nameOf(child));
+                    break :blk try persist(self, ShapeData.nameOf(child));
                 }
             }
 
             break :blk try persist(self, @typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, Meta.nameOf(Normalized)),
+        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, ShapeData.nameOf(Normalized)),
         else => persist(self, @typeName(Normalized)),
     };
 }
@@ -104,7 +116,7 @@ pub fn displayTypeName(self: *Docs, comptime T: type, comptime ctx: DisplayConte
 ///
 /// Returns:
 /// - []const u8: Arena-allocated Lua function signature string.
-pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
+pub fn functionHandleSignature(self: *Generator, comptime T: type) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "fun(");
 
@@ -113,7 +125,7 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
             if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
             const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{index + 1});
             const arg_type_str = try displayTypeName(self, field.type, .parameter);
-            try emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type_str });
+            try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, arg_type_str });
         }
     }
 
@@ -121,9 +133,13 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
 
     if (comptime @typeInfo(T.Result) == .@"struct") {
         try out.appendSlice(self.arena.allocator(), ": ");
-        inline for (@typeInfo(T.Result).@"struct".fields, 0..) |field, index| {
-            if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-            try out.appendSlice(self.arena.allocator(), try displayTypeName(self, field.type, .return_value));
+        if (comptime @typeInfo(T.Result).@"struct".is_tuple) {
+            inline for (@typeInfo(T.Result).@"struct".fields, 0..) |field, index| {
+                if (index > 0) try out.appendSlice(self.arena.allocator(), ", ");
+                try out.appendSlice(self.arena.allocator(), try displayTypeName(self, field.type, .return_value));
+            }
+        } else {
+            try out.appendSlice(self.arena.allocator(), try displayTypeName(self, T.Result, .return_value));
         }
     }
 
@@ -141,26 +157,25 @@ pub fn functionHandleSignature(self: *Docs, comptime T: type) ![]const u8 {
 ///
 /// Returns:
 /// - []const u8: Arena-allocated copy of `text`.
-pub fn persist(self: *Docs, text: []const u8) ![]const u8 {
+pub fn persist(self: *Generator, text: []const u8) ![]const u8 {
     return self.arena.allocator().dupe(u8, text);
 }
 
-/// Wraps a method value, converting a plain Zig function to a `Native` wrapper
-/// if necessary.
-///
-/// Accepts either a `NativeFn`/`Closure` wrapper (returned as-is) or a plain
-/// Zig function (wrapped via `Native.new`).
-///
-/// Arguments:
-/// - method_value: A Zig function or native wrapper value representing a method.
-///
-/// Returns:
-/// - A `NativeFn` or `Closure` wrapper.
-pub fn wrapMethod(comptime method_value: anytype) @TypeOf(if (@typeInfo(@TypeOf(method_value)) == .@"fn") Native.new(method_value, .{}, .{}) else method_value) {
+/// Returns the description string from a `Shape.Fn` or closure wrapper type.
+pub fn nativeFnDesc(comptime T: type) []const u8 {
+    const S = comptime ShapeData.getShape(T);
+    return S.description;
+}
+
+/// Wraps a Zig function or native function type into a documentation-ready
+/// callable type. Plain Zig functions get wrapped with `Shape.Fn`; native
+/// function types pass through as-is.
+pub fn wrapMethod(comptime method_value: anytype) type {
     const T = @TypeOf(method_value);
-    if (comptime @typeInfo(T) == .@"fn") return Native.new(method_value, .{}, .{});
-    if (comptime isNativeWrapperType(T)) return method_value;
-    @compileError("method docs only support Zig functions or NativeFn/Closure wrappers");
+    if (comptime @typeInfo(T) == .@"fn") return Shape.Fn(method_value, .{});
+    if (comptime ShapeData.isFunction(T)) return T;
+    if (comptime @typeInfo(T) == .type and ShapeData.isFunction(method_value)) return method_value;
+    @compileError("method docs only support Zig functions or Shape.Fn wrappers");
 }
 
 /// Normalizes a top-level type by unwrapping any transparent typed wrappers.
@@ -175,28 +190,15 @@ pub fn normalizeRootType(comptime T: type) type {
     return T;
 }
 
-/// Determines whether a type should be emitted as an `---@alias` instead of a
-/// `---@class`.
-///
-/// Returns `true` for tagged unions (discriminated unions with an explicit
-/// tag) and for enums whose proxy type is `[]const u8`.
-///
-/// Arguments:
-/// - T: The Zig type to check.
-///
-/// Returns:
-/// - bool: `true` if the type should be emitted as an alias.
 pub fn shouldEmitAlias(comptime T: type) bool {
-    if (Meta.strategyOf(T) != .table) return false;
-    return switch (@typeInfo(T)) {
-        .@"union" => |info| info.tag_type != null,
-        .@"enum" => true,
+    return switch (ShapeData.strategyOf(T)) {
+        .alias, .typed_alias => true,
         else => false,
     };
 }
 
 /// Normalizes a type for reference comparison by unwrapping optionals,
-/// transparent wrappers, and single-element pointers to named types.
+/// transparent wrappers, and single-element pointers to named Types.
 ///
 /// Arguments:
 /// - T: The type to normalize.
@@ -204,7 +206,7 @@ pub fn shouldEmitAlias(comptime T: type) bool {
 /// Returns:
 /// - type: The innermost relevant type.
 pub fn normalizeReferencedType(comptime T: type) type {
-    if (comptime Mapper.isOptional(T)) return normalizeReferencedType(Mapper.optionalChild(T));
+    if (comptime Internals.isOptional(T)) return normalizeReferencedType(Internals.optionalChild(T));
     if (comptime isTransparentTypedWrapper(T)) return unwrapTransparentTypedWrapper(T);
 
     return switch (@typeInfo(T)) {
@@ -219,8 +221,8 @@ pub fn normalizeReferencedType(comptime T: type) type {
     };
 }
 
-/// Unwraps transparent typed wrappers (`__ZUA_USERDATA_TYPE` or
-/// `__ZUA_TABLE_VIEW`) to reveal the underlying Zua type.
+/// Unwraps transparent typed wrappers (userdata wrapper or table view)
+/// to reveal the underlying Zua type.
 ///
 /// Arguments:
 /// - T: The wrapper type.
@@ -228,8 +230,8 @@ pub fn normalizeReferencedType(comptime T: type) type {
 /// Returns:
 /// - type: The underlying Zua type.
 pub fn unwrapTransparentTypedWrapper(comptime T: type) type {
-    if (comptime hasStructDecl(T, "__ZUA_USERDATA_TYPE")) return T.__ZUA_USERDATA_TYPE;
-    if (comptime hasStructDecl(T, "__ZUA_TABLE_VIEW")) return @typeInfo(@TypeOf(@as(T, undefined).ref)).pointer.child;
+    if (comptime Object.userdataInnerType(T)) |inner| return inner;
+    if (comptime TableView.tableViewInnerType(T)) |inner| return inner;
     return T;
 }
 
@@ -240,9 +242,9 @@ pub fn unwrapTransparentTypedWrapper(comptime T: type) type {
 /// - T: The type to check.
 ///
 /// Returns:
-/// - bool: `true` if the type has `__ZUA_USERDATA_TYPE` or `__ZUA_TABLE_VIEW`.
+/// - bool: `true` if the type is a typed wrapper.
 pub fn isTransparentTypedWrapper(comptime T: type) bool {
-    return hasStructDecl(T, "__ZUA_USERDATA_TYPE") or hasStructDecl(T, "__ZUA_TABLE_VIEW");
+    return Marker.any(T, &.{ .table_view, .userdata_wrapper });
 }
 
 /// Returns `true` if `T` is a typed function handle (has `Args`, `Result`, and
@@ -260,7 +262,7 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns `true` if `T` is a type that should be skipped during doc
 /// collection.
 ///
-/// Ignored types are: `*Context`, `Context`, `Mapper.Decoder.Primitive`, and
+/// Ignored types are: `*Context`, `Context`, `Mapper.Primitive`, and
 /// `Handlers.Handle`.
 ///
 /// Arguments:
@@ -269,14 +271,15 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
 /// Returns:
 /// - bool: `true` if the type should be ignored.
 pub fn isIgnoredDocType(comptime T: type) bool {
-    return T == *Context or T == Context or T == Mapper.Decoder.Primitive or T == Handlers.Handle or T == Handlers.Userdata or T == Handlers.Function;
+    if (comptime Marker.any(T, &.{.docs_ignore})) return true;
+    return T == *Context or T == Context or T == Mapper.Primitive;
 }
 
-/// Looks up a field description from a `ZUA_META` attribute descriptions
+/// Looks up a field description from a `ZUA_SHAPE` attribute descriptions
 /// struct.
 ///
 /// Arguments:
-/// - descriptions: The `ZUA_META` attribute description struct.
+/// - descriptions: The `ZUA_SHAPE` attribute description struct.
 /// - field_name: The field name to look up.
 ///
 /// Returns:
@@ -300,7 +303,7 @@ pub fn fieldDescription(comptime descriptions: anytype, comptime field_name: []c
 /// Returns:
 /// - struct: A struct with `name` and `description` fields. Falls back to
 ///   `"arg{N}"` and `""` when the index is out of range.
-pub fn argDocInfo(args: []const Native.ArgInfo, comptime index: usize) struct { name: []const u8, description: []const u8 } {
+pub fn argDocInfo(args: []const ArgInfo, comptime index: usize) struct { name: []const u8, description: []const u8 } {
     if (index < args.len) {
         return .{
             .name = args[index].name,
@@ -350,7 +353,7 @@ pub fn isSelfParam(comptime ParamType: type, comptime OwnerType: type) bool {
 ///
 /// Returns:
 /// - []const u8: Arena-allocated shape string like `"{ name: string?, pid: integer? }"`.
-pub fn structToAliasShape(self: *Docs, comptime T: type) ![]const u8 {
+pub fn structToAliasShape(self: *Generator, comptime T: type) ![]const u8 {
     const info = @typeInfo(T);
     if (comptime info != .@"struct") @compileError("structToAliasShape requires a struct type, got " ++ @typeName(T));
     const fields = info.@"struct".fields;
@@ -360,8 +363,48 @@ pub fn structToAliasShape(self: *Docs, comptime T: type) ![]const u8 {
     inline for (fields, 0..) |field, i| {
         if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
         const type_str = try displayTypeName(self, field.type, .field);
-        try emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
+        try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ field.name, type_str });
     }
     try out.appendSlice(self.arena.allocator(), " }");
+    return out.toOwnedSlice(self.arena.allocator());
+}
+
+/// Renders a function type (plain Zig fn or ShapeFn) as `fun(arg0: T, ...): R`,
+/// skipping Context and capture pointer parameters.
+fn fnTypeToStub(self: *Generator, comptime T: type) ![]const u8 {
+    const fn_info: std.builtin.Type.Fn = if (comptime @typeInfo(T) == .@"fn")
+        @typeInfo(T).@"fn"
+    else
+        Trampoline.fnTypeInfo(T);
+
+    const ret_type: type = if (comptime @typeInfo(T) == .@"fn") blk: {
+        break :blk if (fn_info.return_type) |r| @Tuple(&.{r}) else @Tuple(&.{});
+    } else Trampoline.nativeReturnType(T);
+
+    var out = std.ArrayList(u8).empty;
+    try out.appendSlice(self.arena.allocator(), "fun(");
+    comptime var arg_index: usize = 0;
+    inline for (fn_info.params) |param| {
+        const param_type = param.type orelse continue;
+        if (comptime param_type == *Context) continue;
+        if (comptime Introspect.isCapturePointer(param_type)) continue;
+        if (arg_index > 0) try out.appendSlice(self.arena.allocator(), ", ");
+        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index});
+        const type_str = try displayTypeName(self, param_type, .parameter);
+        try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, type_str });
+        arg_index += 1;
+    }
+    try out.appendSlice(self.arena.allocator(), ")");
+
+    const count = comptime Introspect.typeListCount(ret_type);
+    if (count > 0) {
+        try out.appendSlice(self.arena.allocator(), ": ");
+        inline for (0..count) |i| {
+            if (i > 0) try out.appendSlice(self.arena.allocator(), ", ");
+            const type_str = try displayTypeName(self, Introspect.typeListAt(ret_type, i), .return_value);
+            try out.appendSlice(self.arena.allocator(), type_str);
+        }
+    }
+
     return out.toOwnedSlice(self.arena.allocator());
 }

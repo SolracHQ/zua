@@ -1,0 +1,5 @@
+local stubs = inspector.docs()
+local file = io.open("process-inspector.d.lua", "w")
+file:write(stubs)
+file:close()
+print("stubs written to process-inspector.d.lua (" .. #stubs .. " bytes)")
