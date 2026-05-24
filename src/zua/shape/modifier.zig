@@ -14,8 +14,8 @@ pub const FieldOpts = struct {
 pub fn Field(comptime T: type, comptime opts: FieldOpts) type {
     return struct {
         pub const __ZUA_MARKER = Marker.object_field;
-        pub const __ZUA_FIELD_TYPE = T;
-        pub const __ZUA_FIELD_OPTS = opts;
+        const __ZUA_FIELD_TYPE = T;
+        const __ZUA_FIELD_OPTS = opts;
         value: T,
 
         pub fn new(value: T) @This() {
@@ -28,8 +28,8 @@ pub fn Field(comptime T: type, comptime opts: FieldOpts) type {
 pub fn Value(comptime T: type, comptime opts: FieldOpts) type {
     return struct {
         pub const __ZUA_MARKER = Marker.object_value;
-        pub const __ZUA_FIELD_TYPE = T;
-        pub const __ZUA_FIELD_OPTS = opts;
+        const __ZUA_FIELD_TYPE = T;
+        const __ZUA_FIELD_OPTS = opts;
         value: T,
 
         pub fn new(value: T) @This() {
