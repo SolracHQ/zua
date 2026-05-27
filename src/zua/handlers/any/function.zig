@@ -8,7 +8,7 @@ const Mapper = @import("../../mapper/api.zig");
 const State = @import("../../state.zig");
 const Context = @import("../../context.zig").Context;
 const ShapeData = @import("../../shape/shape_data.zig");
-const MetaTable = @import("../../metatable.zig");
+const MetaTable = @import("../../metatable/api.zig");
 const Marker = @import("../../marker.zig").Marker;
 
 /// Errors returned by function calls.

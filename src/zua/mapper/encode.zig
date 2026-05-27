@@ -18,7 +18,7 @@ const Internals = @import("internals.zig");
 const Mapper = @import("api.zig");
 const Shape = @import("../shape/api.zig");
 const ShapeData = @import("../shape/shape_data.zig");
-const MetaTable = @import("../metatable.zig");
+const MetaTable = @import("../metatable/api.zig");
 
 pub const Encoder = @This();
 

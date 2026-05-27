@@ -13,7 +13,7 @@ const lua = @import("../lua/lua.zig");
 const Table = @import("handlers/any/table.zig").Table;
 const Mapper = @import("mapper/api.zig");
 const Context = @import("context.zig");
-const MetaTable = @import("metatable.zig");
+const MetaTable = @import("metatable/api.zig");
 
 const registry_key_prefix: [:0]const u8 = "zua_zua_";
 var zua_registry_key: [:0]const u8 = "zua_zua";
