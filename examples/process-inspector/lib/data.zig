@@ -85,20 +85,20 @@ pub fn register(ctx: *zua.Context, store: Store) !void {
 
 pub fn read(self: *const Store, ctx: *zua.Context, address: usize) !i32 {
     const pid = address >> 24;
-    if (pid >= PID_COUNT) return ctx.failWithFmtTyped(i32, "invalid pid {d}", .{pid});
+    if (pid >= PID_COUNT) return ctx.fail(i32, error.OutOfRange, "invalid pid {d}", .{pid});
     const region = (address >> 16) & 0xFF;
-    if (region >= REGION_COUNT) return ctx.failWithFmtTyped(i32, "invalid region {d}", .{region});
+    if (region >= REGION_COUNT) return ctx.fail(i32, error.OutOfRange, "invalid region {d}", .{region});
     const cell = (address & 0xFFFF) / 4;
-    if (cell >= CELL_COUNT) return ctx.failWithFmtTyped(i32, "address 0x{x} beyond region", .{address});
+    if (cell >= CELL_COUNT) return ctx.fail(i32, error.OutOfRange, "address 0x{x} beyond region", .{address});
     return self.ram[pid][region][cell];
 }
 
 pub fn write(self: *Store, ctx: *zua.Context, address: usize, value: i32) !void {
     const pid = address >> 24;
-    if (pid >= PID_COUNT) return ctx.failWithFmt("invalid pid {d}", .{pid});
+    if (pid >= PID_COUNT) return ctx.fail(void, error.OutOfRange, "invalid pid {d}", .{pid});
     const region = (address >> 16) & 0xFF;
-    if (region >= REGION_COUNT) return ctx.failWithFmt("invalid region {d}", .{region});
+    if (region >= REGION_COUNT) return ctx.fail(void, error.OutOfRange, "invalid region {d}", .{region});
     const cell = (address & 0xFFFF) / 4;
-    if (cell >= CELL_COUNT) return ctx.failWithFmt("address 0x{x} beyond region", .{address});
+    if (cell >= CELL_COUNT) return ctx.fail(void, error.OutOfRange, "address 0x{x} beyond region", .{address});
     self.ram[pid][region][cell] = value;
 }

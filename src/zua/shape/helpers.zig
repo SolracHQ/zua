@@ -57,12 +57,12 @@ pub fn strEnumDecode(comptime T: type) DecodeHookType(T) {
         fn decode(ctx: *Context, primitive: Primitive) anyerror!?T {
             const str = switch (primitive) {
                 .string => |s| s,
-                else => return ctx.failTyped(?T, "expected string"),
+                else => return ctx.fail(?T, error.WrongType, "expected string", .{}),
             };
             inline for (std.meta.fields(T)) |field| {
                 if (std.mem.eql(u8, str, field.name)) return @field(T, field.name);
             }
-            return ctx.failTyped(?T, "invalid enum value");
+            return ctx.fail(?T, error.InvalidEnumValue, "invalid enum value", .{});
         }
     }.decode;
 }

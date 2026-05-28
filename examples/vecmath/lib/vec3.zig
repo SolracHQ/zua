@@ -109,6 +109,6 @@ pub const Vec3 = struct {
     // have ctx as the first parameter if it needs to query the context.
     fn toString(ctx: *zua.Context, self: *const Vec3) ![]const u8 {
         return std.fmt.allocPrint(ctx.arena(), "vec3({d}, {d}, {d})", .{ self.x.value, self.y.value, self.z.value }) catch
-            ctx.failTyped([]const u8, "oom");
+            ctx.fail([]const u8, error.OutOfMemory, "oom", .{});
     }
 };

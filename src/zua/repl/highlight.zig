@@ -106,13 +106,13 @@ fn decodeColor(ctx: *Context, prim: Primitive) !?Color {
         .integer => |n| Color{ .ansi = @intCast(n) },
         .string => |s| {
             if (s.len > 0 and s[0] == '#') {
-                if (s.len != 7) return ctx.failTyped(?Color, "invalid RGB hex color, expected #rrggbb");
+                if (s.len != 7) return ctx.fail(?Color, error.InvalidFormat, "invalid RGB hex color, expected #rrggbb", .{});
                 const r = try std.fmt.parseInt(u8, s[1..3], 16);
                 const g = try std.fmt.parseInt(u8, s[3..5], 16);
                 const b = try std.fmt.parseInt(u8, s[5..7], 16);
                 return Color{ .rgb = .{ .r = r, .g = g, .b = b } };
             }
-            const ansi = ansiFromName(s) orelse return ctx.failTyped(?Color, "unknown color name");
+            const ansi = ansiFromName(s) orelse return ctx.fail(?Color, error.InvalidEnumValue, "unknown color name", .{});
             return Color{ .ansi = ansi };
         },
         .table => |t| {

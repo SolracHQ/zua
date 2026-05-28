@@ -32,6 +32,7 @@ const PrimitiveTag = Mapper.PrimitiveTag;
 const Tracing = @import("tracing.zig");
 const Trace = Tracing.Trace;
 const DecodeError = Tracing.DecodeError;
+const ObjectGuard = @import("../object_guard.zig");
 
 /// Converts a comptime tuple of types or a single type into a Zig tuple
 /// type suitable for holding decoded values.
@@ -167,24 +168,24 @@ fn decodeHostPtr(comptime T: type, prim: Primitive, ctx: *Context) !T {
         .object, .closure => {
             const raw = switch (prim) {
                 .userdata => |p| p,
-                else => return ctx.failWithFmtTyped(T, "expected userdata but got {s}", .{@tagName(prim)}),
+                else => return ctx.fail(T, error.WrongType, "expected userdata but got {s}", .{@tagName(prim)}),
             };
-            if (comptime strategy == .object) return ObjectType(Pointee).from(raw).get();
-            return @ptrCast(@alignCast(raw));
+            const ptr = raw.get() orelse return ctx.fail(T, error.NullValue, "null userdata", .{});
+            return ObjectGuard.ObjectGuard(Pointee).from(ctx, ptr);
         },
         .ptr => {
             const raw = switch (prim) {
                 .light_userdata => |p| p,
-                else => return ctx.failWithFmtTyped(T, "expected light userdata but got {s}", .{@tagName(prim)}),
+                else => return ctx.fail(T, error.WrongType, "expected light userdata but got {s}", .{@tagName(prim)}),
             };
             return @ptrCast(@alignCast(raw));
         },
-        else => return ctx.failTyped(T, "expected object, closure, or pointer strategy"),
+        else => return ctx.fail(T, error.WrongType, "expected object, closure, or pointer strategy", .{}),
     }
 }
 
 fn buildPrimitiveError(ctx: *Context, t: lua.Type) !Primitive {
-    return ctx.failWithFmtTyped(Primitive, "Lua reports {s} but decoding it failed", .{@tagName(t)});
+    return ctx.fail(Primitive, error.DecodeFailed, "Lua reports {s} but decoding it failed", .{@tagName(t)});
 }
 
 fn buildPrimitive(ctx: *Context, index: lua.StackIndex) !Primitive {
@@ -224,7 +225,7 @@ pub fn popString(ctx: *Context) ![]const u8 {
     }
     const raw = lua.toDisplayString(ctx.state.luaState, -1) orelse {
         lua.pop(ctx.state.luaState, 1);
-        return ctx.failTyped([]const u8, "tostring failed");
+        return ctx.fail([]const u8, error.ToStringFailed, "tostring failed", .{});
     };
     lua.pop(ctx.state.luaState, 2);
     return ctx.arena().dupe(u8, raw);

@@ -41,7 +41,7 @@ pub fn Fn(comptime ins: anytype, comptime outs: anytype) type {
         fn decode(ctx: *Context, prim: Mapper.Primitive) !?@This() {
             return switch (prim) {
                 .function => |f| @This().from(f),
-                else => ctx.failTyped(?@This(), "expected function"),
+                else => ctx.fail(?@This(), error.WrongType, "expected function", .{}),
             };
         }
 

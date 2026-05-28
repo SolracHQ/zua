@@ -19,6 +19,8 @@ const UpValue = @import("../any/upvalue.zig");
 const Primitive = @import("../../mapper/api.zig").Primitive;
 const ShapeData = @import("../../shape/shape_data.zig");
 const Marker = @import("../../marker.zig").Marker;
+const Modifier = @import("../../shape/modifier.zig");
+const ObjectGuard = @import("../../mapper/object_guard.zig");
 
 pub fn Closure(comptime T: type) type {
     return struct {
@@ -29,6 +31,7 @@ pub fn Closure(comptime T: type) type {
         const __ZUA_CLOSURE_TYPE = T;
 
         handle: UpValue,
+        ptr: Modifier.Ignore(*T),
 
         pub fn encode(_: *Context, self: @This()) !?UpValue {
             return self.handle;
@@ -36,20 +39,24 @@ pub fn Closure(comptime T: type) type {
 
         fn decode(ctx: *Context, prim: Primitive) !?@This() {
             return switch (prim) {
-                .userdata => |u| @This(){
-                    .handle = .{
-                        .state = ctx.state,
-                        .handle = u.handle,
-                        .cfunction = ShapeData.getShape(T).trampoline(),
-                    },
+                .userdata => |u| blk: {
+                    const raw = u.get() orelse return ctx.fail(?@This(), error.NullValue, "null upvalue", .{});
+                    const guard_ptr = try ObjectGuard.ObjectGuard(T).from(ctx, raw);
+                    break :blk @This(){
+                        .handle = .{
+                            .state = ctx.state,
+                            .handle = u.handle,
+                            .cfunction = ShapeData.getShape(T).trampoline(),
+                        },
+                        .ptr = .new(guard_ptr),
+                    };
                 },
-                else => ctx.failTyped(?@This(), "expected userdata"),
+                else => ctx.fail(?@This(), error.WrongType, "expected userdata", .{}),
             };
         }
 
         pub fn get(self: @This()) *T {
-            const ptr = self.handle.get() orelse @panic("invalid closure upvalue handle");
-            return @ptrCast(@alignCast(ptr));
+            return self.ptr.value;
         }
     };
 }

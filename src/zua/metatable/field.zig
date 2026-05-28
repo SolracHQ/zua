@@ -5,18 +5,21 @@ const lua = @import("../../lua/lua.zig");
 const State = @import("../state.zig");
 const Context = @import("../context.zig");
 const Mapper = @import("../mapper/api.zig");
+const ObjectGuard = @import("../mapper/object_guard.zig");
 
 /// Encodes `self.field_name` onto the Lua stack via the mapper.
 fn pushFieldValue(comptime T: type, comptime field_name: []const u8, state: *lua.State, ctx: *Context) !void {
-    const self_ptr: *T = @ptrCast(@alignCast(lua.toUserdata(state, 1) orelse return));
-    try Mapper.Encoder.push(ctx, @field(self_ptr, field_name).value);
+    const raw = lua.toUserdata(state, 1) orelse return;
+    const self_ptr = try ObjectGuard.ObjectGuard(T).from(ctx, raw);
+    try Mapper.Encoder.push(ctx, @field(self_ptr.*, field_name).value);
 }
 
 /// Decodes a Lua value into `self.field_name` via the mapper.
 fn decodeFieldValue(comptime T: type, comptime field_name: []const u8, comptime InnerType: type, state: *lua.State, ctx: *Context) !void {
     const val = try Mapper.Decoder.pop(ctx, InnerType);
-    const self_ptr: *T = @ptrCast(@alignCast(lua.toUserdata(state, 1) orelse return));
-    @field(self_ptr, field_name).value = val;
+    const raw = lua.toUserdata(state, 1) orelse return;
+    const self_ptr = try ObjectGuard.ObjectGuard(T).from(ctx, raw);
+    @field(self_ptr.*, field_name).value = val;
 }
 
 /// Lua CFunction: pushes the value of `field_name` from the userdata at

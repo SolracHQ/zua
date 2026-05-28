@@ -25,6 +25,9 @@ pub const Marker = enum {
     /// Raw Lua handle type (Table, Function, Userdata, UpValue).
     /// Used to detect handler types in generic code.
     raw_handle,
+    /// Internal field that should be skipped by encode/decode pipelines.
+    /// Marked fields are treated as if they do not exist for serialization.
+    ignore,
 
     /// Returns the set of markers declared on `T`.
     pub fn markerOf(comptime T: type) std.EnumSet(Marker) {

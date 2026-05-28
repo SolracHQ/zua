@@ -56,7 +56,7 @@ fn getValue(ctx: *zua.Context, self: *Entry) !zua.Mapper.Primitive {
 
 fn setValue(ctx: *zua.Context, self: *Entry, value: zua.Mapper.Primitive) !void {
     if (!self.perms.value.has(.write)) {
-        return ctx.failWithFmt("address 0x{x} is not writable", .{self.address.value});
+        return ctx.fail(void, error.OutOfRange, "address 0x{x} is not writable", .{self.address.value});
     }
     const store = try Store.get(ctx);
     switch (self.data_type) {

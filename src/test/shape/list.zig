@@ -25,7 +25,7 @@ const IntList = struct {
 
     fn toString(ctx: *zua.Context, self: *IntList) ![]const u8 {
         return std.fmt.allocPrint(ctx.arena(), "IntList({d})", .{self.items.len}) catch
-            ctx.failTyped([]const u8, "oom");
+            ctx.fail([]const u8, error.OutOfMemory, "oom", .{});
     }
 };
 

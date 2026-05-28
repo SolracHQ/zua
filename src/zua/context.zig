@@ -87,95 +87,30 @@ pub fn heap(self: *Context) std.mem.Allocator {
     return self.state.allocator;
 }
 
-/// Records a Lua-facing error message on the `Context` and returns `error.Failed`.
+/// Matches a Zig error with a Lua exception message.
 ///
-/// The message is stored in `ctx.err` so the trampoline can raise it to Lua after the invocation completes.
-///
-/// Arguments:
-/// - msg: The error message to record. It must remain valid until the current
-///   invocation completes.
-///
-/// Returns:
-/// - !void: Always returns `error.Failed`.
-///
-/// Example:
-/// ```zig
-/// allocOp() catch {
-///     try ctx.fail("allocation failed on important call");
-/// }
-/// ```
-pub fn fail(self: *Context, msg: []const u8) !void {
-    self.err = msg;
-    return error.Failed;
-}
-
-/// Records a Lua-facing error message on the `Context` and returns `error.Failed`
-/// as a typed result.
-///
-/// Use this in functions that return a value on success so the failure path
-/// still carries the correct `!T` signature.
+/// The message is stored in `ctx.err` for Lua's error handling. The Zig
+/// error value preserves explicit control so callers can catch specific
+/// errors (`error.WrongType`) or `try` forward just like any other Zig
+/// error.
 ///
 /// Arguments:
-/// - T: The expected success type for the caller.
-/// - msg: The error message to record.
-///
-/// Returns:
-/// - !T: Always returns `error.Failed`.
-///
-/// Example:
-/// ```zig
-/// const str = getOptional() orelse return ctx.failTyped([]const u8, "expected value not found");
-/// ```
-pub fn failTyped(self: *Context, comptime T: type, msg: []const u8) !T {
-    self.err = msg;
-    return error.Failed;
-}
-
-/// Formats an error message into the context arena and returns `error.Failed`.
-///
-/// Use this when the error message requires runtime interpolation and the callback does not return a success value.
-///
-/// Arguments:
-/// - fmt: The format string.
-/// - args: The values to interpolate into the formatted message.
-///
-/// Returns:
-/// - !void: Always returns `error.Failed`.
-///
-/// Example:
-/// ```zig
-/// allocOp() catch |err| {
-///     try ctx.failWithFmt("allocation failed: {s}", .{err});
-/// }
-/// ```
-pub fn failWithFmt(self: *Context, comptime fmt: []const u8, args: anytype) !void {
-    const msg = std.fmt.allocPrint(self.arena(), fmt, args) catch
-        return error.Failed;
-    self.err = msg;
-    return error.Failed;
-}
-
-/// Formats a typed error message into the context arena and returns `error.Failed`.
-///
-/// Use this in functions that return a value and need a formatted failure string.
-///
-/// Arguments:
-/// - T: The expected success type for the caller.
-/// - fmt: The format string.
+/// - T: The success type for the `!T` return signature.
+/// - err: The Zig error to return (e.g. `error.WrongType`).
+/// - fmt: The format string to allocate into the context arena.
 /// - args: The values to interpolate.
 ///
 /// Returns:
-/// - !T: Always returns `error.Failed`.
+/// - !T: Returns `err`.
 ///
 /// Example:
 /// ```zig
-/// const value = parseInput() orelse return ctx.failWithFmtTyped(i32, "invalid input: {s}", .{err});
+/// const value = getOptional() orelse return ctx.fail(?[]const u8, error.WrongType, "expected string, got {s}", .{@tagName(prim)});
 /// ```
-pub fn failWithFmtTyped(self: *Context, comptime T: type, comptime fmt: []const u8, args: anytype) !T {
-    const msg = std.fmt.allocPrint(self.arena(), fmt, args) catch
-        return error.Failed;
+pub fn fail(self: *Context, comptime T: type, err: anyerror, comptime fmt: []const u8, args: anytype) !T {
+    const msg = try std.fmt.allocPrint(self.arena(), fmt, args);
     self.err = msg;
-    return error.Failed;
+    return err;
 }
 
 test {

@@ -49,16 +49,16 @@ const Priority = enum(u8) {
                 inline for (std.meta.fields(Priority)) |field| {
                     if (std.mem.eql(u8, s, field.name)) return @field(Priority, field.name);
                 }
-                return ctx.failTyped(?Priority, "unknown priority name");
+                return ctx.fail(?Priority, error.InvalidEnumValue, "unknown priority name", .{});
             },
             .integer => |n| {
                 const byte = std.math.cast(u8, n) orelse
-                    return ctx.failTyped(?Priority, "priority out of range");
+                    return ctx.fail(?Priority, error.OutOfRange, "priority out of range", .{});
                 if (byte > @intFromEnum(Priority.high))
-                    return ctx.failTyped(?Priority, "invalid priority");
+                    return ctx.fail(?Priority, error.InvalidEnumValue, "invalid priority", .{});
                 return @enumFromInt(byte);
             },
-            else => return ctx.failTyped(?Priority, "expected string or integer"),
+            else => return ctx.fail(?Priority, error.WrongType, "expected string or integer", .{}),
         }
     }
 };
@@ -67,7 +67,7 @@ fn returnPriority() Priority { return .normal; }
 
 fn describePriority(ctx: *zua.Context, p: Priority) ![]const u8 {
     return std.fmt.allocPrint(ctx.arena(), "priority={s} ({})", .{ @tagName(p), @intFromEnum(p) }) catch
-        try ctx.failTyped([]const u8, "out of memory");
+        try ctx.fail([]const u8, error.OutOfMemory, "out of memory", .{});
 }
 
 test "Alias with custom encode/decode hooks" {

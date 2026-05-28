@@ -11,7 +11,7 @@ fn sumAll(ctx: *zua.Context, args: zua.Mapper.VarArgs) !i64 {
         switch (prim) {
             .integer => |i| total += i,
             .float => |f| total += @intFromFloat(f),
-            else => return ctx.failTyped(i64, "expected number"),
+            else => return ctx.fail(i64, error.WrongType, "expected number", .{}),
         }
     }
     return total;

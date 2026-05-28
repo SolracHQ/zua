@@ -14,7 +14,7 @@ pub const Scanner = @This();
 
 pub fn scanRegion(ctx: *zua.Context, region: *const Region, dataType: DataType, selector: Selector) ![]Entry {
     if (!region.perms.value.has(.read)) {
-        try ctx.failWithFmt("region at 0x{x} is not readable", .{region.start.value});
+        try ctx.fail(void, error.OutOfRange, "region at 0x{x} is not readable", .{region.start.value});
     }
     const store = try Store.get(ctx);
     const cells = &store.ram[region.proc_idx][region.region_idx];

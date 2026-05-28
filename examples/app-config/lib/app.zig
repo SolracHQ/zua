@@ -158,7 +158,7 @@ pub const App = struct {
                 return try rt.handler.call(ctx, .{req});
             }
         }
-        return ctx.failWithFmtTyped(Response, "no matching route for {s} {s}", .{ req.method, req.path });
+        return ctx.fail(Response, error.InvalidEnumValue, "no matching route for {s} {s}", .{ req.method, req.path });
     }
 
     // __gc runs when Lua collects the App userdata. Every heap

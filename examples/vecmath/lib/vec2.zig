@@ -104,6 +104,6 @@ pub const Vec2 = struct {
     // returns.
     fn toString(ctx: *zua.Context, self: *const Vec2) ![]const u8 {
         return std.fmt.allocPrint(ctx.arena(), "vec2({d}, {d})", .{ self.x.value, self.y.value }) catch
-            ctx.failTyped([]const u8, "oom");
+            ctx.fail([]const u8, error.OutOfMemory, "oom", .{});
     }
 };

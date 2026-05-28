@@ -16,6 +16,7 @@ const HookTypes = @import("helpers.zig");
 const Primitive = @import("../mapper/api.zig").Primitive;
 const Marker = @import("../marker.zig").Marker;
 const UpValue = @import("../handlers/any/upvalue.zig");
+const ObjectGuard = @import("../mapper/object_guard.zig");
 
 /// Describes one parameter of a Zig function for Lua annotation generation.
 ///
@@ -279,11 +280,12 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
                 @panic("closure upvalue 1 is nil, capture was not pushed");
             const UpvalueParam = comptime cb_info.params[upvalue_param_index].type.?;
             if (comptime Marker.isClosureWrapper(UpvalueParam)) {
+                const guard_ptr = try ObjectGuard.ObjectGuard(T).from(ctx, raw_ptr);
                 lua.pushValue(ctx.state.luaState, lua.upvalueIndex(1));
                 const uv = UpValue.fromStack(ctx.state, -1, comptime ShapeData.getShape(T).trampoline());
-                call_args[comptime upvalue_param_index] = UpvalueParam{ .handle = uv };
+                call_args[comptime upvalue_param_index] = UpvalueParam{ .handle = uv, .ptr = .new(guard_ptr) };
             } else {
-                call_args[comptime upvalue_param_index] = @ptrCast(@alignCast(raw_ptr));
+                call_args[comptime upvalue_param_index] = try ObjectGuard.ObjectGuard(T).from(ctx, raw_ptr);
             }
             inline for (types, 0..) |_, i| {
                 call_args[comptime @as(usize, @intFromBool(has_context)) + 1 + i] = decoded[i];

@@ -138,7 +138,7 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
         const error_msg = lua.toString(self.state.luaState, -1) orelse "unknown error";
         const owned_msg = ctx.arena().dupe(u8, error_msg) catch {
             lua.pop(self.state.luaState, 1);
-            return try ctx.failTyped(Mapper.Decoder.ParseResult(res_types), "out of memory");
+            return try ctx.fail(Mapper.Decoder.ParseResult(res_types), error.OutOfMemory, "out of memory", .{});
         };
         lua.pop(self.state.luaState, 1);
         ctx.err = owned_msg;

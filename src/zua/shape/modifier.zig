@@ -53,6 +53,24 @@ pub fn isFieldOrValue(comptime T: type) bool {
     return Marker.any(T, &.{ .object_field, .object_value });
 }
 
+/// Wraps a field type so the encode/decode pipeline skips it.
+/// The field exists in Zig but is invisible to table serialization.
+pub fn Ignore(comptime T: type) type {
+    return struct {
+        pub const __ZUA_MARKER = Marker.ignore;
+        value: T,
+
+        pub fn new(value: T) @This() {
+            return .{ .value = value };
+        }
+    };
+}
+
+/// Returns `true` if `T` carries the `ignore` marker.
+pub fn isIgnored(comptime T: type) bool {
+    return Marker.markerOf(T).contains(.ignore);
+}
+
 /// Returns `true` if `T` is a `Field` wrapper (writable).
 pub fn isField(comptime T: type) bool {
     return Marker.markerOf(T).contains(.object_field);

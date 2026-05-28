@@ -15,6 +15,8 @@ const Handle = @import("../../handlers/api.zig").Handle;
 
 const Mapper = @import("../api.zig");
 const MapperInternals = @import("../internals.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
+const Marker = @import("../../marker.zig").Marker;
 
 const Primitive = Mapper.Primitive;
 
@@ -48,8 +50,11 @@ pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
 pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
     const T = @TypeOf(value);
 
-    switch (@typeInfo(T)) {
+    switch (comptime @typeInfo(T)) {
         .@"struct" => |info| {
+            if (comptime !info.is_tuple and ShapeData.strategyOf(T) != .table)
+                @compileError("fillTable requires a type with .table strategy or a tuple, got " ++ @typeName(T) ++ " (strategy " ++ @tagName(ShapeData.strategyOf(T)) ++ ")");
+
             if (info.is_tuple) {
                 inline for (value, 0..) |item, index| {
                     try table.set(ctx, index + 1, item);
@@ -58,6 +63,7 @@ pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
             }
 
             inline for (info.fields) |field| {
+                if (comptime Marker.markerOf(field.type).contains(.ignore)) continue;
                 try table.set(ctx, field.name, @field(value, field.name));
             }
         },

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Replaced O(n) string scans in the `__index` and `__newindex` trampolines with `StaticStringMap` lookups, keyed by string length as first-level discriminant. Method and field dispatch on userdata objects is now O(len(key)) instead of O(n * avg_key_len).
+
+- Split `metatable.zig` into a multi-file module under `metatable/` with `api.zig` as the entry point.
+
+- Added `ObjectGuard(T)` userdata envelope that stores a comptime hash and `@typeName` alongside the payload. Object and closure userdata now carry a type signature verified on every decode. Passing the wrong userdata to a function was UB, now it is a proper type error.
+
+### Breaking
+
+- Consolidated all `ctx.fail*` variants (`fail`, `failTyped`, `failWithFmt`, `failWithFmtTyped`, `failCustom`) into a single `ctx.fail(T, err, fmt, args)` function. The old signatures are removed.
+
 ## 0.14.0
 
 ### Breaking

@@ -58,11 +58,11 @@ fn decode(ctx: *zua.Context, value: Mapper.Primitive) !?Permissions {
     return switch (value) {
         .integer => |n| blk: {
             const bits = std.math.cast(u8, n) orelse
-                return ctx.failTyped(?Permissions, "integer out of range");
+                return ctx.fail(?Permissions, error.OutOfRange, "integer out of range", .{});
             break :blk .{ .bits = bits };
         },
         .string => |s| parseString(ctx, s) catch |err| {
-            return ctx.failWithFmtTyped(?Permissions, "invalid permission string: {s}", .{@errorName(err)});
+            return ctx.fail(?Permissions, error.InvalidFormat, "invalid permission string: {s}", .{@errorName(err)});
         },
         .table => |t| {
             var perms: Permissions = .{ .bits = 0 };
@@ -74,13 +74,13 @@ fn decode(ctx: *zua.Context, value: Mapper.Primitive) !?Permissions {
                 else if (std.mem.eql(u8, name, "execute")) Permission.execute
                 else if (std.mem.eql(u8, name, "shared")) Permission.shared
                 else if (std.mem.eql(u8, name, "private")) Permission.private
-                else return ctx.failTyped(?Permissions, "unknown permission");
+                else return ctx.fail(?Permissions, error.InvalidEnumValue, "unknown permission", .{});
                 perms.bits |= @intFromEnum(p);
                 idx += 1;
             }
-            if (idx == 1) return ctx.failTyped(?Permissions, "permission table is empty");
+            if (idx == 1) return ctx.fail(?Permissions, error.InvalidFormat, "permission table is empty", .{});
             return perms;
         },
-        else => ctx.failTyped(?Permissions, "expected string, integer, or table"),
+        else => ctx.fail(?Permissions, error.WrongType, "expected string, integer, or table", .{}),
     };
 }

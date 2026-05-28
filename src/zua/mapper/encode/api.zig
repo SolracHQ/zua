@@ -21,6 +21,7 @@ const Shape = @import("../../shape/api.zig");
 const ShapeData = @import("../../shape/shape_data.zig");
 const MetaTable = @import("../../metatable/api.zig");
 const MapperInternals = @import("../internals.zig");
+const ObjectGuard = @import("../object_guard.zig");
 
 const Primitive = Mapper.Primitive;
 
@@ -95,7 +96,7 @@ pub fn push(ctx: *Context, value: anytype) !void {
             lua.pushBoolean(ctx.state.luaState, value);
         },
         .int, .comptime_int => {
-            lua.pushInteger(ctx.state.luaState, std.math.cast(lua.Integer, value) orelse try ctx.failWithFmtTyped(lua.Integer, "integer value {d} out of range for Lua", .{value}));
+            lua.pushInteger(ctx.state.luaState, std.math.cast(lua.Integer, value) orelse try ctx.fail(lua.Integer, error.OutOfRange, "integer value {d} out of range for Lua", .{value}));
         },
         .float, .comptime_float => {
             lua.pushNumber(ctx.state.luaState, @as(lua.Number, value));
@@ -104,15 +105,13 @@ pub fn push(ctx: *Context, value: anytype) !void {
             const strategy = comptime ShapeData.strategyOf(T);
 
             if (comptime strategy == .object) {
-                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
-                ptr.* = value;
+                _ = ObjectGuard.ObjectGuard(T).push(ctx.state.luaState, value);
                 MetaTable.attachMetatable(ctx.state, T);
                 return;
             }
 
             if (comptime strategy == .closure) {
-                const ptr: *T = @ptrCast(@alignCast(lua.newUserdata(ctx.state.luaState, @sizeOf(T))));
-                ptr.* = value;
+                _ = ObjectGuard.ObjectGuard(T).push(ctx.state.luaState, value);
                 MetaTable.attachMetatable(ctx.state, T);
                 lua.pushCClosure(ctx.state.luaState, shape.trampoline(), 1);
                 return;
@@ -170,7 +169,7 @@ pub fn push(ctx: *Context, value: anytype) !void {
                 if (comptime MapperInternals.isStringValueType(T)) {
                     @compileError("This path must be unreachable since we already push string-like types as Lua strings above. Report a bug if you hit this error.");
                 }
-                const size = std.math.cast(i32, value.len) orelse try ctx.failWithFmtTyped(i32, "Slice is too large to push as Lua table: length {d} exceeds Lua's maximum table size {d}", .{ value.len, std.math.maxInt(c_int) });
+                const size = std.math.cast(i32, value.len) orelse try ctx.fail(i32, error.OutOfRange, "Slice is too large to push as Lua table: length {d} exceeds Lua's maximum table size {d}", .{ value.len, std.math.maxInt(c_int) });
                 lua.createTable(ctx.state.luaState, size, 0);
                 const nested = Table.fromStack(ctx.state, -1);
                 try Internals.fillTable(ctx, nested, value);

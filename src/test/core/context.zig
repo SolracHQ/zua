@@ -33,27 +33,27 @@ test "ctx.heap() allocates persistent memory" {
 test "ctx.fail returns error.Failed and sets err" {
     var test_env = try helpers.setup();
     defer test_env.deinit();
-    try testing.expectError(error.Failed, test_env.ctx.fail("something broke"));
+    try testing.expectError(error.Failed, test_env.ctx.fail(void, error.Failed, "something broke", .{}));
     try testing.expectEqualStrings("something broke", test_env.ctx.err.?);
 }
 
-test "ctx.failTyped returns error.Failed as typed result" {
+test "ctx.fail returns error.Failed as typed result" {
     var test_env = try helpers.setup();
     defer test_env.deinit();
-    try testing.expectError(error.Failed, test_env.ctx.failTyped(i32, "bad value"));
+    try testing.expectError(error.Failed, test_env.ctx.fail(i32, error.Failed, "bad value", .{}));
     try testing.expectEqualStrings("bad value", test_env.ctx.err.?);
 }
 
-test "ctx.failWithFmt formats message" {
+test "ctx.fail formats message" {
     var test_env = try helpers.setup();
     defer test_env.deinit();
-    try testing.expectError(error.Failed, test_env.ctx.failWithFmt("error code {d}", .{404}));
+    try testing.expectError(error.Failed, test_env.ctx.fail(void, error.Failed, "error code {d}", .{404}));
     try testing.expectEqualStrings("error code 404", test_env.ctx.err.?);
 }
 
-test "ctx.failWithFmtTyped formats typed message" {
+test "ctx.fail formats typed message" {
     var test_env = try helpers.setup();
     defer test_env.deinit();
-    try testing.expectError(error.Failed, test_env.ctx.failWithFmtTyped([]const u8, "invalid {s}", .{"input"}));
+    try testing.expectError(error.Failed, test_env.ctx.fail([]const u8, error.Failed, "invalid {s}", .{"input"}));
     try testing.expectEqualStrings("invalid input", test_env.ctx.err.?);
 }
