@@ -13,7 +13,6 @@ const Context = @import("../context.zig");
 pub fn ObjectGuard(comptime T: type) type {
     return struct {
         name_hash: u64,
-        type_name: [:0]const u8,
         value: T,
 
         /// Reads the guard from a raw userdata pointer and returns the
@@ -22,7 +21,7 @@ pub fn ObjectGuard(comptime T: type) type {
         pub fn from(ctx: *Context, handle: *anyopaque) !*T {
             const guard_ptr: *@This() = @ptrCast(@alignCast(handle));
             if (guard_ptr.name_hash != comptime hashOf(T))
-                return ctx.fail(*T, error.TypeMismatch, "expected userdata of type {s}, got {s}", .{ @typeName(T), guard_ptr.type_name });
+                return ctx.fail(*T, error.TypeMismatch, "expected userdata of type {s}, got a different type", .{@typeName(T)});
             return &guard_ptr.value;
         }
 
@@ -30,7 +29,7 @@ pub fn ObjectGuard(comptime T: type) type {
         /// and returns a pointer to it so callers can stash `&guard.value`.
         pub fn push(state: *lua.State, value: T) *@This() {
             const ptr: *@This() = @ptrCast(@alignCast(lua.newUserdata(state, @sizeOf(@This()))));
-            ptr.* = .{ .name_hash = comptime hashOf(T), .type_name = comptime @typeName(T), .value = value };
+            ptr.* = .{ .name_hash = comptime hashOf(T), .value = value };
             return ptr;
         }
     };

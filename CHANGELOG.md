@@ -8,7 +8,7 @@
 
 - Split `metatable.zig` into a multi-file module under `metatable/` with `api.zig` as the entry point.
 
-- Added `ObjectGuard(T)` userdata envelope that stores a comptime hash and `@typeName` alongside the payload. Object and closure userdata now carry a type signature verified on every decode. Passing the wrong userdata to a function was UB, now it is a proper type error.
+- Added `ObjectGuard(T)` userdata envelope that stores a comptime hash alongside the payload. Object and closure userdata now carry a type signature verified on every decode. Passing the wrong userdata to a function was UB, now it is a proper type error.
 
 ### Breaking
 
