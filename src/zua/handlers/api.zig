@@ -1,9 +1,8 @@
 //! Handler utilities for Lua values.
 //!
-//! This module defines the normalized ownership model used by typed Lua
-//! handles such as `Table` and `Function`. Handlers are lightweight wrappers
-//! around Lua values that preserve stack and registry lifetime semantics while
-//! exposing a small API for safe interaction from Zig.
+//! This module defines the normalized ownership model used by typed Lua handles such as `Table` and `Function`. Handlers
+//! are lightweight wrappers around Lua values that preserve stack and registry lifetime semantics while exposing a small
+//! API for safe interaction from Zig.
 
 const std = @import("std");
 const Marker = @import("../marker.zig").Marker;
@@ -13,10 +12,8 @@ pub const Handlers = @This();
 
 /// Ownership mode used when decoding Lua values into handle types.
 ///
-/// This enum distinguishes borrowed stack references from owned handles that
-/// must be cleaned up explicitly. It is used by the `Table`, `Function`, and
-/// `Userdata` handler implementations to manage lifetime correctly across the
-/// Lua API.
+/// This enum distinguishes borrowed stack references from owned handles that must be cleaned up explicitly. It is used by
+/// the `Table`, `Function`, and `Userdata` handler implementations to manage lifetime correctly across the Lua API.
 const State = @import("../state.zig");
 const Mapper = @import("../mapper/api.zig");
 const Internals = @import("../mapper/internals.zig");
@@ -116,11 +113,9 @@ pub const Handle = union(enum) {
 
 pub const Any = @import("any/api.zig");
 
-/// Typed wrappers over Lua values that are bound to a specific Zig type.
-/// `Typed.Fn(ins, outs)` wraps a Lua function with typed arguments and returns.
-/// `Typed.Object(T)` wraps a Lua userdata containing a `T` payload.
-/// `Typed.Closure(T)` wraps a closure upvalue containing a `T` payload.
-/// `Typed.TableView(T)` wraps a Lua table as a typed mutable view of `T`.
+/// Typed wrappers over Lua values that are bound to a specific Zig type. `Typed.Fn(ins, outs)` wraps a Lua function with
+/// typed arguments and returns. `Typed.Object(T)` wraps a Lua userdata containing a `T` payload. `Typed.Closure(T)` wraps a
+/// closure upvalue containing a `T` payload. `Typed.TableView(T)` wraps a Lua table as a typed mutable view of `T`.
 pub const Typed = @import("typed/api.zig");
 
 /// Recursively takes ownership of any handler values within `value`.

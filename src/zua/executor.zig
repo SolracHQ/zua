@@ -1,8 +1,7 @@
 //! Executor evaluates Lua chunks in an existing Zua execution context.
 //!
-//! This module provides a reusable `Executor` type for loading and executing
-//! Lua source from a string or file path. It captures optional stack trace
-//! behavior and can preserve error messages beyond the call-local `Context`.
+//! This module provides a reusable `Executor` type for loading and executing Lua source from a string or file path. It
+//! captures optional stack trace behavior and can preserve error messages beyond the call-local `Context`.
 const std = @import("std");
 const lua = @import("../lua/lua.zig");
 const Mapper = @import("mapper/api.zig");
@@ -44,8 +43,7 @@ fn reset(self: *Executor) void {
     self.lua_error_status = null;
 }
 
-/// Internal executor implementation that loads and calls a Lua chunk,
-/// leaving `num_results` values on the stack.
+/// Internal executor implementation that loads and calls a Lua chunk, leaving `num_results` values on the stack.
 fn executeImpl(self: *Executor, ctx: *Context, config: Config, num_results: i32) !void {
     self.reset();
     const previous_top = lua.getTop(ctx.state.luaState);
@@ -57,9 +55,8 @@ fn executeImpl(self: *Executor, ctx: *Context, config: Config, num_results: i32)
 
 /// Loads and executes a Lua chunk without returning results.
 ///
-/// This uses the provided `Context` and preserves the Lua stack top across the
-/// call. If loading or execution fails, it records a Lua-facing error message
-/// on `ctx.err` and returns `error.Failed`.
+/// This uses the provided `Context` and preserves the Lua stack top across the call. If loading or execution fails, it
+/// records a Lua-facing error message on `ctx.err` and returns `error.Failed`.
 ///
 /// Arguments:
 /// - ctx: The current call context and allocator.
@@ -73,8 +70,7 @@ pub fn execute(self: *Executor, ctx: *Context, config: Config) !void {
 
 /// Loads and executes a Lua chunk and leaves any results on the Lua stack.
 ///
-/// Returns the number of result values left on the stack.
-/// The caller owns these stack slots and should pop or read them.
+/// Returns the number of result values left on the stack. The caller owns these stack slots and should pop or read them.
 pub fn evalCount(self: *Executor, ctx: *Context, config: Config) !usize {
     const previous_top = lua.getTop(ctx.state.luaState);
     try self.executeImpl(ctx, config, lua.MULT_RETURN);
@@ -83,9 +79,8 @@ pub fn evalCount(self: *Executor, ctx: *Context, config: Config) !usize {
 
 /// Loads and executes a Lua chunk and decodes returned values into `types`.
 ///
-/// If the chunk fails to load, execute, or decode, `ctx.err` is populated with
-/// a printable error message. When `config.take_error_ownership` is enabled,
-/// the error message is preserved beyond the current `Context`.
+/// If the chunk fails to load, execute, or decode, `ctx.err` is populated with a printable error message. When
+/// `config.take_error_ownership` is enabled, the error message is preserved beyond the current `Context`.
 ///
 /// Arguments:
 /// - ctx: The current call context and allocator.

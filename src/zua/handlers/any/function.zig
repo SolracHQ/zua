@@ -1,6 +1,5 @@
-//! Function handles wrap Lua functions so they can be safely called from Zig.
-//! They support borrowed, stack-owned, and registry-owned lifetimes and
-//! centralize the logic for pushing arguments, calling Lua, and decoding results.
+//! Function handles wrap Lua functions so they can be safely called from Zig. They support borrowed, stack-owned, and
+//! registry-owned lifetimes and centralize the logic for pushing arguments, calling Lua, and decoding results.
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Handle = @import("../api.zig").Handle;
@@ -19,15 +18,15 @@ pub const Function = @This();
 
 pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
-/// Global Zua state pointer used to access the Lua VM and allocators.
-/// This pointer is borrowed by the handle and is not owned by `Function`.
+/// Global Zua state pointer used to access the Lua VM and allocators. This pointer is borrowed by the handle and is not
+/// owned by `Function`.
 state: *State,
-/// Ownership mode for the referenced Lua function value.
-/// The handle may represent a borrowed stack slot, a stack-owned slot, or a registry reference.
+/// Ownership mode for the referenced Lua function value. The handle may represent a borrowed stack slot, a stack-owned
+/// slot, or a registry reference.
 handle: Handle,
 
-/// Creates a borrowed function handle for a stack slot owned by another API operation.
-/// The borrowed handle does not own the stack slot and must not be released.
+/// Creates a borrowed function handle for a stack slot owned by another API operation. The borrowed handle does not own the
+/// stack slot and must not be released.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
@@ -68,11 +67,10 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Function {
     };
 }
 
-/// Creates a new Lua function handle from a Zig callback or an existing
-/// Native callback wrapper.
+/// Creates a new Lua function handle from a Zig callback or an existing Native callback wrapper.
 ///
-/// This is a convenience helper for constructing raw function handles from
-/// native Zig callbacks or pre-wrapped `NativeFn`/`Closure` values.
+/// This is a convenience helper for constructing raw function handles from native Zig callbacks or pre-wrapped
+/// `NativeFn`/`Closure` values.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
@@ -99,9 +97,8 @@ pub fn create(state: *State, comptime callback: anytype) Function {
     @compileError("Function.create expects a Zig function or a NativeFn/Closure wrapper");
 }
 
-/// Calls the Lua function with the given arguments and decodes return values.
-/// The function is pushed onto the stack, arguments are encoded, and the Lua call
-/// result is parsed into `res_types`.
+/// Calls the Lua function with the given arguments and decodes return values. The function is pushed onto the stack,
+/// arguments are encoded, and the Lua call result is parsed into `res_types`.
 ///
 /// Arguments:
 /// - ctx: The current call context used for encoding and error handling.
@@ -156,9 +153,8 @@ pub fn call(self: Function, ctx: *Context, args: anytype, comptime res_types: an
     return parsed_values;
 }
 
-/// Anchors this function in the Lua registry for persistent storage.
-/// The returned handle owns the registry reference and remains valid after the
-/// current stack frame is unwound.
+/// Anchors this function in the Lua registry for persistent storage. The returned handle owns the registry reference and
+/// remains valid after the current stack frame is unwound.
 ///
 /// Returns:
 /// - Function: A registry-owned function handle.
@@ -175,8 +171,7 @@ pub fn owned(self: Function) Function {
     };
 }
 
-/// Anchors this function in the Lua registry and removes the old stack-owned
-/// handle if applicable.
+/// Anchors this function in the Lua registry and removes the old stack-owned handle if applicable.
 pub fn takeOwnership(self: Function) Function {
     return .{
         .state = self.state,

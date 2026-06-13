@@ -1,9 +1,8 @@
 //! UpValue handle for Lua CClosure upvalues.
 //!
-//! A CClosure in Lua has a C function pointer and N upvalues (userdata blocks).
-//! This handler wraps a single upvalue userdata together with the C function
-//! pointer so the encoder can reconstruct the CClosure from the parts without
-//! knowing the inner type at the encode dispatch level.
+//! A CClosure in Lua has a C function pointer and N upvalues (userdata blocks). This handler wraps a single upvalue
+//! userdata together with the C function pointer so the encoder can reconstruct the CClosure from the parts without knowing
+//! the inner type at the encode dispatch level.
 
 pub const UpValue = @This();
 
@@ -17,8 +16,8 @@ pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_
 
 state: *State,
 handle: Handle,
-/// The C function pointer for the closure. Stored at handler-creation time
-/// so the encoder can push the CClosure without knowing T.
+/// The C function pointer for the closure. Stored at handler-creation time so the encoder can push the CClosure without
+/// knowing T.
 cfunction: lua.CFunction,
 
 pub fn fromBorrowed(state: *State, index: lua.StackIndex, cfunction: lua.CFunction) UpValue {

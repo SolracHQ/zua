@@ -1,7 +1,5 @@
-//! Comptime type introspection helpers used by the trampolines and docs
-//! generator. Not part of the public API, used internally to unwrap
-//! error unions, detect tuples, count and index type lists, and check
-//! for closure capture pointers.
+//! Comptime type introspection helpers used by the trampolines and docs generator. Not part of the public API, used
+//! internally to unwrap error unions, detect tuples, count and index type lists, and check for closure capture pointers.
 
 const std = @import("std");
 const ShapeData = @import("shape/shape_data.zig");
@@ -39,8 +37,8 @@ pub fn unwrapErrorUnion(comptime T: type) type {
 
 /// Returns the number of elements in a type spec.
 ///
-/// `void` → 0, a single non-tuple type → 1, a tuple type → field count.
-/// When `spec` is not a type but a slice/array, returns the length.
+/// `void` → 0, a single non-tuple type → 1, a tuple type → field count. When `spec` is not a type but a slice/array,
+/// returns the length.
 pub fn typeListCount(comptime spec: anytype) usize {
     const SpecType = @TypeOf(spec);
     if (SpecType == type) {
@@ -54,9 +52,8 @@ pub fn typeListCount(comptime spec: anytype) usize {
 
 /// Returns the type at `index` within a type spec.
 ///
-/// Index 0 on a non-tuple type returns the type itself.
-/// For tuple types, returns the field type at the given index.
-/// When `spec` is not a type but a slice/array, returns `spec[index]`.
+/// Index 0 on a non-tuple type returns the type itself. For tuple types, returns the field type at the given index. When
+/// `spec` is not a type but a slice/array, returns `spec[index]`.
 pub fn typeListAt(comptime spec: anytype, comptime index: usize) type {
     const SpecType = @TypeOf(spec);
     if (SpecType == type) {

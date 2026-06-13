@@ -1,15 +1,11 @@
 //! Declares how a Zig type maps to its Lua representation.
 //!
-//! Attach a `pub const ZUA_SHAPE` to your type using one of the
-//! constructors here. Each constructor picks a strategy: table,
-//! alias, typed alias, object, ptr, or closure.
+//! Attach a `pub const ZUA_SHAPE` to your type using one of the constructors here. Each constructor picks a strategy:
+//! table, alias, typed alias, object, ptr, or closure.
 //!
-//! When no `ZUA_SHAPE` is present, the encoder falls back to a
-//! default strategy based on the Zig type: structs become tables,
-//! enums become aliases, tagged unions become typed aliases, and
-//! untagged unions and opaque types become objects. Attach a shape
-//! when you need to override that default or add methods and
-//! lifecycle hooks.
+//! When no `ZUA_SHAPE` is present, the encoder falls back to a default strategy based on the Zig type: structs become
+//! tables, enums become aliases, tagged unions become typed aliases, and untagged unions and opaque types become objects.
+//! Attach a shape when you need to override that default or add methods and lifecycle hooks.
 
 const std = @import("std");
 const Context = @import("../context.zig");
@@ -26,9 +22,8 @@ pub const Modifier = @import("modifier.zig");
 
 /// Declare `T` as an `.object` shape.
 ///
-/// Object types are represented as full userdata in Lua and expose
-/// methods through a metatable. Use this for Zig values that need
-/// identity, mutability, and controlled behavior from Lua.
+/// Object types are represented as full userdata in Lua and expose methods through a metatable. Use this for Zig values
+/// that need identity, mutability, and controlled behavior from Lua.
 ///
 /// Example:
 /// ```zig
@@ -52,9 +47,8 @@ pub inline fn Object(comptime T: type, comptime methods: anytype, comptime opts:
 
 /// Declare `T` as a `.table` shape.
 ///
-/// Table types are represented as Lua tables with fields mapped from
-/// Zig struct members. Only struct types can use this strategy. For
-/// tagged unions see `TypedAlias`, for enums see `Alias`.
+/// Table types are represented as Lua tables with fields mapped from Zig struct members. Only struct types can use this
+/// strategy. For tagged unions see `TypedAlias`, for enums see `Alias`.
 ///
 /// Example:
 /// ```zig
@@ -82,8 +76,8 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime opts: 
 
 /// Declare `T` as a `.ptr` shape.
 ///
-/// Ptr types are represented as Lua light userdata, with no metatable or
-/// field access. Use this for opaque handles that Lua should not inspect.
+/// Ptr types are represented as Lua light userdata, with no metatable or field access. Use this for opaque handles that Lua
+/// should not inspect.
 pub inline fn Ptr(comptime T: type, comptime opts: Options.PtrOptions) type {
     comptime Internals.Assertions.assertContainerType(T);
     return comptime Internals.ShapeData.Shape(T, void, .ptr, null, null, null, opts, null);
@@ -91,9 +85,8 @@ pub inline fn Ptr(comptime T: type, comptime opts: Options.PtrOptions) type {
 
 /// Declare `T` as a callable closure shape.
 ///
-/// The struct is stored as the closure's captured state. Each call from
-/// Lua invokes `callback` with `*T` as the first parameter (or second
-/// if `*Context` comes first). Remaining parameters are decoded from Lua.
+/// The struct is stored as the closure's captured state. Each call from Lua invokes `callback` with `*T` as the first
+/// parameter (or second if `*Context` comes first). Remaining parameters are decoded from Lua.
 ///
 /// Arguments:
 /// - T: The struct type that holds the closure state.
@@ -110,8 +103,7 @@ pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc:
 
 /// Declare `T` as a string-backed alias (enum with string representation).
 ///
-/// Attaches encode and decode hooks so the enum is pushed as a Lua string
-/// and parsed from string values.
+/// Attaches encode and decode hooks so the enum is pushed as a Lua string and parsed from string values.
 ///
 /// Example:
 /// ```zig
@@ -133,16 +125,14 @@ pub inline fn StrAlias(comptime T: type, comptime methods: anytype, comptime opt
 
 /// Declare `T` as a list-type `.object` shape.
 ///
-/// This builds a userdata-backed list object that supports Lua indexing,
-/// length queries, and iterator semantics. The `getElements` accessor is
-/// used to derive element values and implement the generated methods:
-/// `get`, `__index`, `__len`, and `iter`.
+/// This builds a userdata-backed list object that supports Lua indexing, length queries, and iterator semantics. The
+/// `getElements` accessor is used to derive element values and implement the generated methods: `get`, `__index`, `__len`,
+/// and `iter`.
 ///
-/// User-provided `methods` are merged with the generated list methods, and
-/// compile-time collisions are rejected so generated names stay stable.
+/// User-provided `methods` are merged with the generated list methods, and compile-time collisions are rejected so
+/// generated names stay stable.
 ///
-/// `getElements` must be a comptime function taking `*T` and returning a
-/// slice of element values.
+/// `getElements` must be a comptime function taking `*T` and returning a slice of element values.
 ///
 /// Example:
 /// ```zig
@@ -170,8 +160,8 @@ pub inline fn List(comptime T: type, comptime getElements: anytype, comptime met
 
 /// Declare `T` as an alias (enum with integer representation).
 ///
-/// This is the default shape for enums. Each variant maps to its integer
-/// tag value. Use `StrAlias` to push enums as strings instead.
+/// This is the default shape for enums. Each variant maps to its integer tag value. Use `StrAlias` to push enums as strings
+/// instead.
 ///
 /// Example:
 /// ```zig
@@ -196,8 +186,7 @@ pub inline fn Alias(comptime T: type, comptime methods: anytype, comptime opts: 
 
 /// Declare `T` as a typed alias (tagged union).
 ///
-/// Tagged unions are represented as Lua tables with a single
-/// variant-name key. Use this for discriminated union types where
+/// Tagged unions are represented as Lua tables with a single variant-name key. Use this for discriminated union types where
 /// each variant carries typed payload data.
 ///
 /// Example:
@@ -235,15 +224,12 @@ pub inline fn TypedAlias(comptime T: type, comptime methods: anytype, comptime o
 
 /// Wraps a Zig function so it can be called from Lua.
 ///
-/// `Shape.Fn(fn, options)` returns a type. The type IS the value. Assign
-/// it directly to a struct field or pass it to `addBinding` without
-/// creating an instance.
+/// `Shape.Fn(fn, options)` returns a type. The type IS the value. Assign it directly to a struct field or pass it to
+/// `addBinding` without creating an instance.
 ///
-/// The wrapper auto-detects `*Context` as the first parameter and injects
-/// the current call context. Parameters after context (or the first param
-/// if context is absent) are decoded from Lua arguments in order. VarArgs
-/// as the last parameter captures remaining Lua values. The return value
-/// is pushed back to Lua: single values directly, tuples as multiple
+/// The wrapper auto-detects `*Context` as the first parameter and injects the current call context. Parameters after
+/// context (or the first param if context is absent) are decoded from Lua arguments in order. VarArgs as the last parameter
+/// captures remaining Lua values. The return value is pushed back to Lua: single values directly, tuples as multiple
 /// returns, `void` as no return.
 ///
 /// Example:

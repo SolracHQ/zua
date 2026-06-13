@@ -1,7 +1,6 @@
 //! Metatable creation and attachment for Zua values.
 //!
-//! Builds metatables from `ZUA_SHAPE` declarations, wires methods and
-//! metamethods, and attaches them to userdata values.
+//! Builds metatables from `ZUA_SHAPE` declarations, wires methods and metamethods, and attaches them to userdata values.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const ShapeData = @import("../shape/shape_data.zig");
@@ -18,9 +17,8 @@ const NewIndex = @import("newindex.zig");
 
 /// Attaches the metatable for `T` to the value on top of the Lua stack.
 ///
-/// Call this after pushing a userdata value to give it method dispatch and
-/// metamethod behavior. The metatable is created once and cached on the
-/// state. Must be called with the target value at the top of the Lua stack.
+/// Call this after pushing a userdata value to give it method dispatch and metamethod behavior. The metatable is created
+/// once and cached on the state. Must be called with the target value at the top of the Lua stack.
 pub fn attachMetatable(state: *State, comptime T: type) void {
     state.getOrCreateMetatable(T);
     _ = lua.setMetatable(state.luaState, -2);
@@ -28,13 +26,10 @@ pub fn attachMetatable(state: *State, comptime T: type) void {
 
 /// Builds the metatable for `T` and leaves it on the Lua stack.
 ///
-/// Object strategy types receive a `__name` field for diagnostics. Methods
-/// declared in `ZUA_SHAPE` are wired into the metatable. Struct fields
-/// wrapping `Shape.Modifier.Field` or `Shape.Modifier.Value` get automatic
-/// Lua field access.
+/// Object strategy types receive a `__name` field for diagnostics. Methods declared in `ZUA_SHAPE` are wired into the
+/// metatable. Struct fields wrapping `Shape.Modifier.Field` or `Shape.Modifier.Value` get automatic Lua field access.
 ///
-/// The metatable is pushed on top of the Lua stack. Caller must pop or use
-/// it before the next stack operation.
+/// The metatable is pushed on top of the Lua stack. Caller must pop or use it before the next stack operation.
 ///
 /// Arguments:
 /// - state: The global Zua state owning the Lua VM.

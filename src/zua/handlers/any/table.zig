@@ -1,5 +1,5 @@
-//! Table handles provide a safe wrapper around Lua table objects.
-//! They support borrowed, stack-owned, and registry-owned lifetimes and centralize conversions between Zig values and Lua tables.
+//! Table handles provide a safe wrapper around Lua table objects. They support borrowed, stack-owned, and registry-owned
+//! lifetimes and centralize conversions between Zig values and Lua tables.
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
 const Handle = @import("../api.zig").Handle;
@@ -20,11 +20,11 @@ pub const Table = @This();
 
 pub const __ZUA_MARKER: std.EnumSet(Marker) = Marker.new(&.{ .docs_ignore, .raw_handle });
 
-/// Global Zua state pointer used to access the Lua VM and allocators.
-/// This pointer is borrowed by the handle and is not owned by `Table`.
+/// Global Zua state pointer used to access the Lua VM and allocators. This pointer is borrowed by the handle and is not
+/// owned by `Table`.
 state: *State,
-/// Ownership mode for the referenced Lua table value.
-/// The handle may represent a borrowed stack slot, a stack-owned slot, or a registry reference.
+/// Ownership mode for the referenced Lua table value. The handle may represent a borrowed stack slot, a stack-owned slot,
+/// or a registry reference.
 handle: Handle,
 
 /// Creates a stack-owned table handle that must be released via `release()`.
@@ -48,8 +48,8 @@ pub fn fromStack(state: *State, index: lua.StackIndex) Table {
     };
 }
 
-/// Creates a borrowed table handle for a stack slot owned by another API operation.
-/// The borrowed handle does not own the stack slot and must not be released.
+/// Creates a borrowed table handle for a stack slot owned by another API operation. The borrowed handle does not own the
+/// stack slot and must not be released.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
@@ -69,8 +69,8 @@ pub fn fromBorrowed(state: *State, index: lua.StackIndex) Table {
     };
 }
 
-/// Creates a new Lua table with optional capacity hints and returns a stack-owned handle.
-/// Pass `0` for capacity hints if the final size is unknown; Lua will resize internally.
+/// Creates a new Lua table with optional capacity hints and returns a stack-owned handle. Pass `0` for capacity hints if
+/// the final size is unknown; Lua will resize internally.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
@@ -90,9 +90,8 @@ pub fn create(state: *State, array_capacity: i32, record_capacity: i32) Table {
     return Table.fromStack(state, -1);
 }
 
-/// Converts a Zig struct, array, tuple, or slice into a Lua table recursively.
-/// Array elements become integer keys and struct fields become string keys.
-/// Nested structs and arrays are converted recursively.
+/// Converts a Zig struct, array, tuple, or slice into a Lua table recursively. Array elements become integer keys and
+/// struct fields become string keys. Nested structs and arrays are converted recursively.
 ///
 /// Arguments:
 /// - state: The global Zua state containing the Lua VM.
@@ -113,8 +112,8 @@ pub fn from(state: *State, ctx: *Context, value: anytype) !Table {
     return table;
 }
 
-/// Anchors this table in the Lua registry for persistent storage.
-/// The returned handle owns the registry reference and may be released with `release()`.
+/// Anchors this table in the Lua registry for persistent storage. The returned handle owns the registry reference and may
+/// be released with `release()`.
 ///
 /// Returns:
 /// - Table: A registry-owned handle that outlives the current Lua stack.
@@ -131,11 +130,9 @@ pub fn owned(self: Table) Table {
     };
 }
 
-/// Anchors this table in the Lua registry and releases the old stack-owned
-/// handle if applicable.
+/// Anchors this table in the Lua registry and releases the old stack-owned handle if applicable.
 ///
-/// Promote a stack-owned table into registry ownership without leaving the
-/// original stack slot behind.
+/// Promote a stack-owned table into registry ownership without leaving the original stack slot behind.
 pub fn takeOwnership(self: Table) Table {
     return .{
         .state = self.state,
@@ -172,8 +169,7 @@ pub fn set(self: Table, ctx: *Context, key: anytype, value: anytype) !void {
     lua.setIndex(self.state.luaState, index, key_value);
 }
 
-/// Reads `table[key]` and converts it to `T`.
-/// If `T == Table`, returns a stack-owned table handle for the result.
+/// Reads `table[key]` and converts it to `T`. If `T == Table`, returns a stack-owned table handle for the result.
 ///
 /// Arguments:
 /// - ctx: The current call context used for decoding and error reporting.
@@ -316,8 +312,7 @@ pub fn release(self: Table) void {
     self.handle.release(self.state);
 }
 
-/// Pushes the table value onto the stack and returns its absolute index.
-/// The caller must pop the stack slot after use.
+/// Pushes the table value onto the stack and returns its absolute index. The caller must pop the stack slot after use.
 pub fn pushForAccess(self: Table) lua.StackIndex {
     switch (self.handle) {
         .borrowed, .stack_owned => |idx| {
@@ -333,8 +328,7 @@ pub fn pushForAccess(self: Table) lua.StackIndex {
 
 /// Returns all string keys present in this table.
 ///
-/// The result slice is allocated from `ctx.arena()` and is valid for the
-/// duration of the current callback invocation.
+/// The result slice is allocated from `ctx.arena()` and is valid for the duration of the current callback invocation.
 pub fn keys(self: Table, ctx: *Context) ![]const [:0]const u8 {
     const table_index = self.pushForAccess();
     defer lua.pop(self.state.luaState, 1);

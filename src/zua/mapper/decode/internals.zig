@@ -1,16 +1,12 @@
 //! Internal decode pipeline with explicit trace management.
 //!
-//! Every function here takes a `Trace` parameter that records the
-//! navigation path (struct field names, array indices, tuple arg
-//! positions) through nested decodes. When a field or element fails,
-//! the trace pinpoints exactly where in the value tree the error
-//! occurred.
+//! Every function here takes a `Trace` parameter that records the navigation path (struct field names, array indices, tuple
+//! arg positions) through nested decodes. When a field or element fails, the trace pinpoints exactly where in the value
+//! tree the error occurred.
 //!
-//! Most callers should use `Mapper.Decoder.pop`, `decode`, `decodeType`,
-//! or `parseTuple` instead. These transparently allocate a trace,
-//! format the path on error, and set `ctx.err`. Only reach for this
-//! module when you need to reuse a trace across multiple decodes or
-//! handle structured errors manually.
+//! Most callers should use `Mapper.Decoder.pop`, `decode`, `decodeType`, or `parseTuple` instead. These transparently
+//! allocate a trace, format the path on error, and set `ctx.err`. Only reach for this module when you need to reuse a trace
+//! across multiple decodes or handle structured errors manually.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -34,8 +30,7 @@ const Trace = Tracing.Trace;
 const DecodeError = Tracing.DecodeError;
 const ObjectGuard = @import("../object_guard.zig");
 
-/// Converts a comptime tuple of types or a single type into a Zig tuple
-/// type suitable for holding decoded values.
+/// Converts a comptime tuple of types or a single type into a Zig tuple type suitable for holding decoded values.
 pub fn ParseResult(comptime types: anytype) type {
     const Ty = @TypeOf(types);
     if (Ty == type) return types;
@@ -44,8 +39,7 @@ pub fn ParseResult(comptime types: anytype) type {
     return @Tuple(&field_types);
 }
 
-/// Decodes function arguments. Sets arg-position trace segments and
-/// enforces arity from the function call contract.
+/// Decodes function arguments. Sets arg-position trace segments and enforces arity from the function call contract.
 pub fn parseArgsDepth(
     ctx: *Context,
     start_index: lua.StackIndex,
@@ -93,8 +87,7 @@ fn parseArgsMultiDepth(
     return values;
 }
 
-/// Decodes return values and direct decode calls. Positional, no
-/// argument-level trace framing.
+/// Decodes return values and direct decode calls. Positional, no argument-level trace framing.
 pub fn parseTupleDepth(
     ctx: *Context,
     start_index: lua.StackIndex,
@@ -206,8 +199,8 @@ fn buildPrimitive(ctx: *Context, index: lua.StackIndex) !Primitive {
     };
 }
 
-/// Collects remaining Lua arguments as a `VarArgs` slice. The slice is
-/// allocated from the context arena and valid for the duration of the call.
+/// Collects remaining Lua arguments as a `VarArgs` slice. The slice is allocated from the context arena and valid for the
+/// duration of the call.
 pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !Mapper.VarArgs {
     const arr = try ctx.arena().alloc(Primitive, count);
     for (0..count) |i| {
@@ -216,8 +209,8 @@ pub fn buildVarArgs(ctx: *Context, start_index: lua.StackIndex, count: usize) !M
     return .{ .args = arr };
 }
 
-/// Pops a value from the top of the Lua stack and returns its string
-/// representation using Lua's `tostring`. The stack slot is removed.
+/// Pops a value from the top of the Lua stack and returns its string representation using Lua's `tostring`. The stack slot
+/// is removed.
 pub fn popString(ctx: *Context) ![]const u8 {
     if (lua.valueType(ctx.state.luaState, -1) == .nil) {
         lua.pop(ctx.state.luaState, 1);
@@ -246,8 +239,7 @@ pub fn decodeAtDepth(ctx: *Context, index: lua.StackIndex, comptime T: type, tra
     return decodeValueDepth(ctx, prim, T, trace);
 }
 
-/// Checks for a user-defined decode hook before dispatching to the
-/// built-in type path. Hooks always take priority.
+/// Checks for a user-defined decode hook before dispatching to the built-in type path. Hooks always take priority.
 pub fn decodeValueDepth(ctx: *Context, prim: Primitive, comptime T: type, trace: Trace) !T {
     if (comptime Internals.isOptional(T)) {
         if (prim == .nil) return null;

@@ -1,15 +1,13 @@
 //! Tagged envelope for userdata type safety.
 //!
-//! Object and closure userdata carry a hash of `@typeName(T)` alongside
-//! the payload. On decode the hash is verified, turning UB into a type
-//! error.
+//! Object and closure userdata carry a hash of `@typeName(T)` alongside the payload. On decode the hash is verified,
+//! turning UB into a type error.
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const Context = @import("../context.zig");
 
-/// Type-checked userdata envelope carrying a name hash, a name string
-/// for error messages, and the payload `T`.
+/// Type-checked userdata envelope carrying a name hash, a name string for error messages, and the payload `T`.
 pub fn ObjectGuard(comptime T: type) type {
     return struct {
         name_hash: u64,

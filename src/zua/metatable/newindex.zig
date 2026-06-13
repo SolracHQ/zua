@@ -8,8 +8,7 @@ const Maps = @import("maps.zig");
 const Field = @import("field.zig");
 const Trampoline = @import("trampoline.zig");
 
-/// Builds the `__newindex` metamethod for type T.
-/// Writes to writable Field fields, rejects Value (read-only) fields, and
+/// Builds the `__newindex` metamethod for type T. Writes to writable Field fields, rejects Value (read-only) fields, and
 /// falls back to a custom `__newindex` if declared in the shape.
 pub fn objectNewIndexTrampoline(comptime T: type) lua.CFunction {
     const methods = comptime ShapeData.methodsOf(T);

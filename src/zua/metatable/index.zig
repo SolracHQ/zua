@@ -9,9 +9,8 @@ const Field = @import("field.zig");
 const Introspection = @import("introspection.zig");
 const Trampoline = @import("trampoline.zig");
 
-/// Builds the `__index` metamethod for type T.
-/// Checks introspection, regular methods, then Field/Value fields, then
-/// a custom `__index` if declared in the shape.
+/// Builds the `__index` metamethod for type T. Checks introspection, regular methods, then Field/Value fields, then a
+/// custom `__index` if declared in the shape.
 pub fn objectIndexTrampoline(comptime T: type) lua.CFunction {
     const methods = comptime ShapeData.methodsOf(T);
     const methods_type = comptime @TypeOf(methods);

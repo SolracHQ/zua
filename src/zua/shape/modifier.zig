@@ -1,7 +1,7 @@
 //! Field and value markers for diferent shapes.
 //!
-//! `Shape.Modifier.Field(T, opts)` and `Shape.Modifier.Value(T, opts)` mark
-//! struct fields as readable (Value) or readable and writable (Field) from Lua.
+//! `Shape.Modifier.Field(T, opts)` and `Shape.Modifier.Value(T, opts)` mark struct fields as readable (Value) or readable
+//! and writable (Field) from Lua.
 
 const Marker = @import("../marker.zig").Marker;
 
@@ -53,8 +53,8 @@ pub fn isFieldOrValue(comptime T: type) bool {
     return Marker.any(T, &.{ .object_field, .object_value });
 }
 
-/// Wraps a field type so the encode/decode pipeline skips it.
-/// The field exists in Zig but is invisible to table serialization.
+/// Wraps a field type so the encode/decode pipeline skips it. The field exists in Zig but is invisible to table
+/// serialization.
 pub fn Ignore(comptime T: type) type {
     return struct {
         pub const __ZUA_MARKER = Marker.ignore;

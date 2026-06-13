@@ -1,14 +1,12 @@
-//! Compile-time assertion helpers for shape declarations. Each function
-//! emits a clear compile error when a `ZUA_SHAPE` declaration uses types,
-//! methods, or strategies that are incompatible or malformed.
+//! Compile-time assertion helpers for shape declarations. Each function emits a clear compile error when a `ZUA_SHAPE`
+//! declaration uses types, methods, or strategies that are incompatible or malformed.
 
 const std = @import("std");
 const ShapeData = @import("shape_data.zig");
 
 /// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
 ///
-/// Emits a compile error if the type does not support field mapping or
-/// strategy-based metadata.
+/// Emits a compile error if the type does not support field mapping or strategy-based metadata.
 ///
 /// Arguments:
 /// - T: The type to validate.
@@ -28,9 +26,8 @@ pub fn assertMethodsIsStruct(comptime methods: anytype) void {
 
 /// Compile-time validation that each method field is valid.
 ///
-/// Each field must be a raw Zig function or a `Shape.Fn`/`Shape.Closure` wrapper
-/// (a type carrying the `native_function` marker). Nested structs and non-callable
-/// values are rejected with a clear error naming the field.
+/// Each field must be a raw Zig function or a `Shape.Fn`/`Shape.Closure` wrapper (a type carrying the `native_function`
+/// marker). Nested structs and non-callable values are rejected with a clear error naming the field.
 pub fn assertValidMethods(comptime methods: anytype) void {
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         const T = field.type;
@@ -46,8 +43,7 @@ pub fn assertValidMethods(comptime methods: anytype) void {
 
 /// Compile-time assertion that `T`, if a union, is a tagged union.
 ///
-/// Untagged unions cannot use `.table` strategy; they must use `.object` or
-/// `.ptr` instead.
+/// Untagged unions cannot use `.table` strategy; they must use `.object` or `.ptr` instead.
 ///
 /// Arguments:
 /// - T: The type to validate.
@@ -57,8 +53,8 @@ pub fn assertTaggedIfUnion(comptime T: type) void {
     }
 }
 
-/// Compile-time assertion that user-provided methods do not shadow
-/// auto-generated list methods (`get`, `iter`, `__index`, `__len`).
+/// Compile-time assertion that user-provided methods do not shadow auto-generated list methods (`get`, `iter`, `__index`,
+/// `__len`).
 ///
 /// Arguments:
 /// - methods: A comptime struct of method name–function pairs.

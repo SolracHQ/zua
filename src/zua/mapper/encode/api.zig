@@ -1,8 +1,7 @@
 //! How a Zig type maps to its Lua representation.
 //!
-//! Call `push` to convert a Zig value to a Lua value on the stack.
-//! Internal helpers for manual table construction are available under
-//! `Internals`.
+//! Call `push` to convert a Zig value to a Lua value on the stack. Internal helpers for manual table construction are
+//! available under `Internals`.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -27,8 +26,8 @@ const Primitive = Mapper.Primitive;
 
 /// Pushes a Zig value onto the Lua stack.
 ///
-/// The value is converted according to its compile-time type, including custom
-/// encode hooks, value strategy metadata, and typed function wrapper support.
+/// The value is converted according to its compile-time type, including custom encode hooks, value strategy metadata, and
+/// typed function wrapper support.
 ///
 /// Arguments:
 /// - ctx: The current call context used for temporary allocations and Lua state access.

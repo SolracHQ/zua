@@ -1,8 +1,7 @@
 //! Interactive Lua REPL for Zua backed by isocline.
 //!
-//! This module exposes an embedded REPL that evaluates each line against an
-//! existing Zua `State`. Every command runs in a fresh `Context`, so scratch
-//! allocations are reclaimed before the next input.
+//! This module exposes an embedded REPL that evaluates each line against an existing Zua `State`. Every command runs in a
+//! fresh `Context`, so scratch allocations are reclaimed before the next input.
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
@@ -28,9 +27,8 @@ pub const Config = @import("config.zig");
 
 /// Runs the interactive Zua REPL session using the provided `State`.
 ///
-/// The REPL supports optional history persistence, syntax highlighting, and
-/// tab Completion. Each entered line is evaluated in a fresh `Context`, which
-/// ensures temporary allocations are reclaimed between commands.
+/// The REPL supports optional history persistence, syntax highlighting, and tab Completion. Each entered line is evaluated
+/// in a fresh `Context`, which ensures temporary allocations are reclaimed between commands.
 pub fn run(state: *State, config: *const Config) !void {
     if (config.history_path) |path| {
         isocline.setHistory(path, config.history_max);

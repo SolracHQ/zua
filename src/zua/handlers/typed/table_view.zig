@@ -1,12 +1,11 @@
 //! Typed table-backed views for decoding Lua tables into mutable Zig values.
 //!
-//! `TableView(T)` stores a raw `Table` handle alongside a heap-allocated typed
-//! mirror of the table contents. This lets callbacks receive a typed view of a
-//! Lua table, mutate `ref` directly, and optionally synchronize those changes
-//! back into the underlying Lua value.
+//! `TableView(T)` stores a raw `Table` handle alongside a heap-allocated typed mirror of the table contents. This lets
+//! callbacks receive a typed view of a Lua table, mutate `ref` directly, and optionally synchronize those changes back into
+//! the underlying Lua value.
 //!
-//! The view is intended for use with table-strategy types where the table itself
-//! is the Lua representation and a typed copy is convenient for mutation.
+//! The view is intended for use with table-strategy types where the table itself is the Lua representation and a typed copy
+//! is convenient for mutation.
 
 const std = @import("std");
 const Context = @import("../../context.zig");
@@ -19,9 +18,8 @@ const Marker = @import("../../marker.zig").Marker;
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
 ///
-/// `TableView(T)` decodes a Lua table into a heap-allocated typed copy of
-/// `T` while preserving the raw table handle. Callers may mutate `ref` directly
-/// and either return the view or call `sync()` to flush changes back into Lua.
+/// `TableView(T)` decodes a Lua table into a heap-allocated typed copy of `T` while preserving the raw table handle.
+/// Callers may mutate `ref` directly and either return the view or call `sync()` to flush changes back into Lua.
 pub fn TableView(comptime T: type) type {
     return struct {
         pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);

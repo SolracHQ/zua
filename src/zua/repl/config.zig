@@ -1,6 +1,5 @@
-//! REPL configuration type exposed to Lua as an Object. Controls prompt,
-//! history, syntax highlighting colors, completion hooks, and stack
-//! trace capture for runtime errors in the interactive session.
+//! REPL configuration type exposed to Lua as an Object. Controls prompt, history, syntax highlighting colors, completion
+//! hooks, and stack trace capture for runtime errors in the interactive session.
 
 const std = @import("std");
 
@@ -66,10 +65,8 @@ prompt: [:0]const u8 = "zua",
 
 /// Optional completion callback for the embedded REPL.
 ///
-/// The callback receives the current completion prefix and a
-/// `*Completer` helper. Use it to add custom completion candidates.
-/// The `Completer` carries a `*Context` so the hook can query the
-/// Lua runtime through it if desired.
+/// The callback receives the current completion prefix and a `*Completer` helper. Use it to add custom completion
+/// candidates. The `Completer` carries a `*Context` so the hook can query the Lua runtime through it if desired.
 completion_hook: CompletionHook = null,
 
 /// Optional path to a history file.
@@ -83,22 +80,21 @@ welcome_message: ?[]const u8 = null,
 
 /// Enable stack trace capture for runtime errors.
 ///
-/// When enabled, the REPL uses the executor's stack trace
-/// mode so tracebacks are available for errors.
+/// When enabled, the REPL uses the executor's stack trace mode so tracebacks are available for errors.
 stack_trace: bool = false,
 
 /// Optional per-token style hook for syntax highlighting.
 style_hook: Highlight.ColorHook = null,
 
-/// When enabled, the REPL resolves chained Lua identifiers against the
-/// live runtime and completes globals, fields, and methods.
+/// When enabled, the REPL resolves chained Lua identifiers against the live runtime and completes globals, fields, and
+/// methods.
 ///
-/// Runtime completion is performed before the Zig and Lua completion
-/// hooks, so custom hooks can augment or override results.
+/// Runtime completion is performed before the Zig and Lua completion hooks, so custom hooks can augment or override
+/// results.
 runtime_completion: bool = true,
 
-/// When true (default), built-in default syntax highlighting styles are used
-/// as a fallback after custom overrides and hooks.
+/// When true (default), built-in default syntax highlighting styles are used as a fallback after custom overrides and
+/// hooks.
 default_styles: bool = true,
 
 /// Per-kind style overrides. Set via repl:set_color or repl:set_style from Lua.

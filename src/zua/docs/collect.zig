@@ -1,8 +1,7 @@
 //! Type-walking and doc-building functions.
 //!
-//! This module is responsible for introspecting Zig types at comptime and
-//! populating the generator's class, object, alias, and function lists.
-//! It is the "collection" phase of the two-phase collect-and-emit pipeline.
+//! This module is responsible for introspecting Zig types at comptime and populating the generator's class, object, alias,
+//! and function lists. It is the "collection" phase of the two-phase collect-and-emit pipeline.
 
 const std = @import("std");
 const Generator = @import("generator.zig").Generator;
@@ -23,10 +22,9 @@ const Modifier = @import("../shape/modifier.zig");
 
 /// Walks a Zig type and inserts its documentation into the generator's lists.
 ///
-/// Handles struct, union, enum, and opaque types according to their Zua translation
-/// shape. Table types go into `classes`. Object/ptr/closure types go into
-/// `objects`. Tagged unions and enums go into `aliases`. Nested types are recursed
-/// into when `recurse_nested` is true. Dedup maps prevent duplicate collection.
+/// Handles struct, union, enum, and opaque types according to their Zua translation shape. Table types go into `classes`.
+/// Object/ptr/closure types go into `objects`. Tagged unions and enums go into `aliases`. Nested types are recursed into
+/// when `recurse_nested` is true. Dedup maps prevent duplicate collection.
 ///
 /// Arguments:
 /// - self: The docs generator to populate.
@@ -122,9 +120,8 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
 
 /// Adds a native function wrapper to the functions map.
 ///
-/// Builds a `Function` doc from the wrapper's parameter metadata and return type,
-/// then inserts it keyed by `cache_key`. If the key already exists, the call is a
-/// no-op (dedup). The caller should directly modify the HashMap entry when appending
+/// Builds a `Function` doc from the wrapper's parameter metadata and return type, then inserts it keyed by `cache_key`. If
+/// the key already exists, the call is a no-op (dedup). The caller should directly modify the HashMap entry when appending
 /// `field_of` entries to an already-registered function.
 ///
 /// Arguments:
@@ -161,9 +158,8 @@ pub fn addWrappedFunction(
     try recurseFunctionTypes(self, T, is_method, owner_type);
 }
 
-/// Collects the fields of a table-strategy struct or union into a `Table` doc.
-/// NativeFn wrapper fields are promoted to `field_of` function entries instead of
-/// opaque `---@field` annotations.
+/// Collects the fields of a table-strategy struct or union into a `Table` doc. NativeFn wrapper fields are promoted to
+/// `field_of` function entries instead of opaque `---@field` annotations.
 fn collectTableFields(
     self: *Generator,
     doc: *Table,
@@ -222,9 +218,9 @@ fn collectTableFields(
     }
 }
 
-/// Collects `Shape.Modifier.Field` and `Shape.Modifier.Value` marked fields from an object-strategy
-/// type into `---@field` annotations. Fn-valued fields are promoted to function entries so the
-/// Docs generator registers their signature instead of emitting an opaque `---@field`.
+/// Collects `Shape.Modifier.Field` and `Shape.Modifier.Value` marked fields from an object-strategy type into `---@field`
+/// annotations. Fn-valued fields are promoted to function entries so the Docs generator registers their signature instead
+/// of emitting an opaque `---@field`.
 fn collectObjectFields(
     self: *Generator,
     doc: *Object,
@@ -272,9 +268,8 @@ fn collectObjectFields(
 
 /// Collects method and operator declarations from `ZUA_SHAPE.methods`.
 ///
-/// Plain methods (no `__` prefix) are stored in the functions list with `method_of`
-/// set to the owner type's name. Metamethods with known operator names are stored as
-/// `Operator` entries on the owning type.
+/// Plain methods (no `__` prefix) are stored in the functions list with `method_of` set to the owner type's name.
+/// Metamethods with known operator names are stored as `Operator` entries on the owning type.
 fn collectMethods(
     self: *Generator,
     operators_out: *std.ArrayList(Types.Operator),
@@ -333,8 +328,7 @@ fn collectMethods(
     }
 }
 
-/// Returns true when `name` is a known Lua operator name (without the `__` prefix)
-/// that LuaLS supports with `---@operator`.
+/// Returns true when `name` is a known Lua operator name (without the `__` prefix) that LuaLS supports with `---@operator`.
 fn isKnownOperator(comptime name: []const u8) bool {
     comptime {
         for (&[_][]const u8{
@@ -348,9 +342,8 @@ fn isKnownOperator(comptime name: []const u8) bool {
     }
 }
 
-/// Extracts parameter metadata from a native wrapper and populates the `Function`
-/// doc's parameter list. Skips `*Context`, capture pointers, and self parameters
-/// (for methods). Varargs parameters are annotated as `...: any`.
+/// Extracts parameter metadata from a native wrapper and populates the `Function` doc's parameter list. Skips `*Context`,
+/// capture pointers, and self parameters (for methods). Varargs parameters are annotated as `...: any`.
 fn collectFunctionParameters(
     self: *Generator,
     doc: *Function,
@@ -394,8 +387,7 @@ fn collectFunctionParameters(
     }
 }
 
-/// Populates the return type list of a `Function` doc from the wrapper's return
-/// type tuple.
+/// Populates the return type list of a `Function` doc from the wrapper's return type tuple.
 fn collectFunctionReturns(self: *Generator, doc: *Function, comptime ReturnType: type) !void {
     const count = comptime Introspect.typeListCount(ReturnType);
     inline for (0..count) |index| {
@@ -405,10 +397,9 @@ fn collectFunctionReturns(self: *Generator, doc: *Function, comptime ReturnType:
 
 /// Collects the variant values of a tagged union or enum into an `Alias` doc.
 ///
-/// For `StrEnum` types, each variant is a string literal. For plain enums, each
-/// variant is an integer value. For union fields, each variant can be a named table
-/// type (with a custom variant name) or an inline table shape. Named variant tables
-/// are pushed to the classes list.
+/// For `StrEnum` types, each variant is a string literal. For plain enums, each variant is an integer value. For union
+/// fields, each variant can be a named table type (with a custom variant name) or an inline table shape. Named variant
+/// tables are pushed to the classes list.
 fn collectAliasValues(self: *Generator, doc: *Alias, comptime T: type, comptime recurse_nested: bool) !void {
     const variant_descs = comptime ShapeData.variantDescriptionsOf(T);
     switch (@typeInfo(T)) {
@@ -460,8 +451,7 @@ fn collectAliasValues(self: *Generator, doc: *Alias, comptime T: type, comptime 
     }
 }
 
-/// Recursively collects doc entries for types referenced in a function's parameters
-/// and return Types.
+/// Recursively collects doc entries for types referenced in a function's parameters and return Types.
 fn recurseFunctionTypes(self: *Generator, comptime T: type, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
     const fn_info = Trampoline.fnTypeInfo(T);
 
@@ -481,9 +471,8 @@ fn recurseFunctionTypes(self: *Generator, comptime T: type, comptime is_method: 
 
 /// Conditionally recurses into a type to add it to the docs lists.
 ///
-/// Only struct, union, enum, and opaque types with `.table` / `.object` / `.ptr`
-/// strategy are recursed. Pointers to these types are dereferenced first. Arrays
-/// and slices are recursed into via their child type.
+/// Only struct, union, enum, and opaque types with `.table` / `.object` / `.ptr` strategy are recursed. Pointers to these
+/// types are dereferenced first. Arrays and slices are recursed into via their child type.
 fn maybeRecurseReferencedType(self: *Generator, comptime T: type, comptime recurse_nested: bool) anyerror!void {
     if (!recurse_nested) return;
 

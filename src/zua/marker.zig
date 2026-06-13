@@ -1,6 +1,5 @@
-//! Compile-time markers that selectively activate internal zua code paths.
-//! Types tag themselves with `__ZUA_MARKER` to opt into specific behavior
-//! (e.g. transparent wrapper unwrapping, closure vs cfunction encoding).
+//! Compile-time markers that selectively activate internal zua code paths. Types tag themselves with `__ZUA_MARKER` to opt
+//! into specific behavior (e.g. transparent wrapper unwrapping, closure vs cfunction encoding).
 
 const std = @import("std");
 

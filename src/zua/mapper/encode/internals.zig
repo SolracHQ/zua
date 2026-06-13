@@ -1,8 +1,7 @@
 //! Internal encode helpers for primitive and table-level operations.
 //!
-//! Most callers should use `Mapper.Encoder.push` instead. These functions
-//! are exposed under `Mapper.Encoder.Internals` for manual control over
-//! table construction when the type dispatch in `push` is not appropriate.
+//! Most callers should use `Mapper.Encoder.push` instead. These functions are exposed under `Mapper.Encoder.Internals` for
+//! manual control over table construction when the type dispatch in `push` is not appropriate.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -20,8 +19,7 @@ const Marker = @import("../../marker.zig").Marker;
 
 const Primitive = Mapper.Primitive;
 
-/// Pushes a handle (borrowed, stack_owned, or registry_owned) onto the Lua
-/// stack.
+/// Pushes a handle (borrowed, stack_owned, or registry_owned) onto the Lua stack.
 pub fn pushHandle(ctx: *Context, handle: Handle) void {
     switch (handle) {
         .borrowed, .stack_owned => |index| lua.pushValue(ctx.state.luaState, index),
@@ -29,8 +27,7 @@ pub fn pushHandle(ctx: *Context, handle: Handle) void {
     }
 }
 
-/// Pushes a `Primitive` value onto the Lua stack using the appropriate Lua
-/// API call.
+/// Pushes a `Primitive` value onto the Lua stack using the appropriate Lua API call.
 pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
     switch (value) {
         .nil => lua.pushNil(ctx.state.luaState),
@@ -95,8 +92,7 @@ pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
     }
 }
 
-/// Infers the array portion capacity for a Lua table representation of
-/// `value`.
+/// Infers the array portion capacity for a Lua table representation of `value`.
 pub fn inferArrayCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 
@@ -115,8 +111,7 @@ pub fn inferArrayCapacity(value: anytype) i32 {
     };
 }
 
-/// Infers the record portion capacity for a Lua table representation of
-/// `value`.
+/// Infers the record portion capacity for a Lua table representation of `value`.
 pub fn inferRecordCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 

@@ -1,7 +1,6 @@
-//! Compile-time metadata builder for `ZUA_SHAPE` declarations. Produces
-//! the struct type that carries a type's translation strategy, hooks,
-//! methods, and documentation fields. The encoder, decoder, and docs
-//! generator query this metadata through `getMeta` and `strategyOf`.
+//! Compile-time metadata builder for `ZUA_SHAPE` declarations. Produces the struct type that carries a type's translation
+//! strategy, hooks, methods, and documentation fields. The encoder, decoder, and docs generator query this metadata through
+//! `getMeta` and `strategyOf`.
 
 const std = @import("std");
 const builtin = @import("builtin");
@@ -29,9 +28,8 @@ pub const MappingStrategy = enum {
     function,
 };
 
-/// Returns the concrete options type for a given strategy and type.
-/// Each strategy has its own options struct with only the fields that
-/// are relevant for that shape.
+/// Returns the concrete options type for a given strategy and type. Each strategy has its own options struct with only the
+/// fields that are relevant for that shape.
 pub fn ShapeOptions(comptime Type: type, comptime strategy: MappingStrategy) type {
     const T = if (@hasDecl(Type, "__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE else Type;
     return switch (strategy) {
@@ -48,15 +46,13 @@ pub fn ShapeOptions(comptime Type: type, comptime strategy: MappingStrategy) typ
 
 /// Low-level shape builder. Prefer the typed helpers in `zua.Shape`.
 ///
-/// Produces a comptime-only type carrying the translation strategy, hooks,
-/// methods, and options for a `ZUA_SHAPE` declaration. The returned type
-/// is never instantiated. It is queried at compile time by the encoder,
-/// decoder, and docs generator.
+/// Produces a comptime-only type carrying the translation strategy, hooks, methods, and options for a `ZUA_SHAPE`
+/// declaration. The returned type is never instantiated. It is queried at compile time by the encoder, decoder, and docs
+/// generator.
 ///
-/// All stable strategy, hook, and options combinations are exposed through
-/// the typed helpers in `zua.Shape`. Using `Shape` directly with non-standard
-/// combinations can lead to unexpected behavior. Do not reach for this unless
-/// you know what you are doing.
+/// All stable strategy, hook, and options combinations are exposed through the typed helpers in `zua.Shape`. Using `Shape`
+/// directly with non-standard combinations can lead to unexpected behavior. Do not reach for this unless you know what you
+/// are doing.
 ///
 /// Arguments:
 /// - Type: The original Zig type the shape describes.
@@ -137,14 +133,11 @@ pub fn Shape(
     };
 }
 
-/// Wraps a type so that `MetaData` can distinguish default metadata from
-/// user-declared `ZUA_SHAPE`.
+/// Wraps a type so that `MetaData` can distinguish default metadata from user-declared `ZUA_SHAPE`.
 ///
-/// When `getShape` falls back to the default strategy it wraps the original
-/// type in `DefaultGuard`. The guard's `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE`
-/// field lets internal code recover the original type while `MetaData`'s
-/// compile-time guard (`@hasDecl(Type, "ZUA_SHAPE")`) correctly identifies
-/// these as having no explicit metadata.
+/// When `getShape` falls back to the default strategy it wraps the original type in `DefaultGuard`. The guard's
+/// `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` field lets internal code recover the original type while `MetaData`'s compile-time
+/// guard (`@hasDecl(Type, "ZUA_SHAPE")`) correctly identifies these as having no explicit metadata.
 ///
 /// Arguments:
 /// - T: The original type to wrap.
@@ -160,12 +153,11 @@ pub fn DefaultGuard(comptime T: type) type {
 
 /// Returns the compile-time metadata type for `T`.
 ///
-/// This helper is used internally to determine the metadata layout for a
-/// type. It applies the same default rules used by translation and
-/// documentation code and returns the metadata type directly.
+/// This helper is used internally to determine the metadata layout for a type. It applies the same default rules used by
+/// translation and documentation code and returns the metadata type directly.
 ///
-/// Internally this is used by code that needs to compute metadata shape at
-/// compile time without materializing a separate metadata value.
+/// Internally this is used by code that needs to compute metadata shape at compile time without materializing a separate
+/// metadata value.
 pub inline fn getShape(comptime T: type) type {
     if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"union" and @typeInfo(T) != .@"enum" and @typeInfo(T) != .@"opaque") {
         return Shape(DefaultGuard(T), void, .default, null, null, null, .{}, null);
@@ -183,25 +175,23 @@ pub inline fn getShape(comptime T: type) type {
 
 /// Returns the translation strategy declared for `T`.
 ///
-/// This is the main branch point used by translation and docs code to decide
-/// whether `T` behaves as a table, userdata object, light userdata pointer,
-/// or closure capture.
+/// This is the main branch point used by translation and docs code to decide whether `T` behaves as a table, userdata
+/// object, light userdata pointer, or closure capture.
 pub inline fn strategyOf(comptime T: type) MappingStrategy {
     return comptime getShape(T).Strategy;
 }
 
 /// Returns the method set exposed by `T`.
 ///
-/// The returned comptime struct is the method table declared on `ZUA_SHAPE`,
-/// or an empty struct when `T` exposes no methods.
+/// The returned comptime struct is the method table declared on `ZUA_SHAPE`, or an empty struct when `T` exposes no
+/// methods.
 pub inline fn methodsOf(comptime T: type) @TypeOf(getShape(T).Methods) {
     return comptime getShape(T).Methods;
 }
 
 /// Returns the documentation name associated with `T`.
 ///
-/// This is the explicit name attached through the shape options,
-/// otherwise the Zig type name.
+/// This is the explicit name attached through the shape options, otherwise the Zig type name.
 pub inline fn nameOf(comptime T: type) []const u8 {
     const meta = comptime getShape(T);
     const strategy = meta.Strategy;
@@ -226,9 +216,8 @@ pub inline fn descriptionOf(comptime T: type) []const u8 {
 
 /// Returns the proxy type used by `T`'s encode hook.
 ///
-/// For most strategies this is `void`, but helpers such as `StrAlias()` use a
-/// concrete proxy type like `[]const u8` to describe the value pushed into Lua
-/// when a custom encode hook is active.
+/// For most strategies this is `void`, but helpers such as `StrAlias()` use a concrete proxy type like `[]const u8` to
+/// describe the value pushed into Lua when a custom encode hook is active.
 pub inline fn proxyTypeOf(comptime T: type) type {
     return comptime getShape(T).Proxy;
 }
@@ -260,8 +249,8 @@ pub inline fn variantDescriptionsOf(comptime T: type) Options.VariantDescription
     return @as(Options.VariantDescriptions(T), .{});
 }
 
-/// Returns the Lua CFunction trampoline for types with `.function` strategy.
-/// Returns `null` if the type has no native function trampoline.
+/// Returns the Lua CFunction trampoline for types with `.function` strategy. Returns `null` if the type has no native
+/// function trampoline.
 pub inline fn trampolineOf(comptime T: type) ?lua.CFunction {
     if (comptime strategyOf(T) == .function) {
         return comptime T.ZUA_SHAPE.trampoline();
@@ -269,8 +258,7 @@ pub inline fn trampolineOf(comptime T: type) ?lua.CFunction {
     return null;
 }
 
-/// Returns `true` if `T` has a `.function` strategy (native function
-/// wrapper or struct wrapping one).
+/// Returns `true` if `T` has a `.function` strategy (native function wrapper or struct wrapping one).
 pub inline fn isFunction(comptime T: type) bool {
     return comptime trampolineOf(T) != null;
 }

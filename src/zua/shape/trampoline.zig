@@ -1,7 +1,6 @@
-//! Generates the Lua CFunction trampolines that bridge Zig functions
-//! and closures into callable Lua values. Each trampoline is a compiled
-//! C closure that decodes arguments from the Lua stack, calls back into
-//! Zig, and pushes return values. Used by `Shape.Fn` and `Shape.Closure`.
+//! Generates the Lua CFunction trampolines that bridge Zig functions and closures into callable Lua values. Each trampoline
+//! is a compiled C closure that decodes arguments from the Lua stack, calls back into Zig, and pushes return values. Used
+//! by `Shape.Fn` and `Shape.Closure`.
 
 const std = @import("std");
 pub const lua = @import("../../lua/lua.zig");
@@ -20,9 +19,8 @@ const ObjectGuard = @import("../mapper/object_guard.zig");
 
 /// Describes one parameter of a Zig function for Lua annotation generation.
 ///
-/// Attach these to `FnOptions.args` so the docs generator produces
-/// `---@param name description` lines with proper parameter names instead
-/// of generic `arg1`, `arg2`, etc.
+/// Attach these to `FnOptions.args` so the docs generator produces `---@param name description` lines with proper parameter
+/// names instead of generic `arg1`, `arg2`, etc.
 pub const ArgInfo = struct {
     /// The parameter name as it appears in the Lua annotation.
     name: []const u8,
@@ -62,10 +60,9 @@ pub const FnOptions = struct {
 
 /// ShapeData variant for `.function` strategy.
 ///
-/// Produces a zero-sized type that IS the function value. The returned type
-/// declares `ZUA_SHAPE = @This()` so the encoder can push it via the
-/// trampoline shortcut. Since all parameters are comptime, no runtime state
-/// is needed, the type encodes itself.
+/// Produces a zero-sized type that IS the function value. The returned type declares `ZUA_SHAPE = @This()` so the encoder
+/// can push it via the trampoline shortcut. Since all parameters are comptime, no runtime state is needed, the type encodes
+/// itself.
 pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime options: FnOptions) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";

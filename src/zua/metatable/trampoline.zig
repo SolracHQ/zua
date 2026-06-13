@@ -5,8 +5,7 @@ const lua = @import("../../lua/lua.zig");
 const ShapeData = @import("../shape/shape_data.zig");
 const Shape = @import("../shape/api.zig");
 
-/// Returns the CFunction trampoline for a Zua method.
-/// Emits a compile error if `method_fn` is not callable.
+/// Returns the CFunction trampoline for a Zua method. Emits a compile error if `method_fn` is not callable.
 pub fn selectTrampoline(comptime method_fn: anytype, comptime name: []const u8) lua.CFunction {
     const method_fn_type = @TypeOf(method_fn);
 

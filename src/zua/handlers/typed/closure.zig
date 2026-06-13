@@ -1,14 +1,11 @@
 //! Typed closure upvalue wrapper.
 //!
-//! `Closure(T)` is a typed handle around the upvalue userdata of a Lua
-//! CClosure whose inner type is `T`. It mirrors `Object(T)` for userdata:
-//! you call `.get()` to access the `*T` payload, and the encode path
-//! reconstructs the callable closure by pushing the upvalue together
-//! with the C function trampoline derived from `T`.
+//! `Closure(T)` is a typed handle around the upvalue userdata of a Lua CClosure whose inner type is `T`. It mirrors
+//! `Object(T)` for userdata: you call `.get()` to access the `*T` payload, and the encode path reconstructs the callable
+//! closure by pushing the upvalue together with the C function trampoline derived from `T`.
 //!
-//! Use this as the receiver in a closure callback to pass the closure
-//! itself to another Lua function (e.g. a middleware chain) without
-//! copying the upvalue on every round-trip.
+//! Use this as the receiver in a closure callback to pass the closure itself to another Lua function (e.g. a middleware
+//! chain) without copying the upvalue on every round-trip.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");

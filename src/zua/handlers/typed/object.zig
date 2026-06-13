@@ -1,8 +1,7 @@
 //! Typed object userdata wrappers for Lua full userdata values.
 //!
-//! `Object(T)` is a lightweight typed wrapper around the raw `handlers.Userdata`
-//! handle. It preserves Lua stack and registry ownership semantics while
-//! exposing a typed accessor for values stored in full userdata.
+//! `Object(T)` is a lightweight typed wrapper around the raw `handlers.Userdata` handle. It preserves Lua stack and
+//! registry ownership semantics while exposing a typed accessor for values stored in full userdata.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -19,9 +18,8 @@ const Marker = @import("../../marker.zig").Marker;
 
 /// Typed object handle for Lua full userdata values.
 ///
-/// `Object(T)` provides a typed wrapper around the raw `handlers.Userdata`
-/// handler. It decodes Lua `userdata` values into a typed handle and exposes a
-/// typed `.get()` method to access the embedded `T` payload.
+/// `Object(T)` provides a typed wrapper around the raw `handlers.Userdata` handler. It decodes Lua `userdata` values into a
+/// typed handle and exposes a typed `.get()` method to access the embedded `T` payload.
 pub fn Object(comptime T: type) type {
     if (comptime @typeInfo(T) == .@"fn") {
         @compileError("Object(T) cannot wrap function types");

@@ -1,9 +1,8 @@
 const std = @import("std");
 
-/// Low-level C binding wrappers. `Bindings.lua` exposes the raw Lua C API,
-/// `Bindings.isocline` exposes the isocline line editor C bindings.
-/// Most users do not need these directly unless writing custom C interop
-/// or embedding Lua in non-standard ways.
+/// Low-level C binding wrappers. `Bindings.lua` exposes the raw Lua C API, `Bindings.isocline` exposes the isocline line
+/// editor C bindings. Most users do not need these directly unless writing custom C interop or embedding Lua in
+/// non-standard ways.
 pub const Bindings = struct {
     /// Raw Lua C API (`lua_State`, `lua_push*`, etc.).
     pub const lua = @import("lua/lua.zig");

@@ -1,8 +1,7 @@
 //! ANSI syntax highlighting helpers for the embedded REPL.
 //!
-//! Tokens are classified by the lexer and mapped to bbcode style tags
-//! understood by isocline's ic_highlight_formatted. The output string
-//! must match the raw input character-for-character outside of the tags.
+//! Tokens are classified by the lexer and mapped to bbcode style tags understood by isocline's ic_highlight_formatted. The
+//! output string must match the raw input character-for-character outside of the tags.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const isocline = @import("../../isocline/isocline.zig");
@@ -37,10 +36,8 @@ pub const TokenKind = enum {
 
 /// An ANSI/RGB color value used by a style.
 ///
-/// .none leaves the channel at the terminal default.
-/// .ansi uses a standard 8/16-color ANSI index.
-/// .ansi256 uses the 256-color xterm palette.
-/// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
+/// .none leaves the channel at the terminal default. .ansi uses a standard 8/16-color ANSI index. .ansi256 uses the
+/// 256-color xterm palette. .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Rgb = struct {
     pub const ZUA_SHAPE = Shape.Table(Rgb, .{}, .{
         .name = "Rgb",
@@ -215,8 +212,7 @@ pub const HighlightState = struct {
 
 /// C callback wrapper for isocline syntax highlighting.
 ///
-/// The callback delegates to `process` and forwards the formatted bbcode
-/// result back to isocline.
+/// The callback delegates to `process` and forwards the formatted bbcode result back to isocline.
 pub fn highlightCallbackC(
     henv: ?*isocline.HighlightEnv,
     input: [*c]const u8,
@@ -281,9 +277,8 @@ fn resolveStyle(
     return defaultStyle(kind);
 }
 
-/// Appends `text` to `out`, escaping `[` as `\[` and `\` as `\\` so that the
-/// bbcode parser in isocline does not misinterpret them as tag delimiters or
-/// escape sequences.
+/// Appends `text` to `out`, escaping `[` as `\[` and `\` as `\\` so that the bbcode parser in isocline does not
+/// misinterpret them as tag delimiters or escape sequences.
 fn appendBbcodeEscaped(out: *std.ArrayList(u8), allocator: std.mem.Allocator, text: []const u8) !void {
     if (std.mem.indexOfAny(u8, text, "[\\") == null) {
         return out.appendSlice(allocator, text);
@@ -299,8 +294,8 @@ fn appendBbcodeEscaped(out: *std.ArrayList(u8), allocator: std.mem.Allocator, te
 
 /// Build a bbcode-annotated copy of `source` suitable for ic_highlight_formatted.
 ///
-/// The returned slice is null-terminated and owned by the caller (allocated with
-/// `allocator`). Returns null on allocation failure or lexer error.
+/// The returned slice is null-terminated and owned by the caller (allocated with `allocator`). Returns null on allocation
+/// failure or lexer error.
 pub fn process(
     ctx: *Context,
     source: []const u8,

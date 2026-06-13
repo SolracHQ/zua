@@ -4,15 +4,12 @@ const Modifier = @import("../shape/modifier.zig");
 
 /// Builds a table of member names for type `T`.
 ///
-/// The table uses sequential integer keys (1..n) with method and
-/// field names as string values. Methods appear first (excluding
-/// `__`-prefixed metamethods), followed by struct fields declared
-/// as `Shape.Modifier.Field` or `Shape.Modifier.Value`.
+/// The table uses sequential integer keys (1..n) with method and field names as string values. Methods appear first
+/// (excluding `__`-prefixed metamethods), followed by struct fields declared as `Shape.Modifier.Field` or
+/// `Shape.Modifier.Value`.
 ///
-/// This is triggered when Lua code indexes a userdata with the
-/// special `__introspection` key. The REPL completion system
-/// (`zua.repl.completion`) calls this to discover available
-/// members without accessing the metatable directly.
+/// This is triggered when Lua code indexes a userdata with the special `__introspection` key. The REPL completion system
+/// (`zua.repl.completion`) calls this to discover available members without accessing the metatable directly.
 pub fn introspectionTable(L: ?*lua.State, comptime methods: anytype, comptime T: type) c_int {
     const methods_type = @TypeOf(methods);
     lua.createTable(L.?, 0, 0);

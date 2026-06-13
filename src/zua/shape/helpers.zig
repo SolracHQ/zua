@@ -1,7 +1,6 @@
-//! Shared hook type signatures and generators for the Shape module.
-//! Used internally by `MetaData` to type-check encode, decode, and docs
-//! hooks. Also provides compile-time helpers for merging method sets
-//! and generating list method implementations.
+//! Shared hook type signatures and generators for the Shape module. Used internally by `MetaData` to type-check encode,
+//! decode, and docs hooks. Also provides compile-time helpers for merging method sets and generating list method
+//! implementations.
 
 const std = @import("std");
 const Trampoline = @import("trampoline.zig");
@@ -26,8 +25,7 @@ pub fn DocsHookType() type {
 
 /// Builds an encode hook that converts an enum value to its `@tagName` string.
 ///
-/// The returned function pointer is used by `Shape.StrEnum` to push enum
-/// values as Lua strings.
+/// The returned function pointer is used by `Shape.StrEnum` to push enum values as Lua strings.
 ///
 /// Arguments:
 /// - T: The enum type to encode.
@@ -44,8 +42,7 @@ pub fn strEnumEncode(comptime T: type) EncodeHookType(T, []const u8) {
 
 /// Builds a decode hook that parses a Lua string back into an enum value.
 ///
-/// Matches the input string against enum field names. Fails with a typed
-/// error when the string does not match any variant.
+/// Matches the input string against enum field names. Fails with a typed error when the string does not match any variant.
 ///
 /// Arguments:
 /// - T: The enum type to decode into.
@@ -69,8 +66,8 @@ pub fn strEnumDecode(comptime T: type) DecodeHookType(T) {
 
 /// Resolves the element type from a `getElements` accessor function.
 ///
-/// The function must return a slice; the element type is the slice's child
-/// type. Emits a compile error if the return type is not a slice.
+/// The function must return a slice; the element type is the slice's child type. Emits a compile error if the return type
+/// is not a slice.
 ///
 /// Arguments:
 /// - getElements: A function returning `[]const T` or `[]T`.
@@ -86,9 +83,8 @@ pub fn ElementType(comptime getElements: anytype) type {
     return info.pointer.child;
 }
 
-/// Merges two method struct types into a single type containing all fields
-/// from both. Duplicate names are not checked; `b`'s fields are appended
-/// after `a`'s.
+/// Merges two method struct types into a single type containing all fields from both. Duplicate names are not checked;
+/// `b`'s fields are appended after `a`'s.
 ///
 /// Arguments:
 /// - a: First method struct.
@@ -127,8 +123,8 @@ pub fn mergeMethodType(comptime a: anytype, comptime b: anytype) type {
     return @Struct(.auto, null, &names, &types, &attributes);
 }
 
-/// Merges two method struct values into a single value. Fields from `b`
-/// override `a` only when the merge type contains both (struct auto merge).
+/// Merges two method struct values into a single value. Fields from `b` override `a` only when the merge type contains both
+/// (struct auto merge).
 ///
 /// Arguments:
 /// - a: First method set value.
@@ -146,11 +142,10 @@ pub fn mergeMethodSets(comptime a: anytype, comptime b: anytype) mergeMethodType
     return result;
 }
 
-/// Generates a struct type with auto-implemented list methods (`get`,
-/// `__index`, `__len`, `iter`) for a list-object-backed type `L`.
+/// Generates a struct type with auto-implemented list methods (`get`, `__index`, `__len`, `iter`) for a list-object-backed
+/// type `L`.
 ///
-/// The generated methods delegate to `getElements` for element access and
-/// 1-indexed Lua conventions.
+/// The generated methods delegate to `getElements` for element access and 1-indexed Lua conventions.
 ///
 /// Arguments:
 /// - L: The userdata type that owns the list.
@@ -193,10 +188,9 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
     };
 }
 
-/// Generates a concrete set of list method values for registration in
-/// `ZUA_SHAPE`. Delegates to `generatedListMethods` and extracts the four
-/// standard list methods (`get`, `__index`, `__len`, `iter`) into a
-/// comptime struct literal, wrapping public-facing methods with documentation.
+/// Generates a concrete set of list method values for registration in `ZUA_SHAPE`. Delegates to `generatedListMethods` and
+/// extracts the four standard list methods (`get`, `__index`, `__len`, `iter`) into a comptime struct literal, wrapping
+/// public-facing methods with documentation.
 ///
 /// Arguments:
 /// - L: The userdata type that owns the list.

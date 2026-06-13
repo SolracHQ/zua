@@ -5,8 +5,7 @@ const lua = @import("../../lua/lua.zig");
 const Modifier = @import("../shape/modifier.zig");
 const Trampoline = @import("trampoline.zig");
 
-/// Maps regular method names to their CFunction trampolines.
-/// Metamethods (names starting with `__`) are excluded.
+/// Maps regular method names to their CFunction trampolines. Metamethods (names starting with `__`) are excluded.
 pub fn methodMap(comptime methods: anytype) std.StaticStringMap(lua.CFunction) {
     const fields = @typeInfo(@TypeOf(methods)).@"struct".fields;
     var count: usize = 0;

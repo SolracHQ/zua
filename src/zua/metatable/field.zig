@@ -22,8 +22,7 @@ fn decodeFieldValue(comptime T: type, comptime field_name: []const u8, comptime 
     @field(self_ptr.*, field_name).value = val;
 }
 
-/// Lua CFunction: pushes the value of `field_name` from the userdata at
-/// stack index 1 onto the stack.
+/// Lua CFunction: pushes the value of `field_name` from the userdata at stack index 1 onto the stack.
 pub fn fieldIndex(L: ?*lua.State, comptime T: type, comptime field_name: []const u8) c_int {
     const state = L orelse unreachable;
     const vm = State.fromState(state) orelse {
@@ -42,8 +41,7 @@ pub fn fieldIndex(L: ?*lua.State, comptime T: type, comptime field_name: []const
     return 1;
 }
 
-/// Lua CFunction: pops a value from the stack and writes it into
-/// `field_name` on the userdata at stack index 1.
+/// Lua CFunction: pops a value from the stack and writes it into `field_name` on the userdata at stack index 1.
 pub fn fieldNewIndex(L: ?*lua.State, comptime T: type, comptime field_name: []const u8, comptime InnerType: type) c_int {
     const state = L orelse unreachable;
     const vm = State.fromState(state) orelse {
