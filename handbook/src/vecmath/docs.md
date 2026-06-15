@@ -224,46 +224,43 @@ Now we have the module level documentation solved. But if you look deeper, we ar
 
 ## How to document methods
 
-Documenting methods works the same way as module functions. You can do it inline, right there in the method map:
+Documenting methods works the same way as module functions. First add the import at the top of your Zig file:
 
 ```zig
-.__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
-.dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
+const Modifier = zua.Shape.Modifier;
+```
+
+Then use bare functions for methods that need no documentation, and `Modifier.Method` when you need description or args:
+
+```zig
+.__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+.dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
 ```
 
 For metamethods only description is needed, Lua already knows their arguments. For regular methods you add `.args` to name the parameters.
 
-The disadvantage of this approach is that the shape becomes dense and hard to read, especially in cases where you host several methods. At the same time it is the simplest, just modify slightly what we currently have.
-
-Or you can pull the methods out into their own constant:
+The disadvantage of this approach is that the shape becomes dense and hard to read, especially when you have several methods. Pulling the methods out into their own constant keeps it cleaner:
 
 ```zig
 const methods = .{
-    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
-    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b" }} }),
     ...
 };
 
 pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
 ```
 
-This separates the method documentation from the shape, keeping a cleaner structure, separating the data documentation from the behavior documentation. But it still has the problem that the docs are outside the function.
+This separates method documentation from the shape, keeping a cleaner structure.
 
-Or if you want each method to carry its own documentation, declare it as its own struct with a `ZUA_SHAPE`:
+Or if you want each method to carry its own documentation, you can define it as a const:
 
 ```zig
-const add = struct {
-    pub const ZUA_SHAPE = zua.Shape.Fn(impl, .{ .description = "Component-wise addition." });
-    fn impl(a: Vec2, b: Vec2) Vec2 { ... }
-};
+fn addImpl(a: Vec2, b: Vec2) Vec2 { ... }
+const add = Modifier.Method(addImpl, .{ .description = "Component-wise addition." });
 ```
 
-This is the cleanest approach, the docs live along the functions. But it is the most verbose by far, it makes the whole type dense to read. The method map stays clean with just `.__add = add` without `Shape.Fn` noise. You can combine approaches if you want, but I really do not recommend it because it gets confusing fast what is documented and what is not.
-
-> [!NOTE]
-> The reason there are multiple forms is the difference between Zig and Lua regarding functions. For Lua a function is a value. For Zig a function is a declaration, and declarations can only exist inside a container. `Shape.Fn` adapts to both: inside a `Table` or `Object` you use already declared functions, and inside functions you cannot declare other functions so you use the struct form.
-
-I prefer the extracted constant approach, keeps `ZUA_SHAPE` short and the methods section is its own block. But I understand those who prefer the struct approach because it keeps the documentation tied to the implementation.
+The method map stays clean with just `.__add = add` without docs noise. I prefer the extracted constant approach, keeps `ZUA_SHAPE` short and the methods section is its own block. But the inline form works fine if you do not want the extra indirection.
 
 Using my preference the Vec2 and Vec3 methods constants will look something like this.
 
@@ -272,13 +269,13 @@ Using my preference the Vec2 and Vec3 methods constants will look something like
 
 ```zig
 const methods = .{
-    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
-    .__sub = zua.Shape.Fn(sub, .{ .description = "Component-wise subtraction." }),
-    .__mul = zua.Shape.Fn(mul, .{ .description = "Scalar multiplication." }),
-    .__eq = zua.Shape.Fn(eq, .{ .description = "Equality comparison." }),
-    .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
-    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
-    .normalize = zua.Shape.Fn(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .__sub = Modifier.Method(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = Modifier.Method(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = Modifier.Method(eq, .{ .description = "Equality comparison." }),
+    .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = Modifier.Method(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
     .__tostring = toString,
 };
 
@@ -287,14 +284,14 @@ pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
 // ... rest of the struct stays the same ...
 
 const methods = .{
-    .__add = zua.Shape.Fn(add, .{ .description = "Component-wise addition." }),
-    .__sub = zua.Shape.Fn(sub, .{ .description = "Component-wise subtraction." }),
-    .__mul = zua.Shape.Fn(mul, .{ .description = "Scalar multiplication." }),
-    .__eq = zua.Shape.Fn(eq, .{ .description = "Equality comparison." }),
-    .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
-    .dot = zua.Shape.Fn(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
-    .cross = zua.Shape.Fn(cross, .{ .description = "Cross product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
-    .normalize = zua.Shape.Fn(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .__sub = Modifier.Method(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = Modifier.Method(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = Modifier.Method(eq, .{ .description = "Equality comparison." }),
+    .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .cross = Modifier.Method(cross, .{ .description = "Cross product.", .args = &.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = Modifier.Method(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
     .__tostring = toString,
 };
 

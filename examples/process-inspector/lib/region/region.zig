@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Permissions = @import("perms.zig").Permissions;
 const DataType = @import("../mem/types.zig").DataType;
@@ -18,10 +19,10 @@ pub const Region = @This();
 // pub for zua to see it; methods can stay private.
 const methods = .{
     .__tostring = display,
-    .get_size = zua.Shape.Fn(getSize, .{
+    .get_size = Modifier.Method(getSize, .{
         .description = "Returns the size of this region.",
     }),
-    .scan = zua.Shape.Fn(scan, .{
+    .scan = Modifier.Method(scan, .{
         .description = "Scans this region for matching values.",
         .args = &.{
             .{ .name = "dataType", .description = "i32 or f32." },
@@ -35,11 +36,11 @@ pub const ZUA_SHAPE = zua.Shape.Object(Region, methods, .{
     .description = "A mapped memory region.",
 });
 
-pid: zua.Shape.Modifier.Value(usize, .{ .description = "Process ID." }),
-start: zua.Shape.Modifier.Value(usize, .{ .description = "Start address." }),
-end: zua.Shape.Modifier.Value(usize, .{ .description = "End address." }),
-perms: zua.Shape.Modifier.Value(Permissions, .{ .description = "Permission flags." }),
-pathname: zua.Shape.Modifier.Value([]const u8, .{ .description = "Mapped path." }),
+pid: Modifier.Value(usize, .{ .description = "Process ID." }),
+start: Modifier.Value(usize, .{ .description = "Start address." }),
+end: Modifier.Value(usize, .{ .description = "End address." }),
+perms: Modifier.Value(Permissions, .{ .description = "Permission flags." }),
+pathname: Modifier.Value([]const u8, .{ .description = "Mapped path." }),
 
 // Plain fields used by the scanner to index into the Store's RAM.
 // Not exposed to Lua. Set at construction from the RegionRecord.

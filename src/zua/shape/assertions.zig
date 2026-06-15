@@ -2,7 +2,8 @@
 //! declaration uses types, methods, or strategies that are incompatible or malformed.
 
 const std = @import("std");
-const ShapeData = @import("shape_data.zig");
+const Introspect = @import("../introspect.zig");
+const Marker = @import("../marker.zig").Marker;
 
 /// Compile-time assertion that `T` is a struct, union, enum, or opaque type.
 ///
@@ -24,20 +25,15 @@ pub fn assertMethodsIsStruct(comptime methods: anytype) void {
     }
 }
 
-/// Compile-time validation that each method field is valid.
-///
-/// Each field must be a raw Zig function or a `Shape.Fn`/`Shape.Closure` wrapper (a type carrying the `native_function`
-/// marker). Nested structs and non-callable values are rejected with a clear error naming the field.
+/// Compile-time assertion that each field in a methods struct is a bare Zig function or a `Modifier.Method`.
 pub fn assertValidMethods(comptime methods: anytype) void {
     inline for (@typeInfo(@TypeOf(methods)).@"struct".fields) |field| {
         const T = field.type;
         if (comptime @typeInfo(T) == .@"fn") continue;
-        if (comptime ShapeData.isFunction(T)) continue;
-        if (comptime @typeInfo(T) == .type) {
-            const val = @field(methods, field.name);
-            if (ShapeData.isFunction(val)) continue;
+        if (comptime Introspect.getContainer(@field(methods, field.name))) |container| {
+            if (comptime Marker.markerOf(container).contains(.method_config)) continue;
         }
-        @compileError("method `" ++ field.name ++ "` must be a Zig function or Shape.Fn/Closure wrapper, got " ++ @typeName(T));
+        @compileError("methods only accept bare functions or Modifier.Method, got " ++ @typeName(T) ++ " for `" ++ field.name ++ "`");
     }
 }
 

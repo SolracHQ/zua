@@ -7,6 +7,7 @@ const Completion = @import("completion.zig");
 const Highlight = @import("highlight.zig");
 
 const Shape = @import("../shape/api.zig");
+const Modifier = Shape.Modifier;
 const Fn = @import("../handlers/typed/fn.zig").Fn;
 const Object = @import("../handlers/typed/object.zig").Object;
 
@@ -17,39 +18,39 @@ const CompletionHook = Completion.CompletionHook;
 pub const Config = @This();
 
 const methods = .{
-    .set_color = Shape.Fn(setColor, .{
+    .set_color = Modifier.Method(setColor, .{
         .description = "Set a color override for a token kind.",
         .args = &.{
             .{ .name = "kind", .description = "Token kind to color." },
             .{ .name = "color", .description = "Color value as ANSI int, hex string, color name, or {r,g,b} table." },
         },
     }){},
-    .set_style = Shape.Fn(setStyle, .{
+    .set_style = Modifier.Method(setStyle, .{
         .description = "Set a full style override for a token kind.",
         .args = &.{
             .{ .name = "kind", .description = "Token kind to style." },
             .{ .name = "style", .description = "Style table with optional fg, bg, bold, dim, italic fields." },
         },
     }){},
-    .set_style_hook = Shape.Fn(setStyleHook, .{
+    .set_style_hook = Modifier.Method(setStyleHook, .{
         .description = "Set the Lua-side syntax highlighting hook.",
         .args = &.{
             .{ .name = "hook", .description = "Function receiving (kind, text) and returning a Style table or nil." },
         },
     }){},
-    .set_completion_hook = Shape.Fn(setLuaCompletionHook, .{
+    .set_completion_hook = Modifier.Method(setLuaCompletionHook, .{
         .description = "Set the Lua-side tab completion hook.",
         .args = &.{
             .{ .name = "hook", .description = "Function receiving (completer, prefix) and calling completer:add/addEx to publish candidates." },
         },
     }){},
-    .set_runtime_completion = Shape.Fn(setRuntimeCompletion, .{
+    .set_runtime_completion = Modifier.Method(setRuntimeCompletion, .{
         .description = "Enable or disable live Lua runtime completion for chained identifiers.",
         .args = &.{
             .{ .name = "enabled", .description = "Whether live Lua runtime completion is enabled." },
         },
     }){},
-    .set_default_styles = Shape.Fn(setDefaultStyles, .{
+    .set_default_styles = Modifier.Method(setDefaultStyles, .{
         .description = "Enable or disable built-in default syntax highlighting styles.",
         .args = &.{
             .{ .name = "enabled", .description = "When true (default), built-in styles are used as fallback after hooks and overrides." },

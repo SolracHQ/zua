@@ -83,5 +83,3 @@ test "Primitive.decode boolean" {
     const value = try prim.decode(&test_env.ctx, bool);
     try testing.expectEqual(false, value);
 }
-
-

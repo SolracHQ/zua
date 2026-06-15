@@ -9,6 +9,10 @@ const Mapper = @import("../mapper/api.zig");
 const Primitive = Mapper.Primitive;
 const Handlers = @import("../handlers/api.zig");
 const Gen = @import("../docs/generator.zig").Generator;
+const Introspect = @import("../introspect.zig");
+const Marker = @import("../marker.zig").Marker;
+const Modifier = @import("modifier.zig");
+
 pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
     const Param = if (comptime @typeInfo(T) == .@"opaque") *T else T;
     return fn (*Context, Param) anyerror!?ProxyType;
@@ -179,7 +183,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
         }
 
         pub fn iter(self: Handlers.Typed.Object(L)) struct {
-            Trampoline.ShapeFn(iget, false, .{}),
+            Trampoline.ShapeFn(iget, .{}, .{}),
             Handlers.Typed.Object(L),
             ?usize,
         } {
@@ -201,33 +205,75 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
     const ListGen = generatedListMethods(L, getElements);
     break :blk .{
-        .get = Trampoline.ShapeFn(ListGen.get, false, .{
+        .get = Modifier.Method(ListGen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = ListGen.__index,
-        .__len = ListGen.__len,
-        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
+        .__index = Modifier.Method(ListGen.__index, .{}){},
+        .__len = Modifier.Method(ListGen.__len, .{}){},
+        .iter = Modifier.Method(ListGen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
 }) {
     const ListGen = generatedListMethods(L, getElements);
     return .{
-        .get = Trampoline.ShapeFn(ListGen.get, false, .{
+        .get = Modifier.Method(ListGen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = ListGen.__index,
-        .__len = ListGen.__len,
-        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
+        .__index = Modifier.Method(ListGen.__index, .{}){},
+        .__len = Modifier.Method(ListGen.__len, .{}){},
+        .iter = Modifier.Method(ListGen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
+}
+
+/// Wraps a single method value into a valid Method. Accepts bare Zig functions and `Modifier.Method`. 
+fn wrappedMethodType(comptime Owner: type, comptime val: anytype) type {
+    if (comptime @TypeOf(val) != type and @typeInfo(@TypeOf(val)) == .@"fn") {
+        const fn_info = comptime @typeInfo(@TypeOf(val)).@"fn";
+        const has_context = comptime fn_info.params.len > 0 and fn_info.params[0].type == *Context;
+        return Trampoline.ShapeFn(val, .{}, .{ .has_context = has_context, .owner_type = Owner });
+    }
+    if (comptime Introspect.getContainer(val)) |container| {
+        if (comptime Marker.markerOf(container).contains(.method_config)) {
+            return Trampoline.ShapeFn(container.Fn, container.FnOptions, .{
+                .has_context = container.HasContext,
+                .owner_type = Owner,
+            });
+        }
+    }
+    @compileError("unsupported method value type " ++ @typeName(@TypeOf(val)));
+}
+
+fn WrappedMethodsType(comptime Owner: type, comptime methods: anytype) type {
+    const fields = @typeInfo(@TypeOf(methods)).@"struct".fields;
+    var names: [fields.len][]const u8 = undefined;
+    var types: [fields.len]type = undefined;
+    var attributes: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
+    inline for (fields, 0..) |field, i| {
+        names[i] = field.name;
+        types[i] = wrappedMethodType(Owner, @field(methods, field.name));
+        attributes[i] = .{
+            .@"comptime" = false,
+            .@"align" = @alignOf(types[i]),
+            .default_value_ptr = null,
+        };
+    }
+    return @Struct(.auto, null, &names, &types, &attributes);
+}
+
+/// Wraps all values in a methods struct into methods of `Owner`.
+pub fn wrapMethods(comptime Owner: type, comptime methods: anytype) WrappedMethodsType(Owner, methods) {
+    // SAFETY: All ShapeFn / Method types are zero-sized so `undefined` is valid for every field.
+    const result: WrappedMethodsType(Owner, methods) = undefined;
+    return result;
 }
 
 test {

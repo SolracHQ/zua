@@ -25,6 +25,8 @@ pub const Modifier = @import("modifier.zig");
 /// Object types are represented as full userdata in Lua and expose methods through a metatable. Use this for Zig values
 /// that need identity, mutability, and controlled behavior from Lua.
 ///
+/// Methods accept bare functions (auto-wrapped as methods of `T`) or `Shape.Modifier.Method(func, opts)`.
+///
 /// Example:
 /// ```zig
 /// const Process = struct {
@@ -42,13 +44,16 @@ pub inline fn Object(comptime T: type, comptime methods: anytype, comptime opts:
     comptime Internals.Assertions.assertContainerType(T);
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as a `.table` shape.
 ///
 /// Table types are represented as Lua tables with fields mapped from Zig struct members. Only struct types can use this
 /// strategy. For tagged unions see `TypedAlias`, for enums see `Alias`.
+///
+/// Methods accept bare functions (auto-wrapped as methods of `T`) or `Shape.Modifier.Method(func, opts)`.
 ///
 /// Example:
 /// ```zig
@@ -71,7 +76,8 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime opts: 
     }
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .table, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .table, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as a `.ptr` shape.
@@ -93,7 +99,7 @@ pub inline fn Ptr(comptime T: type, comptime opts: Options.PtrOptions) type {
 /// - callback: A function `fn (*T, args...)` or `fn (*Context, *T, args...)`.
 /// - gc: Optional cleanup. Pass `null` or `void` for none, or a
 ///       `fn (*Context, *T) void` that follows the normal method path.
-/// - options: `FnOptions` with optional `description`, `args`.
+/// - options: `Options` with optional `description`, `args`.
 pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc: anytype, comptime opts: Options.Fn) type {
     comptime Internals.Assertions.assertContainerType(T);
     if (comptime @typeInfo(T) != .@"struct")
@@ -108,19 +114,17 @@ pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc:
 /// Example:
 /// ```zig
 /// const Priority = enum {
-///     pub const ZUA_SHAPE = zua.Shape.StrAlias(Priority, .{}, .{
+///     pub const ZUA_SHAPE = zua.Shape.StrAlias(Priority, .{
 ///         .name = "Priority",
 ///         .description = "Task priority level.",
 ///     });
 ///     low, normal, high
 /// };
 /// ```
-pub inline fn StrAlias(comptime T: type, comptime methods: anytype, comptime opts: Options.AliasOptions(T)) type {
+pub inline fn StrAlias(comptime T: type, comptime opts: Options.AliasOptions(T)) type {
     if (comptime @typeInfo(T) != .@"enum")
         @compileError("StrAlias requires an enum type, got " ++ @typeName(T));
-    comptime Internals.Assertions.assertMethodsIsStruct(methods);
-    comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, []const u8, .alias, Internals.Helpers.strEnumEncode(T), Internals.Helpers.strEnumDecode(T), methods, opts, null);
+    return comptime Internals.ShapeData.Shape(T, []const u8, .alias, Internals.Helpers.strEnumEncode(T), Internals.Helpers.strEnumDecode(T), null, opts, null);
 }
 
 /// Declare `T` as a list-type `.object` shape.
@@ -155,7 +159,9 @@ pub inline fn List(comptime T: type, comptime getElements: anytype, comptime met
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
     comptime Internals.Assertions.assertNoListCollisions(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, Internals.Helpers.mergeMethodSets(Internals.Helpers.generateListMethodsSet(T, getElements), methods), opts, null);
+    const merged = comptime Internals.Helpers.mergeMethodSets(Internals.Helpers.generateListMethodsSet(T, getElements), methods);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, merged);
+    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as an alias (enum with integer representation).
@@ -167,21 +173,19 @@ pub inline fn List(comptime T: type, comptime getElements: anytype, comptime met
 /// ```zig
 /// const Color = enum { red, green, blue };
 /// const MyColor = enum {
-///     pub const ZUA_SHAPE = zua.Shape.Alias(MyColor, .{}, .{
+///     pub const ZUA_SHAPE = zua.Shape.Alias(MyColor, .{
 ///         .name = "MyColor",
 ///         .description = "A color enum with a custom alias.",
 ///     });
 ///     red, green, blue
 /// };
 /// ```
-pub inline fn Alias(comptime T: type, comptime methods: anytype, comptime opts: Options.AliasOptions(T)) type {
+pub inline fn Alias(comptime T: type, comptime opts: Options.AliasOptions(T)) type {
     comptime {
         if (@typeInfo(T) != .@"enum")
             @compileError(@typeName(T) ++ " must be an enum to use Alias strategy");
     }
-    comptime Internals.Assertions.assertMethodsIsStruct(methods);
-    comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .alias, null, null, methods, opts, null);
+    return comptime Internals.ShapeData.Shape(T, void, .alias, null, null, null, opts, null);
 }
 
 /// Declare `T` as a typed alias (tagged union).
@@ -219,7 +223,8 @@ pub inline fn TypedAlias(comptime T: type, comptime methods: anytype, comptime o
     }
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .typed_alias, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .typed_alias, null, null, wrapped, opts, null);
 }
 
 /// Wraps a Zig function so it can be called from Lua.
@@ -249,7 +254,7 @@ pub fn Fn(comptime function: anytype, comptime opts: Options.Fn) type {
     const has_context = comptime fn_info.params.len > 0 and
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
-    return Internals.Trampoline.ShapeFn(function, has_context, opts);
+    return Internals.Trampoline.ShapeFn(function, opts, .{ .has_context = has_context });
 }
 
 test {

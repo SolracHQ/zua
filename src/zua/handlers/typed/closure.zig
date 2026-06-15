@@ -25,7 +25,7 @@ pub fn Closure(comptime T: type) type {
             .withEncode(UpValue, encode)
             .withDecode(decode);
         pub const __ZUA_MARKER = Marker.closure_wrapper;
-        const __ZUA_CLOSURE_TYPE = T;
+        const ClosureType = T;
 
         handle: UpValue,
         ptr: Modifier.Ignore(*T),

@@ -1,18 +1,44 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-
-- Replaced O(n) string scans in the `__index` and `__newindex` trampolines with `StaticStringMap` lookups, keyed by string length as first-level discriminant. Method and field dispatch on userdata objects is now O(len(key)) instead of O(n * avg_key_len).
-
-- Split `metatable.zig` into a multi-file module under `metatable/` with `api.zig` as the entry point.
-
-- Added `ObjectGuard(T)` userdata envelope that stores a comptime hash alongside the payload. Object and closure userdata now carry a type signature verified on every decode. Passing the wrong userdata to a function was UB, now it is a proper type error.
+## 0.15.0
 
 ### Breaking
 
+- Methods inside `Object`, `Table`, and `List` now only accept bare Zig functions or `Modifier.Method`. Passing `Shape.Fn` directly produces a compile error directing to `Modifier.Method`.
+- `StrAlias` and `Alias` no longer accept a methods parameter (primitives do not support metatables).
 - Consolidated all `ctx.fail*` variants (`fail`, `failTyped`, `failWithFmt`, `failWithFmtTyped`, `failCustom`) into a single `ctx.fail(T, err, fmt, args)` function. The old signatures are removed.
+
+### Added
+
+- `Shape.Modifier.Method(func, opts)` to mark a function as a method so docs skip the self parameter.
+- `Introspect.actualArgs` and `actualArgCount` helpers.
+- `FnConfig` struct and `Config` metadata namespace on ShapeFn and closure types.
+- Compile-time validation inside ShapeFn: documented args count must match, and `*Context` must be the first parameter.
+- `ObjectGuard(T)` userdata envelope that stores a comptime hash alongside the payload. Object and closure userdata now carry a type signature verified on every decode. Passing the wrong userdata to a function was UB, now it is a proper type error.
+
+### Changed
+
+- Doc comments wrap at 120 characters instead of 80.
+- `collectFunctionParameters` uses `actualArgs` instead of manual skip logic.
+- `generateListMethodsSet` uses `Modifier.Method` instead of raw ShapeFn calls.
+- All examples and internal code updated to use `Modifier.Method` instead of `Shape.Method`.
+- Internal constants renamed: removed `__ZUA_` prefix from `FieldType`, `UserdataType`, etc.
+- Variables renamed for consistency: `cb_info` to `callback_info`, `decode_depth` to `DecodeDepth`, local variables to lowercase.
+- Replaced O(n) string scans in the `__index` and `__newindex` trampolines with `StaticStringMap` lookups, keyed by string length as first-level discriminant. Method and field dispatch on userdata objects is now O(len(key)) instead of O(n * avg_key_len).
+- Split `metatable.zig` into a multi-file module under `metatable/` with `api.zig` as the entry point.
+
+### Removed
+
+- `Shape.Method(Owner, func, opts)` from the public API (replaced by `Modifier.Method`).
+- `src/zua/shape/method.zig`.
+- Flat `description`, `args`, `parse_err_hook` from ShapeFn and closure types (access through `.Options`).
+- Old `__ZuaFnTypeInfo`, `__ZuaNativeReturnType`, `__ZuaFn`, `__ZUA_OWNER_TYPE` constants from ShapeFn.
+- Methods parameter from `StrAlias` and `Alias`.
+
+### Fixed
+
+- `collectFunctionParameters` arg_index desync when skipping method self param.
+- `fnTypeToStub` and `functionHandleSignature` now consistently 1-indexed for Lua convention.
 
 ## 0.14.0
 

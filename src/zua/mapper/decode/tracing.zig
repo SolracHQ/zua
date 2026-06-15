@@ -13,7 +13,6 @@ const ArgInfo = @import("../../shape/trampoline.zig").ArgInfo;
 const PrimitiveTag = @import("../api.zig").PrimitiveTag;
 const ShapeData = @import("../../shape/shape_data.zig");
 
-
 /// One step in a decode trace path.
 ///
 /// A path is an array of segments terminated by `empty`. The formatter walks the array until it hits `empty` and joins the

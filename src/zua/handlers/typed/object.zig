@@ -28,7 +28,7 @@ pub fn Object(comptime T: type) type {
     return struct {
         pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withDecode(decode).withEncode(UserData, encode);
         pub const __ZUA_MARKER = Marker.userdata_wrapper;
-        const __ZUA_USERDATA_TYPE = T;
+        const UserdataType = T;
 
         /// Underlying raw userdata handle for ownership semantics.
         handle: UserData,
@@ -88,7 +88,7 @@ pub fn Object(comptime T: type) type {
 
 /// Returns the inner type `T` if `Wrapper` is an `Object(T)`, otherwise `null`.
 pub fn userdataInnerType(comptime Wrapper: type) ?type {
-    if (comptime Marker.isUserdataWrapper(Wrapper)) return Wrapper.__ZUA_USERDATA_TYPE;
+    if (comptime Marker.isUserdataWrapper(Wrapper)) return Wrapper.UserdataType;
     return null;
 }
 

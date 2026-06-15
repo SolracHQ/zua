@@ -3,8 +3,12 @@ const testing = std.testing;
 const zua = @import("../../root.zig");
 const Shape = zua.Shape;
 
-fn greetDoc(_: *zua.Context, name: []const u8) void { _ = name; }
-fn addDoc(a: i32, b: i32) i32 { return a + b; }
+fn greetDoc(_: *zua.Context, name: []const u8) void {
+    _ = name;
+}
+fn addDoc(a: i32, b: i32) i32 {
+    return a + b;
+}
 
 test "Docs.generateGlobals produces non-empty stub" {
     const stub = try zua.Docs.generateGlobals(testing.allocator, .{

@@ -24,7 +24,7 @@ pub fn TableView(comptime T: type) type {
     return struct {
         pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
         pub const __ZUA_MARKER = Marker.table_view;
-        const __ZUA_TABLE_VIEW_TYPE = T;
+        const TableViewType = T;
 
         /// Underlying raw Lua table handle.
         handle: Table,
@@ -104,7 +104,7 @@ pub fn TableView(comptime T: type) type {
 
 /// Returns the inner type `T` if `Wrapper` is a `TableView(T)`, otherwise `null`.
 pub fn tableViewInnerType(comptime Wrapper: type) ?type {
-    if (comptime Marker.isTableView(Wrapper)) return Wrapper.__ZUA_TABLE_VIEW_TYPE;
+    if (comptime Marker.isTableView(Wrapper)) return Wrapper.TableViewType;
     return null;
 }
 

@@ -4,7 +4,9 @@ const helpers = @import("../../helpers.zig");
 const zua = @import("../../../root.zig");
 const Executor = zua.Executor;
 
-fn increment(x: i32) i32 { return x + 1; }
+fn increment(x: i32) i32 {
+    return x + 1;
+}
 
 test "Typed.Fn.from wraps an Any.Function handle" {
     var test_env = try helpers.setup();

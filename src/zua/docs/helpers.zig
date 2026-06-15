@@ -66,6 +66,9 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
     }
     if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
+    if (comptime Introspect.isContainer(Normalized)) {
+        return try persist(self, ShapeData.nameOf(Normalized));
+    }
     return switch (@typeInfo(Normalized)) {
         .bool => persist(self, "boolean"),
         .int, .comptime_int => persist(self, "integer"),
@@ -91,14 +94,13 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
 
             if (ptr.size == .one) {
                 const child = ptr.child;
-                if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
+                if (comptime Introspect.isContainer(child)) {
                     break :blk try persist(self, ShapeData.nameOf(child));
                 }
             }
 
             break :blk try persist(self, @typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, ShapeData.nameOf(Normalized)),
         else => persist(self, @typeName(Normalized)),
     };
 }
@@ -158,8 +160,8 @@ pub fn persist(self: *Generator, text: []const u8) ![]const u8 {
 
 /// Returns the description string from a `Shape.Fn` or closure wrapper type.
 pub fn nativeFnDesc(comptime T: type) []const u8 {
-    const S = comptime ShapeData.getShape(T);
-    return S.description;
+    const shape = comptime ShapeData.getShape(T);
+    return shape.Options.description;
 }
 
 /// Wraps a Zig function or native function type into a documentation-ready callable type. Plain Zig functions get wrapped
@@ -205,10 +207,7 @@ pub fn normalizeReferencedType(comptime T: type) type {
 
     return switch (@typeInfo(T)) {
         .pointer => |ptr| if (ptr.size == .one)
-            switch (@typeInfo(ptr.child)) {
-                .@"struct", .@"union", .@"enum", .@"opaque" => ptr.child,
-                else => T,
-            }
+            if (comptime Introspect.getContainer(ptr.child)) |container| container else T
         else
             T,
         else => T,
@@ -369,13 +368,17 @@ fn fnTypeToStub(self: *Generator, comptime T: type) ![]const u8 {
 
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "fun(");
+    const is_method = comptime @typeInfo(T) != .@"fn" and ShapeData.isMethod(T);
     comptime var arg_index: usize = 0;
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
         if (comptime param_type == *Context) continue;
         if (comptime Introspect.isCapturePointer(param_type)) continue;
+        if (comptime is_method and arg_index == 0) {
+            continue;
+        }
         if (arg_index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index});
+        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index + 1});
         const type_str = try displayTypeName(self, param_type, .parameter);
         try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, type_str });
         arg_index += 1;

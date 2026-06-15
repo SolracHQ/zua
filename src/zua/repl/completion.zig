@@ -9,6 +9,7 @@ const State = @import("../state.zig").State;
 const Context = @import("../context.zig").Context;
 const Table = @import("../handlers/any/table.zig").Table;
 const Shape = @import("../shape/api.zig");
+const Modifier = Shape.Modifier;
 const Mapper = @import("../mapper/api.zig");
 const Object = @import("../handlers/typed/object.zig").Object;
 const isocline = @import("../../isocline/isocline.zig");
@@ -20,13 +21,13 @@ const Config = @import("config.zig");
 /// created as a zua object per REPL session and reused across tab events by updating `_env` and `_ctx`.
 pub const Completer = struct {
     pub const ZUA_SHAPE = Shape.Object(Completer, .{
-        .add = Shape.Fn(add, .{
+        .add = Modifier.Method(add, .{
             .description = "Add a completion candidate.",
             .args = &.{
                 .{ .name = "candidate", .description = "Completion candidate string." },
             },
         }){},
-        .addEx = Shape.Fn(addEx, .{
+        .addEx = Modifier.Method(addEx, .{
             .description = "Add a completion candidate with display and help text.",
             .args = &.{
                 .{ .name = "candidate", .description = "Completion candidate string." },

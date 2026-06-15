@@ -33,51 +33,51 @@ pub const PrimitiveTag = enum {
 /// handle valid for the duration of the decode hook execution (the value remains on the stack).
 pub const Primitive =
     union(enum) {
-    /// Represents a Lua `nil` or absent value.
-    nil,
-    boolean: bool,
-    integer: i64,
-    float: f64,
-    string: [:0]const u8,
-    table: Handlers.Any.Table,
-    function: Handlers.Any.Function,
-    light_userdata: *anyopaque,
-    userdata: Handlers.Any.Userdata,
-    /// Generic handle for Lua values not covered by specific variants (e.g. threads).
-    handle: Handlers.Handle,
+        /// Represents a Lua `nil` or absent value.
+        nil,
+        boolean: bool,
+        integer: i64,
+        float: f64,
+        string: [:0]const u8,
+        table: Handlers.Any.Table,
+        function: Handlers.Any.Function,
+        light_userdata: *anyopaque,
+        userdata: Handlers.Any.Userdata,
+        /// Generic handle for Lua values not covered by specific variants (e.g. threads).
+        handle: Handlers.Handle,
 
-    /// Returns the `PrimitiveTag` for this primitive, discarding the payload.
-    pub fn tag(self: Primitive) PrimitiveTag {
-        return switch (self) {
-            .nil => .nil,
-            .boolean => .boolean,
-            .integer => .integer,
-            .float => .float,
-            .string => .string,
-            .table => .table,
-            .function => .function,
-            .light_userdata => .light_userdata,
-            .userdata => .userdata,
-            .handle => .handle,
-        };
-    }
+        /// Returns the `PrimitiveTag` for this primitive, discarding the payload.
+        pub fn tag(self: Primitive) PrimitiveTag {
+            return switch (self) {
+                .nil => .nil,
+                .boolean => .boolean,
+                .integer => .integer,
+                .float => .float,
+                .string => .string,
+                .table => .table,
+                .function => .function,
+                .light_userdata => .light_userdata,
+                .userdata => .userdata,
+                .handle => .handle,
+            };
+        }
 
-    /// Decodes this primitive into a Zig value of type `T`.
-    ///
-    /// Delegates to `Decoder.decodeValue`, which performs type dispatch
-    /// using `T`'s `ZUA_SHAPE` strategy. The returned value is owned by the
-    /// caller.
-    ///
-    /// Arguments:
-    /// - ctx: Call-local context for allocation and error reporting.
-    /// - T: The target Zig type to decode into.
-    ///
-    /// Returns:
-    /// - T: The decoded value, or an error if decoding fails.
-    pub fn decode(self: Primitive, ctx: *Context, comptime T: type) !T {
-        return Decoder.decode(ctx, self, T);
-    }
-};
+        /// Decodes this primitive into a Zig value of type `T`.
+        ///
+        /// Delegates to `Decoder.decodeValue`, which performs type dispatch
+        /// using `T`'s `ZUA_SHAPE` strategy. The returned value is owned by the
+        /// caller.
+        ///
+        /// Arguments:
+        /// - ctx: Call-local context for allocation and error reporting.
+        /// - T: The target Zig type to decode into.
+        ///
+        /// Returns:
+        /// - T: The decoded value, or an error if decoding fails.
+        pub fn decode(self: Primitive, ctx: *Context, comptime T: type) !T {
+            return Decoder.decode(ctx, self, T);
+        }
+    };
 
 /// Internal helpers exposed for users who need them.
 pub const Internals = @import("internals.zig");

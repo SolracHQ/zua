@@ -26,7 +26,7 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_SHAPE = Shape.StrAlias(TokenKind, .{}, .{
+    pub const ZUA_SHAPE = Shape.StrAlias(TokenKind, .{
         .name = "TokenKind",
         .description = "Token kinds recognized by the REPL syntax highlighter.",
     });

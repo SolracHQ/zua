@@ -5,6 +5,7 @@
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
+const Introspect = @import("../../introspect.zig");
 
 const Table = @import("../../handlers/any/table.zig");
 const Function = @import("../../handlers/any/function.zig");
@@ -147,7 +148,7 @@ pub fn push(ctx: *Context, value: anytype) !void {
                     return;
                 }
 
-                if (@typeInfo(Pointee) == .@"struct" or @typeInfo(Pointee) == .@"union" or @typeInfo(Pointee) == .@"enum" or @typeInfo(Pointee) == .@"opaque") {
+                if (comptime Introspect.isContainer(Pointee)) {
                     const strategy = comptime ShapeData.strategyOf(Pointee);
 
                     if (strategy == .object) {

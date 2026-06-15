@@ -65,6 +65,66 @@ pub fn typeListAt(comptime spec: anytype, comptime index: usize) type {
     return spec[index];
 }
 
+/// Returns `true` if `T` is a struct, union, enum, or opaque type.
+pub fn isContainer(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => true,
+        else => false,
+    };
+}
+
+/// Returns the container type (struct, union, enum, opaque) for a comptime value, or `null` if the value is not a
+/// container. When the value itself is a type, returns the type if it is a container. When the value is a container
+/// instance, returns its type.
+pub fn getContainer(comptime v: anytype) ?type {
+    const T = @TypeOf(v);
+    if (T == type) {
+        return switch (@typeInfo(v)) {
+            .@"struct", .@"union", .@"enum", .@"opaque" => v,
+            else => null,
+        };
+    }
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => T,
+        else => null,
+    };
+}
+
+/// Parameters for `actualArgCount` and `actualArgs`.
+pub const ArgConfig = struct {
+    has_context: bool = false,
+    is_method: bool = false,
+    is_closure: bool = false,
+};
+
+/// Returns the number of documented parameters for a function, excluding `*Context` (if has_context), self (if is_method),
+/// and capture pointer (if is_closure). `VarArgs` is counted as a normal argument.
+pub fn actualArgCount(comptime fn_info: std.builtin.Type.Fn, comptime config: ArgConfig) usize {
+    comptime var skip: usize = 0;
+    if (config.has_context) skip += 1;
+    if (config.is_closure) skip += 1; // capture param
+    if (config.is_method) skip += 1; // self param
+    const total = fn_info.params.len;
+    if (total < skip) return 0;
+    return total - skip;
+}
+
+/// Returns the documented parameter types for a function, excluding `*Context`, self, and capture pointer.
+pub fn actualArgs(comptime fn_info: std.builtin.Type.Fn, comptime config: ArgConfig) [actualArgCount(fn_info, config)]type {
+    comptime var types: [actualArgCount(fn_info, config)]type = undefined;
+    comptime var out: usize = 0;
+    comptime var skip: usize = 0;
+    if (config.has_context) skip += 1;
+    if (config.is_closure) skip += 1;
+    if (config.is_method) skip += 1;
+    inline for (fn_info.params[skip..]) |param| {
+        const T = param.type orelse continue;
+        types[out] = T;
+        out += 1;
+    }
+    return types;
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

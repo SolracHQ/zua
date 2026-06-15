@@ -36,7 +36,7 @@ test "function returning multiple values through Lua" {
         .multi = multiReturnExample,
     });
     var executor = Executor{};
-    const result = try executor.eval(&test_env.ctx, .{i32, f64}, .{ .code = .{ .string =
+    const result = try executor.eval(&test_env.ctx, .{ i32, f64 }, .{ .code = .{ .string =
         \\return multi()
     } });
     try testing.expectEqual(42, result[0]);
@@ -47,7 +47,7 @@ test "Lua native multiple return parsed as tuple" {
     var test_env = try helpers.setup();
     defer test_env.deinit();
     var executor = Executor{};
-    const result = try executor.eval(&test_env.ctx, .{bool, []const u8, i32}, .{ .code = .{ .string =
+    const result = try executor.eval(&test_env.ctx, .{ bool, []const u8, i32 }, .{ .code = .{ .string =
         \\return true, "hello", 99
     } });
     try testing.expectEqual(true, result[0]);

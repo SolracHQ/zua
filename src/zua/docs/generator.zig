@@ -74,7 +74,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     if (comptime T == type and ShapeData.isFunction(value)) {
-        try Collect.addWrappedFunction(self, value, false, null, name, name);
+        try Collect.addWrappedFunction(self, value, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -83,7 +83,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     }
 
     if (comptime ShapeData.isFunction(T)) {
-        try Collect.addWrappedFunction(self, T, false, null, name, name);
+        try Collect.addWrappedFunction(self, T, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -92,7 +92,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     }
 
     if (comptime @typeInfo(T) == .@"struct" and ShapeData.strategyOf(T) == .closure) {
-        try Collect.addWrappedFunction(self, T, false, null, name, name);
+        try Collect.addWrappedFunction(self, T, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },

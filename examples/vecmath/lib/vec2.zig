@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 // Vec2 is an object-strategy type using Shape.Object.
 //
@@ -13,51 +14,48 @@ const zua = @import("zua");
 // __-prefixed names become Lua metamethods (__add, __sub, etc.).
 // Non-prefixed names become regular methods callable with :method().
 //
-// zua.Shape.Fn wraps each method with documentation metadata. The
+// Modifier.Method and bare functions wrap each method with documentation metadata. The
 // .description and .args are consumed by the Docs stub generator.
 
 pub const Vec2 = struct {
     // Modifier.Field marks struct fields as readable and writable from Lua.
     // zua generates __index and __newindex entries in the metatable so Lua
     // can access v.x and v.y = 5 directly.
-    x: zua.Shape.Modifier.Field(f64, .{ .description = "X component." }),
-    y: zua.Shape.Modifier.Field(f64, .{ .description = "Y component." }),
+    x: Modifier.Field(f64, .{ .description = "X component." }),
+    y: Modifier.Field(f64, .{ .description = "Y component." }),
 
     pub const ZUA_SHAPE = zua.Shape.Object(Vec2, .{
         // __add and __sub take two Vec2 values and return a new one.
-        .__add = zua.Shape.Fn(add, .{
+        .__add = Modifier.Method(add, .{
             .description = "Component-wise addition.",
             .args = &.{
-                .{ .name = "a", .description = "First vector." },
                 .{ .name = "b", .description = "Second vector." },
             },
         }),
-        .__sub = zua.Shape.Fn(sub, .{
+        .__sub = Modifier.Method(sub, .{
             .description = "Component-wise subtraction.",
             .args = &.{
-                .{ .name = "a", .description = "First vector." },
                 .{ .name = "b", .description = "Second vector." },
             },
         }),
         // __mul takes a Vec2 and a scalar number.
-        .__mul = zua.Shape.Fn(mul, .{
+        .__mul = Modifier.Method(mul, .{
             .description = "Scalar multiplication.",
             .args = &.{
                 .{ .name = "factor", .description = "Scalar factor." },
             },
         }),
         // __eq compares two Vec2 values. Returns a boolean, not a Vec2.
-        // Shape.Fn is not used here. A bare fn reference is enough when
-        // no documentation metadata is needed.
+        // A bare function reference is enough when no documentation is needed.
         .__eq = eq,
         // Named methods use :notation from Lua. zua injects the userdata
         // pointer for the self parameter automatically.
-        .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
-        .dot = zua.Shape.Fn(dot, .{
+        .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+        .dot = Modifier.Method(dot, .{
             .description = "Dot product.",
             .args = &.{.{ .name = "b", .description = "Right vector." }},
         }),
-        .normalize = zua.Shape.Fn(normalize, .{
+        .normalize = Modifier.Method(normalize, .{
             .description = "Unit vector, returns zeros if length is zero.",
         }),
         .__tostring = toString,

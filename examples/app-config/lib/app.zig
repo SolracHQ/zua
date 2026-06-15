@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 const ObjectOf = zua.Handlers.Typed.Object;
 const Route = @import("router.zig").Route;
 const AppInfo = @import("router.zig").AppInfo;
@@ -32,14 +33,14 @@ const Middleware = zua.Handlers.Typed.Fn(.{ Request, zua.Handlers.Typed.Fn(.{Req
 // annotations automatically.
 pub const App = struct {
     pub const ZUA_SHAPE = zua.Shape.Object(App, .{
-        .listen = zua.Shape.Fn(listen, .{
+        .listen = Modifier.Method(listen, .{
             .description = "Set the listen address and port.",
             .args = &.{
                 .{ .name = "host", .description = "Listen address." },
                 .{ .name = "port", .description = "Listen port." },
             },
         }),
-        .route = zua.Shape.Fn(route, .{
+        .route = Modifier.Method(route, .{
             .description = "Register a route with path, method, and handler.",
             .args = &.{
                 .{ .name = "path", .description = "URL path." },
@@ -47,23 +48,23 @@ pub const App = struct {
                 .{ .name = "handler", .description = "Handler function(req) -> res." },
             },
         }),
-        .middleware = zua.Shape.Fn(middleware, .{
+        .middleware = Modifier.Method(middleware, .{
             .description = "Register a middleware function.",
             .args = &.{
                 .{ .name = "handler", .description = "Middleware function(req, next) -> res." },
             },
         }),
-        .database = zua.Shape.Fn(databaseFn, .{
+        .database = Modifier.Method(databaseFn, .{
             .description = "Create a mock database connection.",
             .args = &.{
                 .{ .name = "db_type", .description = "Database type (sqlite, etc.)." },
                 .{ .name = "path", .description = "Connection path." },
             },
         }),
-        .build = zua.Shape.Fn(build, .{
+        .build = Modifier.Method(build, .{
             .description = "Return a summary table of the current configuration.",
         }),
-        .simulate = zua.Shape.Fn(simulate, .{
+        .simulate = Modifier.Method(simulate, .{
             .description = "Simulate a request through the middleware chain.",
             .args = &.{
                 .{ .name = "request", .description = "Table with method and path fields." },

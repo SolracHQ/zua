@@ -5,6 +5,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const lua = @import("../../lua/lua.zig");
+const Introspect = @import("../introspect.zig");
 
 const EncodeHookType = @import("./helpers.zig").EncodeHookType;
 const DecodeHookType = @import("./helpers.zig").DecodeHookType;
@@ -31,7 +32,7 @@ pub const MappingStrategy = enum {
 /// Returns the concrete options type for a given strategy and type. Each strategy has its own options struct with only the
 /// fields that are relevant for that shape.
 pub fn ShapeOptions(comptime Type: type, comptime strategy: MappingStrategy) type {
-    const T = if (@hasDecl(Type, "__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE else Type;
+    const T = if (@hasDecl(Type, "DefaultGuardOriginalType")) Type.DefaultGuardOriginalType else Type;
     return switch (strategy) {
         .default => Options.ObjectOptions,
         .table => Options.TableOptions(T),
@@ -39,7 +40,7 @@ pub fn ShapeOptions(comptime Type: type, comptime strategy: MappingStrategy) typ
         .typed_alias => Options.TypedAliasOptions(T),
         .object => Options.ObjectOptions,
         .ptr => Options.PtrOptions,
-        .closure => Trampoline.FnOptions,
+        .closure => Trampoline.Options,
         .function => Options.ObjectOptions,
     };
 }
@@ -78,7 +79,7 @@ pub fn Shape(
         @compileError(@typeName(Type) ++ " has no visible ZUA_SHAPE: is it misspelled or declared outside the type?");
     }
 
-    const T = if (@hasDecl(Type, "__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE")) Type.__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE else Type;
+    const T = if (@hasDecl(Type, "DefaultGuardOriginalType")) Type.DefaultGuardOriginalType else Type;
 
     const encode_hook_typed: ?EncodeHookType(T, ProxyType) = if (encode_hook) |h| @as(EncodeHookType(T, ProxyType), h) else null;
     const decode_hook_typed: ?DecodeHookType(T) = if (decode_hook) |h| @as(DecodeHookType(T), h) else null;
@@ -136,18 +137,18 @@ pub fn Shape(
 /// Wraps a type so that `MetaData` can distinguish default metadata from user-declared `ZUA_SHAPE`.
 ///
 /// When `getShape` falls back to the default strategy it wraps the original type in `DefaultGuard`. The guard's
-/// `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` field lets internal code recover the original type while `MetaData`'s compile-time
+/// `DefaultGuardOriginalType` field lets internal code recover the original type while `MetaData`'s compile-time
 /// guard (`@hasDecl(Type, "ZUA_SHAPE")`) correctly identifies these as having no explicit metadata.
 ///
 /// Arguments:
 /// - T: The original type to wrap.
 ///
 /// Returns:
-/// - type: A struct type with a single `__ZUA_DEFAULT_GUARD_ORIGINAL_TYPE` constant.
+/// - type: A struct type with a single `DefaultGuardOriginalType` constant.
 pub fn DefaultGuard(comptime T: type) type {
     return struct {
         pub const __ZUA_MARKER = Marker.default_guard;
-        const __ZUA_DEFAULT_GUARD_ORIGINAL_TYPE = T;
+        const DefaultGuardOriginalType = T;
     };
 }
 
@@ -159,7 +160,7 @@ pub fn DefaultGuard(comptime T: type) type {
 /// Internally this is used by code that needs to compute metadata shape at compile time without materializing a separate
 /// metadata value.
 pub inline fn getShape(comptime T: type) type {
-    if (comptime @typeInfo(T) != .@"struct" and @typeInfo(T) != .@"union" and @typeInfo(T) != .@"enum" and @typeInfo(T) != .@"opaque") {
+    if (comptime !Introspect.isContainer(T)) {
         return Shape(DefaultGuard(T), void, .default, null, null, null, .{}, null);
     }
 
@@ -263,7 +264,18 @@ pub inline fn isFunction(comptime T: type) bool {
     return comptime trampolineOf(T) != null;
 }
 
+/// Returns `true` if `T` is a function wrapper that declares an owner type (i.e. a method).
+pub inline fn isMethod(comptime T: type) bool {
+    return comptime @hasDecl(T, "Config") and T.Config.OwnerType != null;
+}
 
+/// Returns the owner type for a method wrapper, or `null` if `T` is not a method.
+pub inline fn ownerTypeOf(comptime T: type) ?type {
+    if (comptime @hasDecl(T, "Config")) {
+        return T.Config.OwnerType;
+    }
+    return null;
+}
 
 test {
     std.testing.refAllDecls(@This());

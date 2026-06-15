@@ -2,6 +2,7 @@
 //! into specific behavior (e.g. transparent wrapper unwrapping, closure vs cfunction encoding).
 
 const std = @import("std");
+const Introspect = @import("introspect.zig");
 
 pub const Marker = enum {
     /// `TableView(T)` transparent wrapper over a table-strategy type.
@@ -27,23 +28,23 @@ pub const Marker = enum {
     /// Internal field that should be skipped by encode/decode pipelines.
     /// Marked fields are treated as if they do not exist for serialization.
     ignore,
+    /// `Shape.Modifier.Method(func, opts)` transparent method config. Carries function and
+    /// options until `wrapMethods` resolves the owner type.
+    method_config,
 
     /// Returns the set of markers declared on `T`.
     pub fn markerOf(comptime T: type) std.EnumSet(Marker) {
         comptime {
             var result: std.EnumSet(Marker) = .initEmpty();
-            switch (@typeInfo(T)) {
-                .@"struct", .@"union", .@"enum", .@"opaque" => {
-                    if (@hasDecl(T, "__ZUA_MARKER")) {
-                        const marker = T.__ZUA_MARKER;
-                        if (@TypeOf(marker) == Marker) {
-                            result.insert(marker);
-                        } else if (@TypeOf(marker) == std.EnumSet(Marker)) {
-                            return marker;
-                        }
+            if (Introspect.getContainer(T)) |container| {
+                if (@hasDecl(container, "__ZUA_MARKER")) {
+                    const marker = container.__ZUA_MARKER;
+                    if (@TypeOf(marker) == Marker) {
+                        result.insert(marker);
+                    } else if (@TypeOf(marker) == std.EnumSet(Marker)) {
+                        return marker;
                     }
-                },
-                else => {},
+                }
             }
             return result;
         }

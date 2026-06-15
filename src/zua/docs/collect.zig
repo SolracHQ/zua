@@ -39,11 +39,7 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
         return addType(self, Helpers.unwrapTransparentTypedWrapper(Normalized), recurse_nested);
     }
     if (comptime Helpers.isTypedFunctionHandle(Normalized)) return;
-
-    switch (@typeInfo(Normalized)) {
-        .@"struct", .@"union", .@"enum", .@"opaque" => {},
-        else => return,
-    }
+    if (comptime !Introspect.isContainer(Normalized)) return;
 
     const cache_key = @typeName(Normalized);
     const meta_info = comptime ShapeData.getShape(Normalized);
@@ -111,7 +107,7 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
                 .description = try Helpers.persist(self, ShapeData.descriptionOf(Normalized)),
             };
 
-            try collectFunctionParameters(self, &doc, trampoline_type, false, null);
+            try collectFunctionParameters(self, &doc, trampoline_type);
             try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(trampoline_type));
             try self.functions.put(try Helpers.persist(self, cache_key), doc);
         },
@@ -127,20 +123,16 @@ pub fn addType(self: *Generator, comptime T: type, comptime recurse_nested: bool
 /// Arguments:
 /// - self: The docs generator to populate.
 /// - comptime T: The native function wrapper.
-/// - is_method: Whether this function is a method (skips self param).
-/// - owner_type: If a method, the type that owns the method.
 /// - display_name: The name to use in the generated stub.
 /// - cache_key: The key used for dedup and HashMap storage.
 pub fn addWrappedFunction(
     self: *Generator,
     comptime T: type,
-    comptime is_method: bool,
-    comptime owner_type: ?type,
     display_name: []const u8,
     cache_key: []const u8,
 ) !void {
-    const ShapeT = comptime ShapeData.getShape(T);
-    if (comptime ShapeT.Strategy != .function and ShapeT.Strategy != .closure) {
+    const shape = comptime ShapeData.getShape(T);
+    if (comptime shape.Strategy != .function and shape.Strategy != .closure) {
         @compileError("Docs.addWrappedFunction expects a native function or closure wrapper type");
     }
 
@@ -151,11 +143,11 @@ pub fn addWrappedFunction(
         .description = try Helpers.persist(self, Helpers.nativeFnDesc(T)),
     };
 
-    try collectFunctionParameters(self, &doc, T, is_method, owner_type);
+    try collectFunctionParameters(self, &doc, T);
     try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(T));
     try self.functions.put(try Helpers.persist(self, cache_key), doc);
 
-    try recurseFunctionTypes(self, T, is_method, owner_type);
+    try recurseFunctionTypes(self, T);
 }
 
 /// Collects the fields of a table-strategy struct or union into a `Table` doc. NativeFn wrapper fields are promoted to
@@ -189,11 +181,11 @@ fn collectTableFields(
                             .owner = try Helpers.persist(self, owner_name),
                             .field_name = try Helpers.persist(self, field.name),
                         });
-                        try collectFunctionParameters(self, &func_doc, field.type, false, null);
+                        try collectFunctionParameters(self, &func_doc, field.type);
                         try collectFunctionReturns(self, &func_doc, Trampoline.nativeReturnType(field.type));
                         try self.functions.put(try Helpers.persist(self, field.name), func_doc);
                     }
-                    if (recurse_nested) try recurseFunctionTypes(self, field.type, false, null);
+                    if (recurse_nested) try recurseFunctionTypes(self, field.type);
                 } else {
                     try doc.fields.append(self.arena.allocator(), .{
                         .name = try Helpers.persist(self, field.name),
@@ -249,11 +241,11 @@ fn collectObjectFields(
                     .owner = try Helpers.persist(self, owner_name),
                     .field_name = try Helpers.persist(self, field.name),
                 });
-                try collectFunctionParameters(self, &func_doc, InnerType, false, null);
+                try collectFunctionParameters(self, &func_doc, InnerType);
                 try collectFunctionReturns(self, &func_doc, Trampoline.nativeReturnType(InnerType));
                 try self.functions.put(try Helpers.persist(self, cache_key), func_doc);
             }
-            if (recurse_nested) try recurseFunctionTypes(self, InnerType, false, null);
+            if (recurse_nested) try recurseFunctionTypes(self, InnerType);
         } else {
             const opts = comptime Modifier.fieldOpts(field.type);
             try doc.fields.append(self.arena.allocator(), .{
@@ -291,7 +283,7 @@ fn collectMethods(
                     .parameters = .empty,
                     .returns = .empty,
                 };
-                try collectFunctionParameters(self, &tmp, wrapped, true, owner_type);
+                try collectFunctionParameters(self, &tmp, wrapped);
                 try collectFunctionReturns(self, &tmp, Trampoline.nativeReturnType(wrapped));
 
                 try operators_out.append(self.arena.allocator(), .{
@@ -302,7 +294,7 @@ fn collectMethods(
                 });
 
                 if (recurse_nested) {
-                    try recurseFunctionTypes(self, wrapped, true, owner_type);
+                    try recurseFunctionTypes(self, wrapped);
                 }
                 continue;
             }
@@ -317,13 +309,12 @@ fn collectMethods(
             .method_of = try Helpers.persist(self, owner_name),
         };
 
-        const is_method = !comptime std.mem.startsWith(u8, field.name, "__");
-        try collectFunctionParameters(self, &doc, wrapped, is_method, owner_type);
+        try collectFunctionParameters(self, &doc, wrapped);
         try collectFunctionReturns(self, &doc, Trampoline.nativeReturnType(wrapped));
         try self.functions.put(method_key, doc);
 
         if (recurse_nested) {
-            try recurseFunctionTypes(self, wrapped, is_method, owner_type);
+            try recurseFunctionTypes(self, wrapped);
         }
     }
 }
@@ -332,9 +323,9 @@ fn collectMethods(
 fn isKnownOperator(comptime name: []const u8) bool {
     comptime {
         for (&[_][]const u8{
-            "add",    "sub",  "mul", "div",  "mod",  "pow",  "unm",
-            "idiv",   "band", "bor", "bxor", "bnot", "shl",  "shr",
-            "concat", "len",  "lt",   "le",   "call",
+            "add",    "sub",  "mul", "div",  "mod",  "pow", "unm",
+            "idiv",   "band", "bor", "bxor", "bnot", "shl", "shr",
+            "concat", "len",  "lt",  "le",   "call",
         }) |op| {
             if (std.mem.eql(u8, name, op)) return true;
         }
@@ -343,46 +334,27 @@ fn isKnownOperator(comptime name: []const u8) bool {
 }
 
 /// Extracts parameter metadata from a native wrapper and populates the `Function` doc's parameter list. Skips `*Context`,
-/// capture pointers, and self parameters (for methods). Varargs parameters are annotated as `...: any`.
+/// capture pointers, and self parameters (when the wrapper is a method). Varargs parameters are annotated as
+/// `...: any`.
 fn collectFunctionParameters(
     self: *Generator,
     doc: *Function,
     comptime T: type,
-    comptime is_method: bool,
-    comptime owner_type: ?type,
 ) !void {
-    const ShapeT = comptime ShapeData.getShape(T);
+    const shape = comptime ShapeData.getShape(T);
     const fn_info = Trampoline.fnTypeInfo(T);
-    comptime var arg_index: usize = 0;
-    comptime var self_skipped = false;
+    const is_method = comptime ShapeData.isMethod(T);
+    const args = comptime Introspect.actualArgs(fn_info, .{
+        .has_context = fn_info.params.len > 0 and fn_info.params[0].type == *Context,
+        .is_method = is_method,
+    });
 
-    inline for (fn_info.params) |param| {
-        const param_type = param.type orelse continue;
-
-        if (comptime param_type == *Context) continue;
-        if (comptime Introspect.isCapturePointer(param_type)) continue;
-
-        if (comptime is_method and owner_type != null and !self_skipped and Helpers.isSelfParam(param_type, owner_type.?)) {
-            self_skipped = true;
-            continue;
-        }
-
-        const arg_info = Helpers.argDocInfo(ShapeT.args, arg_index);
-        arg_index += 1;
-
-        if (comptime param_type == Mapper.VarArgs) {
-            try doc.parameters.append(self.arena.allocator(), .{
-                .name = try Helpers.persist(self, "..."),
-                .description = try Helpers.persist(self, arg_info.description),
-                .type = try Helpers.persist(self, "any"),
-            });
-            continue;
-        }
-
+    inline for (args, 0..) |param_type, i| {
+        const arg_info = Helpers.argDocInfo(shape.Options.args, i);
         try doc.parameters.append(self.arena.allocator(), .{
-            .name = try Helpers.persist(self, arg_info.name),
+            .name = try Helpers.persist(self, if (param_type == Mapper.VarArgs) "..." else arg_info.name),
             .description = try Helpers.persist(self, arg_info.description),
-            .type = try Helpers.displayTypeName(self, param_type, .parameter),
+            .type = try Helpers.persist(self, try Helpers.displayTypeName(self, param_type, .parameter)),
         });
     }
 }
@@ -452,14 +424,20 @@ fn collectAliasValues(self: *Generator, doc: *Alias, comptime T: type, comptime 
 }
 
 /// Recursively collects doc entries for types referenced in a function's parameters and return Types.
-fn recurseFunctionTypes(self: *Generator, comptime T: type, comptime is_method: bool, comptime owner_type: ?type) anyerror!void {
+fn recurseFunctionTypes(self: *Generator, comptime T: type) anyerror!void {
     const fn_info = Trampoline.fnTypeInfo(T);
+    const is_method = comptime ShapeData.isMethod(T);
+    comptime var arg_index: usize = 0;
 
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
         if (comptime param_type == *Context) continue;
         if (comptime Introspect.isCapturePointer(param_type)) continue;
-        if (comptime is_method and owner_type != null and Helpers.isSelfParam(param_type, owner_type.?)) continue;
+        if (comptime is_method and arg_index == 0) {
+            arg_index += 1;
+            continue;
+        }
+        arg_index += 1;
         try maybeRecurseReferencedType(self, param_type, true);
     }
 
@@ -488,22 +466,23 @@ fn maybeRecurseReferencedType(self: *Generator, comptime T: type, comptime recur
     if (comptime Helpers.isTypedFunctionHandle(T)) return;
     if (comptime ShapeData.isFunction(T)) return;
 
-    switch (@typeInfo(T)) {
-        .@"struct", .@"union", .@"enum", .@"opaque" => {
-            const strategy = comptime ShapeData.strategyOf(T);
-            if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure or strategy == .alias or strategy == .typed_alias) {
-                try addType(self, T, true);
-            }
-        },
-        .pointer => |ptr| {
-            if (ptr.size == .slice and !Internals.isStringValueType(T)) {
-                try maybeRecurseReferencedType(self, ptr.child, recurse_nested);
-            }
-        },
-        .array => |array| {
-            try maybeRecurseReferencedType(self, array.child, recurse_nested);
-        },
-        else => {},
+    if (comptime Introspect.isContainer(T)) {
+        const strategy = comptime ShapeData.strategyOf(T);
+        if (comptime strategy == .table or strategy == .object or strategy == .ptr or strategy == .closure or strategy == .alias or strategy == .typed_alias) {
+            try addType(self, T, true);
+        }
+    } else {
+        switch (@typeInfo(T)) {
+            .pointer => |ptr| {
+                if (ptr.size == .slice and !Internals.isStringValueType(T)) {
+                    try maybeRecurseReferencedType(self, ptr.child, recurse_nested);
+                }
+            },
+            .array => |array| {
+                try maybeRecurseReferencedType(self, array.child, recurse_nested);
+            },
+            else => {},
+        }
     }
 }
 

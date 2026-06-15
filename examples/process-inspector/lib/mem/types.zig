@@ -9,7 +9,7 @@ pub const DataType = enum {
     i32,
     f32,
 
-    pub const ZUA_SHAPE = zua.Shape.StrAlias(DataType, .{}, .{
+    pub const ZUA_SHAPE = zua.Shape.StrAlias(DataType, .{
         .name = "DataType",
         .description = "i32 or f32 memory data type.",
     });
