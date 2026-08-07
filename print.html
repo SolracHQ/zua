@@ -1,0 +1,1122 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>zua HandBook</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-3180d51c.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-31b3b9ae.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">zua HandBook</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>If you have ever tried to call Zig code from Lua, you know the pattern. You push arguments onto the Lua stack, call a function, pop results back. Every new function means writing the same push and pop dance again. Change a struct and you chase down every push and pop that touches it. It turns your binding layer into write-only code: you write it once, and from that point on you dread touching it because any change means fixing all the glue code. It is like writing everything twice.</p>
+<p>zua generates that glue code at compile time. You write ordinary Zig functions and types, pass them to Lua, and zua handles the stack for you. Change a struct field, the push and pop logic updates with it. Add a new function, the encode and decode paths are generated from the type itself. No registration calls, no runtime reflection, no stack bookkeeping outside of a few specific cases.</p>
+<h2 id="what-this-book-does"><a class="header" href="#what-this-book-does">What this book does</a></h2>
+<p>The book follows three real projects from an empty Zig file to a complete Lua API. Each project lives in its own part. You pick the project closest to what you are building and follow that part. Concepts are introduced only when the project needs them, explained through the decision that made them necessary. Each chapter adds one piece and you see the whole thing grow.</p>
+<p>I wanted something like Crafting Interpreters for zua. I know I am not even near to be mentioned in the same phrase as that book, but I love how it teaches by building. That is what I am trying to do here. Follow its shadow.</p>
+<h2 id="the-three-projects"><a class="header" href="#the-three-projects">The three projects</a></h2>
+<h3 id="vecmath"><a class="header" href="#vecmath">vecmath</a></h3>
+<p>A Lua math library distributed as a shared library that Lua loads with <code>require("vecmath")</code>. You write Vec2 and Vec3 as plain Zig structs and expose them as Lua tables with methods, operator overloads, iteration, and editor stubs. This project stays almost entirely in the table strategy, mostly for didactic purposes.</p>
+<h3 id="app-config"><a class="header" href="#app-config">app-config</a></h3>
+<p>A Zig program that owns the Lua VM and runs a user script to configure a mock HTTP server. You decode config tables with optional fields and flexible address formats, store Lua callbacks as route handlers and middleware, manage memory with <code>__gc</code>, and build a stateful middleware chain using closures.</p>
+<h3 id="process-inspector"><a class="header" href="#process-inspector">process-inspector</a></h3>
+<p>A REPL-driven tool that exposes process lists, memory regions, and scan entries as typed Lua objects. You filter results, write back to memory, and get autocompletion in the shell. Lua is the frontend, Zig is the backend.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="what-we-are-building"><a class="header" href="#what-we-are-building">What we are building</a></h1>
+<p>We are building a vector library for Lua. It will be modest but expressive enough to be useful under certain contexts. I am keeping the surface small: addition, subtraction, scalar multiplication, equality, length, dot product, cross product, normalization, and linear interpolation. Plus a simple 3x3 transform system with identity, rotation, scale, and apply.</p>
+<p>Just vectors and transforms, enough to move things around in 2D and 3D space. Quaternions, matrix4x4, SVD decomposition, GPU integration are out of scope, but they would follow the same pattern. If you want to expand this into a full-featured math library, that would be incredible.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>I chose a vector library because the idea is to build something that looks like a native Lua value. Vectors let us talk about operators, methods, and plain data in a natural way without the examples feeling artificial.</p>
+</blockquote>
+<p>The API we are working toward looks like this:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+
+local a = vm.vec2(3, 4)
+local b = vm.vec2(1, 2)
+
+print(a:length())
+print(a:dot(b))
+print(a:normalize())
+
+local c = a + b
+local d = a - b
+local e = a * 2
+print(a == vm.vec2(3, 4))
+
+local mid = vm.lerp(a, b, 0.5)
+
+local u = vm.vec3(1, 0, 0)
+local v = vm.vec3(0, 1, 0)
+print(u:cross(v))
+print(u:dot(v))
+print(u:length())
+
+local w = u + v
+
+local t = vm.rotate(vm.scale(vm.identity(), 2), math.pi / 4)
+local rotated = vm.apply(t, a)
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vm.vec2(x, y)</code></td><td>Creates a 2D vector</td></tr>
+<tr><td><code>vm.vec3(x, y, z)</code></td><td>Creates a 3D vector</td></tr>
+<tr><td><code>a + b</code></td><td>Component-wise addition</td></tr>
+<tr><td><code>a - b</code></td><td>Component-wise subtraction</td></tr>
+<tr><td><code>a * n</code></td><td>Scalar multiplication</td></tr>
+<tr><td><code>a == b</code></td><td>Equality check</td></tr>
+<tr><td><code>a:length()</code></td><td>Euclidean norm</td></tr>
+<tr><td><code>a:dot(b)</code></td><td>Dot product</td></tr>
+<tr><td><code>a:cross(b)</code></td><td>Cross product (vec3 only)</td></tr>
+<tr><td><code>a:normalize()</code></td><td>Unit vector</td></tr>
+<tr><td><code>vm.lerp(a, b, t)</code></td><td>Linear interpolation</td></tr>
+<tr><td><code>vm.identity()</code></td><td>3x3 identity matrix</td></tr>
+<tr><td><code>vm.rotate(t, angle)</code></td><td>Rotation around Z</td></tr>
+<tr><td><code>vm.scale(t, factor)</code></td><td>Uniform scale</td></tr>
+<tr><td><code>vm.apply(t, v)</code></td><td>Transform a vector</td></tr>
+</tbody>
+</table>
+</div>
+<p>But before we get there we first need to set up our Zig project to produce the dylib we will run from our Lua interpreter.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>A dylib (dynamic library) is a file with executable code that is not executable by itself. The Lua interpreter can load not only Lua files but also dylibs. When someone writes <code>require("module_name")</code>, Lua first looks for a <code>module_name.lua</code> file. If it does not find one, it searches the working directory for a <code>module_name.so</code> (or <code>.dll</code> on Windows) and then searches the paths configured in <code>package.cpath</code>. You must place your library either in the working directory or in a directory listed in the path.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="setting-up-the-project"><a class="header" href="#setting-up-the-project">Setting up the project</a></h1>
+<p>The first step is to set up our project. This is a Zig library, so we need a Zig project.</p>
+<p>Create a directory for the project:</p>
+<pre><code class="language-bash">mkdir -p ~/coding/vecmath
+cd ~/coding/vecmath
+</code></pre>
+<p>You can use whatever folder you want here. You can also skip this step if you are adding zua to an existing project.</p>
+<p>Then initialize the project:</p>
+<pre><code class="language-bash">zig init --name vecmath
+</code></pre>
+<p>This generates four files: <code>build.zig</code>, <code>build.zig.zon</code>, <code>src/main.zig</code>, and <code>src/root.zig</code>.</p>
+<p>Now we need to add zua as a dependency. Run this from the project root:</p>
+<pre><code class="language-bash">zig fetch --save git+https://github.com/SolracHQ/zua
+</code></pre>
+<p>This adds zua to the <code>dependencies</code> section of <code>build.zig.zon</code>.</p>
+<p>Next we need to modify <code>build.zig</code>. By default it produces an executable, but we need a dynamic library that Lua can load with <code>require</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>If this is your first time with <code>build.zig</code>, do not worry. It looks like a big file but most of it is just comments. Zig’s build system is pretty simple once you get used to it.</p>
+</blockquote>
+<p>Remove the executable section and replace it with a library:</p>
+<pre><code class="language-zig">const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const zua_dep = b.dependency("zua", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "vecmath",
+        .linkage = .dynamic,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &amp;.{
+                .{ .name = "zua", .module = zua_dep.module("zua") },
+            },
+        }),
+    });
+    lib.root_module.link_libc = true;
+    b.installArtifact(lib);
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The <code>.name</code> field in <code>addLibrary</code> determines the output file name. On Linux this produces <code>libvecmath.so</code>. Lua expects <code>vecmath.so</code> (without the <code>lib</code> prefix). You can either rename the file after building, or add <code>;./lib?.so</code> to <code>package.cpath</code> in your test scripts.</p>
+</blockquote>
+<p>Now write the entry point in <code>src/main.zig</code>:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+const lua = zua.Bindings.lua;
+
+export fn luaopen_vecmath(L: *lua.State) c_int {
+    var threaded = std.Io.Threaded.init(std.heap.c_allocator, .{});
+    const io = threaded.io();
+
+    const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
+    var ctx = zua.Context.init(state);
+    defer ctx.deinit();
+    zua.Mapper.Encoder.push(&amp;ctx, "Hello Lua") catch return 0;
+    return 1;
+}
+</code></pre>
+<p>What is happening here? Let us go line by line.</p>
+<p>First we initialize the Zig IO interface. This is important because the zua state holds it for any IO access (file access, console access, threading, async, random). It goes alongside the allocator, a familiar pattern in Zig.</p>
+<p>Then we initialize the zua state with <code>State.libState</code>. This attaches zua to an existing Lua state instead of creating a new one. The <code>"vecmath"</code> suffix distinguishes this state from other zua-based libraries that might be loaded in the same Lua process. If the same suffix is used again, it returns the existing state instead of allocating a new one. This makes multiple <code>require</code> calls for the same library safe.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Use the name of your library as the state suffix. Since <code>require("name")</code> only loads a module once per Lua state, that name is effectively unique. But there is a deeper reason: the state holds the mapping from Zig type to metatable. If two libraries use the same type name, there will be a silent collision. One metatable gets attached to the wrong type, values get cast to the wrong type, and bad things happen :3.</p>
+</blockquote>
+<p>Now we initialize the Context. The context is required everywhere in the zua API. Do not worry about it too much for now. This is the only one you will write by hand in this project. Inside callback functions, zua provides it automatically. Pin it in your head, it will save us later. For now, it just holds the error message in case <code>push</code> fails (even if pushing a string can never really fail).</p>
+<p>Finally we return <code>1</code>, telling Lua that we pushed one return value.</p>
+<p>Now build it:</p>
+<pre><code class="language-bash">zig build
+</code></pre>
+<p>This produces <code>zig-out/lib/libvecmath.so</code>. Lua expects <code>vecmath.so</code>, so rename it:</p>
+<pre><code class="language-bash">cp zig-out/lib/libvecmath.so vecmath.so
+</code></pre>
+<p>Or if you prefer, add this to your Lua test scripts:</p>
+<pre><code class="language-lua">package.cpath = package.cpath .. ";./lib?.so"
+</code></pre>
+<p>Now test it from Lua:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+print(vm)
+</code></pre>
+<p>You should see <code>Hello Lua</code> printed to the console. We have a working dylib.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="first-functions"><a class="header" href="#first-functions">First functions</a></h1>
+<p>At this point I can imagine you thinking: “Hey, I can do this with the pure Lua C API, and it is even simpler! What is zua providing aside from boilerplate?” And you are right. Right now we have a glorified and overengineered hello world. But from this point on you will not need to call <code>push</code> again. Never. You will not even see the Lua bindings again.</p>
+<p>Lets start doing something useful. A vector library needs vectors, so lets create one.</p>
+<p>Create a file called <code>src/vec2.zig</code>:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+
+pub const Vec2 = struct {
+    x: f64,
+    y: f64,
+};
+</code></pre>
+<p>Now in <code>src/main.zig</code>, add the import and change the <code>push</code> line (the rest stays the same as setup):</p>
+<pre><code class="language-zig">const Vec2 = @import("vec2.zig").Vec2;
+
+export fn luaopen_vecmath(L: *lua.State) c_int {
+    // ... threaded io, libState, context init (same as before) ...
+    zua.Mapper.Encoder.push(&amp;ctx, Vec2{ .x = 20.0, .y = 30.0 }) catch return 0;
+    return 1;
+}
+</code></pre>
+<p>Build it and run from Lua:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+print(vm.x, vm.y)
+</code></pre>
+<p>You will see <code>20  30</code> printed.</p>
+<p>Maybe if you are not familiar with the Lua C API you will think “Thats all? You just push a struct into Lua?” But for those more familiar with the C API, notice what we did not do: create a table, push values on the stack, set keys one by one. We just pushed it and it worked. All that hard work was handled by zua at comptime.</p>
+<p>But even now, our library is still kind of useless. We only return one fixed vector. Lets improve it by adding a function to create vectors. On zua it is as simple as writing a plain Zig function:</p>
+<pre><code class="language-zig">fn vec2(x: f64, y: f64) Vec2 {
+    return .{ .x = x, .y = y };
+}
+</code></pre>
+<p>Now push the function instead of the fixed vector (again, same setup, only the push line changes):</p>
+<pre><code class="language-zig">zua.Mapper.Encoder.push(&amp;ctx, vec2) catch return 0;
+</code></pre>
+<p>Build it and try it from Lua:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+
+local a = vm.vec2(3, 4)
+local b = vm.vec2(1, 2)
+local c = vm.vec2(10, 20)
+
+print(a.x, a.y)
+print(b.x, b.y)
+print(c.x, c.y)
+</code></pre>
+<p>That is it. Create a Zig function, return a Zig struct, and use it from Lua. All the encoding and decoding happen automatically. That single <code>push</code> call creates at compile time all the optimized paths that call the required Lua API functions to encode the function and its return type and decode the function arguments. The only runtime behavior is calling the Lua API to check types and interact with the stack.</p>
+<p>We went from an overengineered hello world to a usable vector builder in less than 10 lines of new code.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="shapes-and-context"><a class="header" href="#shapes-and-context">Shapes and Context</a></h1>
+<p>If you keep playing with what we did so far, you will notice that trying to print our vectors gives something like <code>table: 0x7f8a4b2040c0</code>. That is the default behavior for all Lua tables and it is ugly.</p>
+<p>Those who come from Lua know what comes next, but since zig is not Lua I need to first explain one of the hearts of the zua library, Shapes.</p>
+<h2 id="what-is-a-shape"><a class="header" href="#what-is-a-shape">What is a Shape?</a></h2>
+<p>You might ask, with all the reason in the world. A Shape is the API that zua provides to customize how the encoder “shapes” Zig data into Lua values and how it “shapes” Lua values back into Zig data.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Shape is maybe not the best name, but it is well known that programmers suck at naming things and I am not the exception.</p>
+</blockquote>
+<p>The declaration is simple, you must define a public constant called <code>ZUA_SHAPE</code> on your type. This is required because the data must be available at comptime.</p>
+<p>There are several available shapes, each designed for a different usage and different Zig types. For now we will use the most simple one: <code>Shape.Table</code>.</p>
+<p>Modify <code>Vec2</code> like this:</p>
+<pre><code class="language-zig">pub const Vec2 = struct {
+    x: f64,
+    y: f64,
+
+    pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{}, .{});
+};
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>For those not familiar with Zig: comptime is one of Zig’s biggest strengths. It lets you execute normal Zig code at compilation time. The work happens only once, allowing you to precompute values or choose better paths for certain types, and then use them at runtime without extra effort.</p>
+</blockquote>
+<p>You will notice two empty <code>.{}</code> in the <code>Shape.Table</code> call. Each one configures different behavior for the type. For now we will leave them with the defaults.</p>
+<p>If you run the code now you will notice that nothing changed. That is because the default strategy for Zig structs is already a Lua table. But now that we have the Shape declared, we can start adding what Lua users expect, methods and metamethods.</p>
+<h2 id="adding-__tostring"><a class="header" href="#adding-__tostring">Adding <code>__tostring</code></a></h2>
+<p>Lua has operator overloading, including string conversion. When Lua needs to convert a table to a string, it looks for a <code>__tostring</code> key in the table’s metatable and calls it with the table as argument. zua provides a straightforward way to add methods and metamethods.</p>
+<p>First we need a function that returns a string representation. Lets start simple, without using the actual vector values:</p>
+<pre><code class="language-zig">fn toString(_: Vec2) []const u8 {
+    return "Vec2";
+}
+</code></pre>
+<p>As you can see it receives a copy of the vector. We ignore it with <code>_</code> because we do not use it yet. “Wait, what? That is useless!” you might think. And yes, it is useless. But what can we do? We need an allocator to format a string at runtime. Zig has <code>std.heap.c_allocator</code>, <code>std.heap.page_allocator</code>, and <code>std.heap.debug_allocator</code>, but they will leak because we never free the memory.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>For those who never touched a low level language before: when you allocate memory you are responsible for freeing it. Otherwise you accumulate unused memory until either your program dies (on a good OS) or your computer dies (on a bad OS). Especially now that RAM is so expensive.</p>
+</blockquote>
+<p>That is where the Context we talked about so long comes to rescue us.</p>
+<h2 id="context-and-the-arena"><a class="header" href="#context-and-the-arena">Context and the arena</a></h2>
+<p>Every zua function can have <code>*zua.Context</code> as its first parameter. Context is our primary tool to communicate the Zig world with the Lua world. It holds the state, but it also holds exactly what we need for our never-free problem, an arena allocator.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>An arena allocator is a special kind of allocator that does not need individual frees. You allocate as much as you want and at the end of the lifetime you free everything in a single call.</p>
+</blockquote>
+<p>The context is an ephemeral value that lives only from function call to result push on the Lua stack. That means you can return arena-allocated types, they survive long enough to be pushed to Lua, and then the arena is released safely.</p>
+<p>Context also serves another purpose, failing. Those with experience in the Lua API know <code>lua_error</code> and its longjmp. It is a beautiful mechanism for error propagation, but it has a big problem in the Zig context: it skips <code>defer</code> statements, and <code>defer</code> is the main mechanism in Zig for cleanup. zua solves this with Context. You do not call <code>lua_error</code>. You make your return type an error union and return a normal Zig error. The error message is handled the same way: just return <code>ctx.failTyped(ReturnType, "message")</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>For those who do not know what longjmp and defer are: <code>lua_error</code> uses a C mechanism called longjmp that jumps out of the current function directly to an error handler, skipping any cleanup code in between. Zig’s <code>defer</code> runs cleanup code when a scope exits normally. If a longjmp skips the scope exit, the deferred code never runs. zua avoids this by not calling <code>lua_error</code> directly inside your function. It records the error and raises it after your function returns, so <code>defer</code> works correctly.</p>
+</blockquote>
+<p>Knowing this, our <code>toString</code> becomes:</p>
+<pre><code class="language-zig">fn toString(ctx: *zua.Context, self: Vec2) ![]const u8 {
+    return std.fmt.allocPrint(ctx.arena(), "vec2({d}, {d})", .{ self.x, self.y })
+        catch ctx.failTyped([]const u8, "out of memory");
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>ctx</code> is optional. If you do not need the arena allocator, IO access, or the Lua state, you can leave it out. The <code>!</code> in the return type is not optional: allocations can fail in Zig, so you must either handle the error (return a default value) or forward it. Forwarding means Lua users using <code>pcall</code> can catch the error and decide what to do.</p>
+</blockquote>
+<p>Now we need to connect this function to the Shape. The first <code>.{}</code> in <code>Shape.Table</code> is the method map. Add <code>__tostring</code> there:</p>
+<pre><code class="language-zig">pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{
+    .__tostring = toString,
+}, .{});
+</code></pre>
+<p>Rebuild and test:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+local a = vm.vec2(3, 4)
+print(a)
+</code></pre>
+<p>Instead of <code>table: 0x...</code> you will see <code>vec2(3, 4)</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="methods-and-metamethods"><a class="header" href="#methods-and-metamethods">Methods and metamethods</a></h1>
+<p>We have a nice printed vector now, but the library is called vecmath. We have the vec, but not too much math yet. Before we add the operators, I need to explain something that might be confusing if you come from Zig and not Lua: methods and metamethods.</p>
+<h2 id="methods-in-lua"><a class="header" href="#methods-in-lua">Methods in Lua</a></h2>
+<p>Lua does not have classes. It has tables and functions. A method is just a function stored in a table. When you write:</p>
+<pre><code class="language-lua">local a = vm.vec2(3, 4)
+print(a.length(a))
+</code></pre>
+<p>That works, but it is verbose. Lua provides sugar for this, the <code>:</code> syntax. <code>a:length()</code> is exactly equivalent to <code>a.length(a)</code>. The compiler inserts the table itself as the first argument.</p>
+<p>On the Zig side, zua handles this automatically. When you declare a method in <code>ZUA_SHAPE</code>, the first parameter after <code>ctx</code> (if present) is the receiver. If your function takes <code>self: Vec2</code>, zua decodes it from the Lua call. You never see the colon syntax from Zig. You just write a function that takes the receiver as a parameter.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Technically you do not need to have the same type as the first argument of a method. You can put any function there and call it with <code>.</code> syntax instead of <code>:</code> and it will work. However, the docs generator will get confused. For standalone functions the <code>Shape.Fn</code> mechanism is preferred. It will be discussed later.</p>
+</blockquote>
+<h2 id="metamethods"><a class="header" href="#metamethods">Metamethods</a></h2>
+<p>Metamethods are methods with a special name that Lua calls automatically when you use an operator. They start with <code>__</code>. <code>__tostring</code> is one: Lua calls it when you pass the value to <code>print()</code> or <code>tostring()</code>. <code>__add</code> is another: Lua calls it when you use <code>+</code>.</p>
+<p>The difference is simple:</p>
+<ul>
+<li><strong>Methods</strong> are called explicitly with <code>:</code> syntax: <code>a:length()</code>.</li>
+<li><strong>Metamethods</strong> are called implicitly by Lua when you use an operator: <code>a + b</code>.</li>
+</ul>
+<p>Both are declared the same way in <code>ZUA_SHAPE</code>. The <code>__</code> prefix tells zua to register them in the metatable instead of the regular method list.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>For performance we do not create a new metatable for each value. Instead they are cached in the zua state and attached when the type is returned by the encoder.</p>
+</blockquote>
+<h2 id="adding-the-operators"><a class="header" href="#adding-the-operators">Adding the operators</a></h2>
+<p>Now that we know the difference, lets add <code>__add</code>, <code>__sub</code>, <code>__mul</code>, and <code>__eq</code>. The pattern is the same as <code>__tostring</code>, write a Zig function and add it to the method map.</p>
+<pre><code class="language-zig">fn add(self: Vec2, other: Vec2) Vec2 {
+    return .{ .x = self.x + other.x, .y = self.y + other.y };
+}
+
+fn sub(self: Vec2, other: Vec2) Vec2 {
+    return .{ .x = self.x - other.x, .y = self.y - other.y };
+}
+
+fn mul(self: Vec2, factor: f64) Vec2 {
+    return .{ .x = self.x * factor, .y = self.y * factor };
+}
+
+fn eq(a: Vec2, b: Vec2) bool {
+    return a.x == b.x and a.y == b.y;
+}
+</code></pre>
+<p>Notice <code>__mul</code> takes a Vec2 and an <code>f64</code>, not two Vec2s. Lua passes the right operand as the second argument regardless of its type. zua decodes it into whatever type the parameter declares, so scalar multiplication works naturally.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>If you pass the wrong argument type, zua gives you an error message like <code>arg1: expected f64, got table</code>. The “arg1” part is not very helpful. We will learn how to customize error messages later and replace those generic names with the actual parameter name.</p>
+</blockquote>
+<p><code>__eq</code> returns <code>bool</code>, not Vec2. Each metamethod has its own return contract: <code>__add</code> returns the same type, <code>__eq</code> returns a boolean, <code>__tostring</code> returns a string. zua does not enforce this. You just write the Zig function with the return type that makes sense, and zua encodes it.</p>
+<p>Now add the named methods too. Same pattern:</p>
+<pre><code class="language-zig">fn length(self: Vec2) f64 {
+    return @sqrt(self.x * self.x + self.y * self.y);
+}
+
+fn dot(a: Vec2, b: Vec2) f64 {
+    return a.x * b.x + a.y * b.y;
+}
+
+fn normalize(self: Vec2) Vec2 {
+    const len = @sqrt(self.x * self.x + self.y * self.y);
+    if (len == 0) return .{ .x = 0, .y = 0 };
+    return .{ .x = self.x / len, .y = self.y / len };
+}
+</code></pre>
+<p>These work the same way, they just use <code>:</code> syntax instead of operators.</p>
+<p>Register everything in the method map alongside <code>__tostring</code>:</p>
+<pre><code class="language-zig">pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{
+    .__tostring = toString,
+    .__add = add,
+    .__sub = sub,
+    .__mul = mul,
+    .__eq = eq,
+    .length = length,
+    .dot = dot,
+    .normalize = normalize,
+}, .{});
+</code></pre>
+<p>Now build and test:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+
+local a = vm.vec2(3, 4)
+local b = vm.vec2(1, 2)
+
+local c = a + b
+print(c)
+
+local d = a - b
+print(d)
+
+local e = a * 2
+print(e)
+
+print(a == vm.vec2(3, 4))
+print(a == b)
+</code></pre>
+<p>You will see <code>vec2(4, 6)</code>, <code>vec2(2, 2)</code>, <code>vec2(6, 8)</code>, <code>true</code>, and <code>false</code>.</p>
+<p>Methods and metamethods follow the same rule: write a plain Zig function, add it to the <code>ZUA_SHAPE</code> method map, and it works. The only difference is who calls them.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="modules"><a class="header" href="#modules">Modules</a></h1>
+<p>We have a working Vec2 with methods, operators, and nice printing. But I also promised Vec3. Vec3 is in essence Vec2 with an extra component and a cross product, so lets just create it in <code>lib/vec3.zig</code>:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+
+pub const Vec3 = struct {
+    x: f64,
+    y: f64,
+    z: f64,
+
+    pub const ZUA_SHAPE = zua.Shape.Table(Vec3, .{
+        .__add = add,
+        .__sub = sub,
+        .__mul = mul,
+        .__eq = eq,
+        .length = length,
+        .dot = dot,
+        .cross = cross,
+        .normalize = normalize,
+        .__tostring = toString,
+    }, .{});
+
+    fn add(a: Vec3, b: Vec3) Vec3 { return .{ .x = a.x + b.x, .y = a.y + b.y, .z = a.z + b.z }; }
+    fn sub(a: Vec3, b: Vec3) Vec3 { return .{ .x = a.x - b.x, .y = a.y - b.y, .z = a.z - b.z }; }
+    fn mul(self: Vec3, factor: f64) Vec3 { return .{ .x = self.x * factor, .y = self.y * factor, .z = self.z * factor }; }
+    fn eq(a: Vec3, b: Vec3) bool { return a.x == b.x and a.y == b.y and a.z == b.z; }
+    fn length(self: Vec3) f64 { return @sqrt(self.x * self.x + self.y * self.y + self.z * self.z); }
+    fn dot(a: Vec3, b: Vec3) f64 { return a.x * b.x + a.y * b.y + a.z * b.z; }
+    fn cross(a: Vec3, b: Vec3) Vec3 { return .{ .x = a.y * b.z - a.z * b.y, .y = a.z * b.x - a.x * b.z, .z = a.x * b.y - a.y * b.x }; }
+    fn normalize(self: Vec3) Vec3 {
+        const len = @sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
+        if (len == 0) return .{ .x = 0, .y = 0, .z = 0 };
+        return .{ .x = self.x / len, .y = self.y / len, .z = self.z / len };
+    }
+    fn toString(ctx: *zua.Context, self: Vec3) ![]const u8 {
+        return std.fmt.allocPrint(ctx.arena(), "vec3({d}, {d}, {d})", .{ self.x, self.y, self.z }) catch
+            ctx.failTyped([]const u8, "oom");
+    }
+};
+</code></pre>
+<p>As you can see it is basically the same, just a couple extra functions. Nothing new on the Lua side.</p>
+<p>Now lets add the constructor functions to <code>main.zig</code>:</p>
+<pre><code class="language-zig">fn vec3_fn(x: f64, y: f64, z: f64) Vec3 {
+    return .{ .x = x, .y = y, .z = z };
+}
+</code></pre>
+<p>Now lets push one of them and test. But wait, can we push both? What happens if we push vec2 and then vec3? Does the user write <code>local vec2, vec3 = require("vecmath")</code>? Or <code>local vecmath = require("vecmath")</code> and then what?</p>
+<h2 id="the-module-problem"><a class="header" href="#the-module-problem">The module problem</a></h2>
+<p>In Lua, <code>require("name")</code> expects a single return value. Lua supports multiple returns, but <code>require</code> specifically looks for the first value and ignores the rest. Pushing two functions means the second one is lost.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>I am not fully sure if this still applies to Lua 5.4, the threads I found about it are pretty old (like <a href="https://stackoverflow.com/questions/9470498/can-luas-require-function-return-multiple-results">this one</a>). But in most places and guides the recommendation is always to return only one value from <code>require</code>.</p>
+</blockquote>
+<p>So how do you expose multiple things? The answer is the same pattern Lua itself uses for modules: return a table. A table with named fields works like a namespace. <code>require</code> sees one value (the table), and the user accesses everything through it.</p>
+<p>Maybe some of you expect an intricate solution or some complex mechanism. The reality is simpler. Lua is a simple language, so we have a hammer called table and this is a nail.</p>
+<p>Lets then move everything into a new file like <code>lib/module.zig</code>:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+
+const Vec2 = @import("vec2.zig").Vec2;
+const Vec3 = @import("vec3.zig").Vec3;
+
+fn vec2_fn(x: f64, y: f64) Vec2 {
+    return .{ .x = x, .y = y };
+}
+
+fn vec3_fn(x: f64, y: f64, z: f64) Vec3 {
+    return .{ .x = x, .y = y, .z = z };
+}
+
+pub const Vecmath = struct {
+    vec2: zua.Shape.Fn(vec2_fn, .{}) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{}) = .{},
+};
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Yes, another empty <code>.{}</code>. You might be wondering what that is for and what <code>Shape.Fn</code> even is. All that will be explained in the next chapter.</p>
+</blockquote>
+<p>Vecmath is a plain struct with no <code>ZUA_SHAPE</code>. The default strategy for Zig structs is a Lua table, and zua pushes each field as a Lua callable automatically. You could add more functions here and they would just appear as new fields in the module table.</p>
+<p>Now <code>main.zig</code> becomes cleaner:</p>
+<pre><code class="language-zig">const std = @import("std");
+const zua = @import("zua");
+const lua = zua.Bindings.lua;
+
+const Vecmath = @import("lib/module.zig").Vecmath;
+
+export fn luaopen_vecmath(L: *lua.State) c_int {
+    var threaded = std.Io.Threaded.init(std.heap.c_allocator, .{});
+    const io = threaded.io();
+
+    const state = zua.State.libState(L, std.heap.c_allocator, io, "vecmath") catch return 0;
+    var ctx = zua.Context.init(state);
+    defer ctx.deinit();
+    zua.Mapper.Encoder.push(&amp;ctx, Vecmath{}) catch return 0;
+    return 1;
+}
+</code></pre>
+<p>The entry point just imports the module and pushes it. Everything else lives in <code>lib/</code>.</p>
+<h2 id="using-it-from-lua"><a class="header" href="#using-it-from-lua">Using it from Lua</a></h2>
+<p>Lets see if it works with this example:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+
+print(vm)
+
+local a = vm.vec2(3, 4)
+local b = vm.vec3(1, 2, 3)
+
+print(a:length(), b:length())
+print(b:cross(vm.vec3(0, 1, 0)))
+</code></pre>
+<p>As you can see it returns a table. The table has our two functions, and we can still use them to generate vectors with all their methods. And we still have the same single push, I promise no stack playing, and as promised that is the only push we will do in the whole project.</p>
+<h2 id="more-module-functions"><a class="header" href="#more-module-functions">More module functions</a></h2>
+<p>Before we move on there is some unfinished business. A vector math library without <code>lerp</code>, transforms, and matrix application is not much of a vector math library. None of this teaches anything new about zua, but you need it to have a complete example to follow along with.</p>
+<p>The only thing worth pointing out is <code>Transform</code>:</p>
+<pre><code class="language-zig">const Transform = [3][3]f64;
+</code></pre>
+<p>A fixed-size array maps to a Lua table with integer keys, same as a struct maps to a table with field names. Nested arrays become nested tables. <code>[3][3]f64</code> arrives in Lua as <code>{{1,0,0},{0,1,0},{0,0,1}}</code> with no extra work. Keep that in mind whenever you need to pass matrix-like data.</p>
+<p>The rest is just math. Add these to <code>lib/module.zig</code>:</p>
+<pre><code class="language-zig">fn lerp_fn(a: Vec2, b: Vec2, t: f64) Vec2 {
+    return .{ .x = a.x + (b.x - a.x) * t, .y = a.y + (b.y - a.y) * t };
+}
+
+fn identity_fn() Transform {
+    return .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } };
+}
+
+fn rotate_fn(t: Transform, angle: f64) Transform {
+    const c = @cos(angle);
+    const s = @sin(angle);
+    return .{
+        .{ t[0][0] * c + t[0][1] * s, -t[0][0] * s + t[0][1] * c, t[0][2] },
+        .{ t[1][0] * c + t[1][1] * s, -t[1][0] * s + t[1][1] * c, t[1][2] },
+        .{ t[2][0] * c + t[2][1] * s, -t[2][0] * s + t[2][1] * c, t[2][2] },
+    };
+}
+
+fn scale_fn(t: Transform, factor: f64) Transform {
+    return .{
+        .{ t[0][0] * factor, t[0][1] * factor, t[0][2] * factor },
+        .{ t[1][0] * factor, t[1][1] * factor, t[1][2] * factor },
+        .{ t[2][0] * factor, t[2][1] * factor, t[2][2] * factor },
+    };
+}
+
+fn apply_fn(t: Transform, v: Vec2) Vec2 {
+    return .{
+        .x = t[0][0] * v.x + t[0][1] * v.y + t[0][2],
+        .y = t[1][0] * v.x + t[1][1] * v.y + t[1][2],
+    };
+}
+</code></pre>
+<p>Register them in <code>Vecmath</code>:</p>
+<pre><code class="language-zig">pub const Vecmath = struct {
+    vec2: zua.Shape.Fn(vec2_fn, .{}) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{}) = .{},
+    lerp: zua.Shape.Fn(lerp_fn, .{}) = .{},
+    identity: zua.Shape.Fn(identity_fn, .{}) = .{},
+    rotate: zua.Shape.Fn(rotate_fn, .{}) = .{},
+    scale: zua.Shape.Fn(scale_fn, .{}) = .{},
+    apply: zua.Shape.Fn(apply_fn, .{}) = .{},
+};
+</code></pre>
+<p>And use them from Lua:</p>
+<pre><code class="language-lua">local mid = vm.lerp(a, b, 0.5)
+print(mid.x, mid.y)
+
+local t = vm.rotate(vm.scale(vm.identity(), 2), math.pi / 4)
+local rotated = vm.apply(t, a)
+print(rotated.x, rotated.y)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="docs"><a class="header" href="#docs">Docs</a></h1>
+<p>At this point we have a pretty decent library. But if you play with it you probably noticed an inconvenience: the LSP is not giving you any autocompletion at all. That is pretty obvious if we think about it. Lua only sees a machine code file with zero information about what your library does. We need to help Lua with that, and zua has exactly the tool for that.</p>
+<p>The Lua language server supports definition-only files, where you define the shape of your library with zero code. zua provides a module to autogenerate this documentation. But too much talk. As Linux Torvalds says, talk is cheap, show me the code:</p>
+<pre><code class="language-zig">fn docs_fn(ctx: *zua.Context) ![]const u8 {
+    return zua.Docs.generateModule(ctx.arena(), Vecmath{}, "vecmath");
+}
+</code></pre>
+<p>Add it to <code>lib/module.zig</code> and register it in the Vecmath struct:</p>
+<pre><code class="language-zig">pub const Vecmath = struct {
+    vec2: zua.Shape.Fn(vec2_fn, .{}) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{}) = .{},
+    docs: zua.Shape.Fn(docs_fn, .{}) = .{},
+};
+</code></pre>
+<p>Now call it from Lua:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+local stubs = vm.docs()
+print(stubs)
+</code></pre>
+<p>The output looks like this:</p>
+<pre><code class="language-lua">---@meta vecmath
+
+---@class Vec2
+---@operator add(Vec2): Vec2
+---@operator sub(Vec2): Vec2
+---@operator mul(number): Vec2
+---@field x number
+---@field y number
+local Vec2 = {}
+
+---@class Vec3
+---@operator add(Vec3): Vec3
+---@operator sub(Vec3): Vec3
+---@operator mul(number): Vec3
+---@field x number
+---@field y number
+---@field z number
+local Vec3 = {}
+
+---@class Vecmath
+local Vecmath = {}
+
+---@return Vec2
+function Vec2:normalize() end
+
+---@return Vec3
+function Vec3:normalize() end
+
+---@return number
+function Vec2:length() end
+
+---@param arg1 number
+---@param arg2 number
+---@return Vec2
+function Vecmath.vec2(arg1, arg2) end
+
+---@param arg1 number
+---@param arg2 number
+---@param arg3 number
+---@return Vec3
+function Vecmath.vec3(arg1, arg2, arg3) end
+
+---@return string
+function Vecmath.docs() end
+
+return Vecmath
+</code></pre>
+<p>Save those stubs to a file and open it in your editor. The autocompletion works. But look closely at the function signatures: <code>arg1</code>, <code>arg2</code>, <code>arg3</code>. Not exactly helpful. And the classes have no descriptions. That is all the information zua had to work with, because Zig doc comments do not survive to comptime. The empty <code>.{}</code> arguments we have been leaving on every Shape call are where that information goes.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><code>---@meta vecmath</code> means the file is definitions only and applies to <code>require("vecmath")</code>. Class declarations are Lua’s way of defining a table shape with its fields, operators, and methods. <code>return Vecmath</code> at the end is a contract saying whatever <code>require</code> returns matches this class.</p>
+</blockquote>
+<p>Now write a script to save the stubs to a file:</p>
+<pre><code class="language-lua">local vm = require("vecmath")
+local stubs = vm.docs()
+local file = io.open("vecmath.d.lua", "w")
+file:write(stubs)
+file:close()
+print("stubs written to vecmath.d.lua (" .. #stubs .. " bytes)")
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>If your editor does not automatically recognize the <code>.d.lua</code> file, you must configure your <code>.luarc.json</code>. Unfortunately that is out of the scope of the book, but the information is widely spread on the internet.</p>
+</blockquote>
+<h2 id="shape-options"><a class="header" href="#shape-options">Shape options</a></h2>
+<p>Every <code>.{}</code> we left empty along the way was a small debt. Time to pay it back.</p>
+<p>Lets start fixing the function argx issue first, since it is the more confusing piece. Everything else has a name, only args has default ones.</p>
+<p>Take the <code>Shape.Fn</code> on vec2_fn in module.zig:</p>
+<pre><code class="language-zig">zua.Shape.Fn(vec2_fn, .{})
+</code></pre>
+<p>That empty <code>.{}</code> can take a description and a list of arguments:</p>
+<pre><code class="language-zig">zua.Shape.Fn(vec2_fn, .{
+    .description = "Construct a new Vec2 value.",
+    .args = &amp;.{
+        .{ .name = "x", .description = "Horizontal component." },
+        .{ .name = "y", .description = "Vertical component." },
+    },
+})
+</code></pre>
+<p>Now the stub generator writes <code>---@param x number # Horizontal component.</code> instead of <code>---@param arg1 number</code>.</p>
+<p>The <code>Table</code> options work the same way. The second <code>.{}</code> we have been leaving empty:</p>
+<pre><code class="language-zig">zua.Shape.Table(Vec2, .{...}, .{
+    .name = "Vec2",
+    .description = "A 2D vector with component-wise operations.",
+    .field_descriptions = .{
+        .x = "Horizontal component.",
+        .y = "Vertical component.",
+    },
+})
+</code></pre>
+<p>The <code>.name</code> sets the class name in stubs. Remember the note in the methods chapter about <code>arg1: expected f64, got table</code> being unhelpful? With <code>.args</code> on the functions, that error turns into <code>x: expected f64, got string</code>.</p>
+<p>One more thing worth knowing: if you rename <code>x</code> to <code>x_coord</code> in Vec2 and forget to update <code>field_descriptions</code>, it breaks at compile time. Docs cannot go stale without you knowing about it.</p>
+<p>Now update Vecmath with all this. Add <code>ZUA_SHAPE</code> back with the module name, and wrap the functions with <code>Fn</code> options:</p>
+<pre><code class="language-zig">const Transform = [3][3]f64;
+
+const Vecmath = struct {
+    pub const ZUA_SHAPE = zua.Shape.Table(Vecmath, .{}, .{
+        .name = "vecmath",
+    });
+
+    vec2: zua.Shape.Fn(vec2_fn, .{
+        .description = "Construct a new Vec2 value.",
+        .args = &amp;.{
+            .{ .name = "x", .description = "Horizontal component." },
+            .{ .name = "y", .description = "Vertical component." },
+        },
+    }) = .{},
+    vec3: zua.Shape.Fn(vec3_fn, .{
+        .description = "Construct a new Vec3 value.",
+        .args = &amp;.{
+            .{ .name = "x", .description = "X component." },
+            .{ .name = "y", .description = "Y component." },
+            .{ .name = "z", .description = "Z component." },
+        },
+    }) = .{},
+    lerp: zua.Shape.Fn(lerp_fn, .{
+        .description = "Linearly interpolate between two Vec2 values.",
+        .args = &amp;.{
+            .{ .name = "a", .description = "Starting vector." },
+            .{ .name = "b", .description = "Ending vector." },
+            .{ .name = "t", .description = "Interpolation factor (0.0 to 1.0)." },
+        },
+    }) = .{},
+    identity: zua.Shape.Fn(identity_fn, .{
+        .description = "Create an identity 3x3 transform matrix.",
+    }) = .{},
+    rotate: zua.Shape.Fn(rotate_fn, .{
+        .description = "Rotate a transform matrix around the Z axis.",
+        .args = &amp;.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "angle", .description = "Rotation angle in radians." },
+        },
+    }) = .{},
+    scale: zua.Shape.Fn(scale_fn, .{
+        .description = "Uniformly scale a transform matrix.",
+        .args = &amp;.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "factor", .description = "Scale factor." },
+        },
+    }) = .{},
+    apply: zua.Shape.Fn(apply_fn, .{
+        .description = "Apply a transform to a Vec2.",
+        .args = &amp;.{
+            .{ .name = "t", .description = "Transform matrix." },
+            .{ .name = "v", .description = "Vector to transform." },
+        },
+    }) = .{},
+    docs: zua.Shape.Fn(docs_fn, .{
+        .description = "Generate editor stubs for the vecmath module.",
+    }) = .{},
+};
+</code></pre>
+<p>Rebuild and run the docs script again and vec2 looks like this:</p>
+<pre><code class="language-lua">---@class Vec2
+---@field x number # Horizontal component.
+---@field y number # Vertical component.
+-- A 2D vector with component-wise operations.
+local Vec2 = {}
+
+-- Construct a new Vec2 value.
+---@param x number # Horizontal component.
+---@param y number # Vertical component.
+---@return Vec2
+function vecmath.vec2(x, y) end
+</code></pre>
+<p>Now we have the module level documentation solved. But if you look deeper, we are not done yet. The vector methods still have <code>arg1</code> and so on.</p>
+<h2 id="how-to-document-methods"><a class="header" href="#how-to-document-methods">How to document methods</a></h2>
+<p>Documenting methods works the same way as module functions. First add the import at the top of your Zig file:</p>
+<pre><code class="language-zig">const Modifier = zua.Shape.Modifier;
+</code></pre>
+<p>Then use bare functions for methods that need no documentation, and <code>Modifier.Method</code> when you need description or args:</p>
+<pre><code class="language-zig">.__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+.dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &amp;.{.{ .name = "b" }} }),
+</code></pre>
+<p>For metamethods only description is needed, Lua already knows their arguments. For regular methods you add <code>.args</code> to name the parameters.</p>
+<p>The disadvantage of this approach is that the shape becomes dense and hard to read, especially when you have several methods. Pulling the methods out into their own constant keeps it cleaner:</p>
+<pre><code class="language-zig">const methods = .{
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &amp;.{.{ .name = "b" }} }),
+    ...
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
+</code></pre>
+<p>This separates method documentation from the shape, keeping a cleaner structure.</p>
+<p>Or if you want each method to carry its own documentation, you can define it as a const:</p>
+<pre><code class="language-zig">fn addImpl(a: Vec2, b: Vec2) Vec2 { ... }
+const add = Modifier.Method(addImpl, .{ .description = "Component-wise addition." });
+</code></pre>
+<p>The method map stays clean with just <code>.__add = add</code> without docs noise. I prefer the extracted constant approach, keeps <code>ZUA_SHAPE</code> short and the methods section is its own block. But the inline form works fine if you do not want the extra indirection.</p>
+<p>Using my preference the Vec2 and Vec3 methods constants will look something like this.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>It will vary a lot depending on what you prefer. The content of the docs will be the same but the way you write it will vary.</p>
+</blockquote>
+<pre><code class="language-zig">const methods = .{
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .__sub = Modifier.Method(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = Modifier.Method(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = Modifier.Method(eq, .{ .description = "Equality comparison." }),
+    .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &amp;.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = Modifier.Method(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__tostring = toString,
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec2, methods, .{ ... });
+
+// ... rest of the struct stays the same ...
+
+const methods = .{
+    .__add = Modifier.Method(add, .{ .description = "Component-wise addition." }),
+    .__sub = Modifier.Method(sub, .{ .description = "Component-wise subtraction." }),
+    .__mul = Modifier.Method(mul, .{ .description = "Scalar multiplication." }),
+    .__eq = Modifier.Method(eq, .{ .description = "Equality comparison." }),
+    .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+    .dot = Modifier.Method(dot, .{ .description = "Dot product.", .args = &amp;.{.{ .name = "b", .description = "Right vector." }} }),
+    .cross = Modifier.Method(cross, .{ .description = "Cross product.", .args = &amp;.{.{ .name = "b", .description = "Right vector." }} }),
+    .normalize = Modifier.Method(normalize, .{ .description = "Unit vector, returns zeros if length is zero." }),
+    .__tostring = toString,
+};
+
+pub const ZUA_SHAPE = zua.Shape.Table(Vec3, methods, .{ ... });
+</code></pre>
+<p>Run the docs script again and the stubs now include descriptions for methods:</p>
+<pre><code class="language-lua">-- Dot product.
+---@param b Vec2 # Right vector.
+---@return number
+function Vec2:dot(b) end
+
+-- Euclidean norm.
+---@return number
+function Vec2:length() end
+
+-- Unit vector, returns zeros if length is zero.
+---@return Vec2
+function Vec2:normalize() end
+</code></pre>
+<p>Now we have a complete generated docs. I know it is a bit verbose, but it looks way better and believe me your Lua users will thank you. It will also serve you since now you will be able to test without needing to read the Zig code, and even better it will be in sync with your code. If you rename a field it will tell you are trying to document something that does not exist. And if you do not need docs, just leave <code>.{}</code>, nobody will complain.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="objects"><a class="header" href="#objects">Objects</a></h1>
+<p>At this point you have a complete vector library. You can create vectors, operate on them, lerp between them, and apply transforms. Everything works. But if you stop and think about it, is this really faster than writing the same thing in pure Lua?</p>
+<p>Honestly, not by much. Every operation has to decode the input tables into Zig structs, do the math, then encode the result back into a new Lua table. That is a lot of table creation and field hashing just to add two vectors. The only real gain is the lexing, parsing, and compiling time for the math itself, but the overhead of pushing data back and forth eats most of that advantage.</p>
+<p>To get real performance we need to skip the table encoding and decoding entirely. That is what Objects are for.</p>
+<h2 id="what-is-an-object"><a class="header" href="#what-is-an-object">What is an Object</a></h2>
+<p>An Object is zua’s name for what Lua calls heavy userdata. The rename felt necessary because “userdata” is not exactly descriptive from a user’s perspective, but under the hood they are the same thing.</p>
+<p>An Object is a Zig value allocated directly in Lua memory. It lives as long as something in Lua references it. When Lua’s garbage collector determines it is no longer reachable, it runs <code>__gc</code> and frees the memory. The data is opaque to Lua, which sounds like a disadvantage, but it plays in our favor. Instead of fields scattered as individual Lua table entries with hashing and reference counting overhead, the entire struct sits in a packed, cache-friendly block of memory.</p>
+<h2 id="changing-table-to-object"><a class="header" href="#changing-table-to-object">Changing Table to Object</a></h2>
+<p>The change is almost insultingly simple. Take Vec2:</p>
+<pre><code class="language-zig">pub const ZUA_SHAPE = zua.Shape.Table(Vec2, .{ ... }, .{
+    .name = "Vec2",
+    .description = "A 2D vector with component-wise operations.",
+    .field_descriptions = .{ .x = "X component.", .y = "Y component." },
+});
+</code></pre>
+<p>Change <code>Table</code> to <code>Object</code> and drop <code>field_descriptions</code>, Object options only take <code>name</code> and <code>description</code>:</p>
+<pre><code class="language-zig">pub const ZUA_SHAPE = zua.Shape.Object(Vec2, .{ ... }, .{
+    .name = "Vec2",
+    .description = "A 2D vector with component-wise operations.",
+});
+</code></pre>
+<p>Same for Vec3. Build and test it. Methods and operators still work. But <code>a.x</code> and <code>a.y</code> will not. The struct is now opaque memory from Lua’s perspective, so there are no fields to look up.</p>
+<h2 id="making-fields-accessible"><a class="header" href="#making-fields-accessible">Making fields accessible</a></h2>
+<p>zua provides <code>Modifier.Field</code> to generate <code>__index</code> and <code>__newindex</code> entries for specific fields automatically. Change the field declarations from plain types:</p>
+<pre><code class="language-zig">x: f64,
+y: f64,
+</code></pre>
+<p>to field modifiers:</p>
+<pre><code class="language-zig">x: zua.Shape.Modifier.Field(f64, .{ .description = "X component." }),
+y: zua.Shape.Modifier.Field(f64, .{ .description = "Y component." }),
+</code></pre>
+<p>Now <code>a.x</code> and <code>a.y = 5</code> work again. <code>Modifier.Field(f64, ...)</code> wraps the <code>f64</code> in a thin struct with a single <code>.value</code> field. Your Zig code reads and writes through <code>.value</code>. Lua reads and writes through the generated <code>__index</code> and <code>__newindex</code>. From either side it is the same <code>f64</code> sitting in memory, there is no conversion.</p>
+<h2 id="updating-the-method-signatures"><a class="header" href="#updating-the-method-signatures">Updating the method signatures</a></h2>
+<p>With <code>Table</code> strategy, methods received <code>Vec2</code> by value because zua decoded the table into a fresh struct copy on every call. With <code>Object</code> strategy, the data already lives in Lua memory. zua can hand you a pointer directly.</p>
+<p>Start with <code>Vec2</code> by value and it works:</p>
+<pre><code class="language-zig">fn add(self: Vec2, other: Vec2) Vec2 {
+    return .{ .x = .new(self.x.value + other.x.value), .y = .new(self.y.value + other.y.value) };
+}
+</code></pre>
+<p>But each call copies the entire struct out of the userdata and into a local. For a two-field struct that is cheap, but it adds up in a hot loop. Switch to a pointer and the copy disappears:</p>
+<pre><code class="language-zig">fn add(self: *Vec2, other: *Vec2) Vec2 {
+    return .{ .x = .new(self.x.value + other.x.value), .y = .new(self.y.value + other.y.value) };
+}
+</code></pre>
+<p>Now <code>self</code> and <code>other</code> point directly into the Lua userdata memory. No copy. But there is a problem. A <code>*Vec2</code> lets you write through the pointer, and none of these functions actually modify their inputs. Leaving the pointer mutable means you might accidentally mutate a vector that Lua still holds a reference to, which produces the kind of bug that is very hard to track down.</p>
+<p>Mark them <code>*const</code> and the compiler closes that door entirely:</p>
+<pre><code class="language-zig">fn add(self: *const Vec2, other: *const Vec2) Vec2 {
+    return .{ .x = .new(self.x.value + other.x.value), .y = .new(self.y.value + other.y.value) };
+}
+</code></pre>
+<p><code>*const</code> tells the compiler these pointers will never be written through. Beyond preventing the accidental mutation, it also allows the compiler to add optimizations it could not apply to a mutable pointer, since it now knows the memory behind them cannot change during the call.</p>
+<p>Apply the same pattern to all Vec2 and Vec3 methods, and to the module-level functions that take vectors:</p>
+<pre><code class="language-zig">fn lerp_fn(a: *const Vec2, b: *const Vec2, t: f64) Vec2 {
+    return .{
+        .x = .new(a.x.value + (b.x.value - a.x.value) * t),
+        .y = .new(a.y.value + (b.y.value - a.y.value) * t),
+    };
+}
+
+fn apply_fn(t: Transform, v: *const Vec2) Vec2 {
+    return .{
+        .x = .new(t[0][0] * v.x.value + t[0][1] * v.y.value + t[0][2]),
+        .y = .new(t[1][0] * v.x.value + t[1][1] * v.y.value + t[1][2]),
+    };
+}
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>If you want a field the Lua user can read but not write, use <code>Modifier.Value</code> instead of <code>Modifier.Field</code>. Only <code>__index</code> is generated, and any write attempt from Lua will error with a clear message.</p>
+</blockquote>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<p>Now the library is genuinely faster than a pure Lua version. The critical path, vector addition, dot product, lerp, transforms, operates directly on packed struct memory without creating or destroying any Lua tables. The only allocation per operation is the new userdata returned as the result, and that is managed by Lua’s own allocator.</p>
+<p>The general rule is: the more data you push through the Lua table boundary, the slower your library becomes. Move critical data and heavy operations to Zig. Expose only what the Lua user needs to read or write through <code>Field</code> and <code>Value</code>. Every chunk of work that stays on the Zig side is a chunk that does not pay the encoding and decoding tax.</p>
+<p>Thanks for coming this far. Have a great time using zua :3</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-59865d3c.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
