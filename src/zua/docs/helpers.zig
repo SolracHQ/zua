@@ -1,8 +1,7 @@
 //! Doc-specific helper and query functions.
 //!
-//! This module provides comptime introspection helpers used by the collection
-//! phase to normalize types, extract metadata, and build display strings for
-//! Lua annotations.
+//! This module provides comptime introspection helpers used by the collection phase to normalize types, extract metadata,
+//! and build display strings for Lua annotations.
 
 const std = @import("std");
 const Generator = @import("generator.zig").Generator;
@@ -26,11 +25,9 @@ const Introspect = @import("../introspect.zig");
 
 /// Produces a human-readable Lua type string for a Zig type.
 ///
-/// Handles optionals (`?T` -> `T?`), string types (`string`), primitive
-/// mappings (`bool` -> `boolean`, `i32` -> `integer`, `f64` -> `number`),
-/// arrays and slices (`T[]`), pointer-to-struct (uses `Meta.nameOf`),
-/// typed function handles (`fun(...)`), and user-defined types (uses
-/// `Meta.nameOf`).
+/// Handles optionals (`?T` -> `T?`), string types (`string`), primitive mappings (`bool` -> `boolean`, `i32` -> `integer`,
+/// `f64` -> `number`), arrays and slices (`T[]`), pointer-to-struct (uses `Meta.nameOf`), typed function handles
+/// (`fun(...)`), and user-defined types (uses `Meta.nameOf`).
 ///
 /// Arguments:
 /// - self: The docs generator (for arena allocation).
@@ -69,6 +66,9 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
     }
     if (comptime Internals.isStringValueType(Normalized)) return persist(self, "string");
 
+    if (comptime Introspect.isContainer(Normalized)) {
+        return try persist(self, ShapeData.nameOf(Normalized));
+    }
     return switch (@typeInfo(Normalized)) {
         .bool => persist(self, "boolean"),
         .int, .comptime_int => persist(self, "integer"),
@@ -94,20 +94,18 @@ pub fn displayTypeName(self: *Generator, comptime T: type, comptime ctx: Display
 
             if (ptr.size == .one) {
                 const child = ptr.child;
-                if (comptime @typeInfo(child) == .@"struct" or @typeInfo(child) == .@"union" or @typeInfo(child) == .@"enum" or @typeInfo(child) == .@"opaque") {
+                if (comptime Introspect.isContainer(child)) {
                     break :blk try persist(self, ShapeData.nameOf(child));
                 }
             }
 
             break :blk try persist(self, @typeName(Normalized));
         },
-        .@"struct", .@"union", .@"enum", .@"opaque" => persist(self, ShapeData.nameOf(Normalized)),
         else => persist(self, @typeName(Normalized)),
     };
 }
 
-/// Renders the signature of a typed function handle (`Args` + `Result` struct)
-/// as a Lua `fun(...) : ...` string.
+/// Renders the signature of a typed function handle (`Args` + `Result` struct) as a Lua `fun(...) : ...` string.
 ///
 /// Arguments:
 /// - self: The docs generator (for arena allocation).
@@ -148,8 +146,7 @@ pub fn functionHandleSignature(self: *Generator, comptime T: type) ![]const u8 {
 
 /// Duplicates `text` into the generator's arena.
 ///
-/// This is the primary persistence mechanism: all doc strings live in the
-/// arena and are freed together in `deinit`.
+/// This is the primary persistence mechanism: all doc strings live in the arena and are freed together in `deinit`.
 ///
 /// Arguments:
 /// - self: The docs generator (provides the arena).
@@ -163,13 +160,12 @@ pub fn persist(self: *Generator, text: []const u8) ![]const u8 {
 
 /// Returns the description string from a `Shape.Fn` or closure wrapper type.
 pub fn nativeFnDesc(comptime T: type) []const u8 {
-    const S = comptime ShapeData.getShape(T);
-    return S.description;
+    const shape = comptime ShapeData.getShape(T);
+    return shape.Options.description;
 }
 
-/// Wraps a Zig function or native function type into a documentation-ready
-/// callable type. Plain Zig functions get wrapped with `Shape.Fn`; native
-/// function types pass through as-is.
+/// Wraps a Zig function or native function type into a documentation-ready callable type. Plain Zig functions get wrapped
+/// with `Shape.Fn`; native function types pass through as-is.
 pub fn wrapMethod(comptime method_value: anytype) type {
     const T = @TypeOf(method_value);
     if (comptime @typeInfo(T) == .@"fn") return Shape.Fn(method_value, .{});
@@ -197,8 +193,8 @@ pub fn shouldEmitAlias(comptime T: type) bool {
     };
 }
 
-/// Normalizes a type for reference comparison by unwrapping optionals,
-/// transparent wrappers, and single-element pointers to named Types.
+/// Normalizes a type for reference comparison by unwrapping optionals, transparent wrappers, and single-element pointers to
+/// named Types.
 ///
 /// Arguments:
 /// - T: The type to normalize.
@@ -211,18 +207,14 @@ pub fn normalizeReferencedType(comptime T: type) type {
 
     return switch (@typeInfo(T)) {
         .pointer => |ptr| if (ptr.size == .one)
-            switch (@typeInfo(ptr.child)) {
-                .@"struct", .@"union", .@"enum", .@"opaque" => ptr.child,
-                else => T,
-            }
+            if (comptime Introspect.getContainer(ptr.child)) |container| container else T
         else
             T,
         else => T,
     };
 }
 
-/// Unwraps transparent typed wrappers (userdata wrapper or table view)
-/// to reveal the underlying Zua type.
+/// Unwraps transparent typed wrappers (userdata wrapper or table view) to reveal the underlying Zua type.
 ///
 /// Arguments:
 /// - T: The wrapper type.
@@ -235,8 +227,7 @@ pub fn unwrapTransparentTypedWrapper(comptime T: type) type {
     return T;
 }
 
-/// Returns `true` if `T` is a transparent typed wrapper (userdata or table
-/// view).
+/// Returns `true` if `T` is a transparent typed wrapper (userdata or table view).
 ///
 /// Arguments:
 /// - T: The type to check.
@@ -247,8 +238,7 @@ pub fn isTransparentTypedWrapper(comptime T: type) bool {
     return Marker.any(T, &.{ .table_view, .userdata_wrapper });
 }
 
-/// Returns `true` if `T` is a typed function handle (has `Args`, `Result`, and
-/// `function` fields).
+/// Returns `true` if `T` is a typed function handle (has `Args`, `Result`, and `function` fields).
 ///
 /// Arguments:
 /// - T: The type to check.
@@ -259,11 +249,9 @@ pub fn isTypedFunctionHandle(comptime T: type) bool {
     return @typeInfo(T) == .@"struct" and @hasDecl(T, "Args") and @hasDecl(T, "Result") and @hasField(T, "function");
 }
 
-/// Returns `true` if `T` is a type that should be skipped during doc
-/// collection.
+/// Returns `true` if `T` is a type that should be skipped during doc collection.
 ///
-/// Ignored types are: `*Context`, `Context`, `Mapper.Primitive`, and
-/// `Handlers.Handle`.
+/// Ignored types are: `*Context`, `Context`, `Mapper.Primitive`, and `Handlers.Handle`.
 ///
 /// Arguments:
 /// - T: The type to check.
@@ -275,8 +263,7 @@ pub fn isIgnoredDocType(comptime T: type) bool {
     return T == *Context or T == Context or T == Mapper.Primitive;
 }
 
-/// Looks up a field description from a `ZUA_SHAPE` attribute descriptions
-/// struct.
+/// Looks up a field description from a `ZUA_SHAPE` attribute descriptions struct.
 ///
 /// Arguments:
 /// - descriptions: The `ZUA_SHAPE` attribute description struct.
@@ -319,8 +306,8 @@ pub fn argDocInfo(args: []const ArgInfo, comptime index: usize) struct { name: [
 
 /// Checks whether a parameter type is the method's self type.
 ///
-/// Matches exact equality, `RawTable`/`RawUserdata`, transparent wrappers
-/// pointing to the owner type, and single-element pointers to the owner type.
+/// Matches exact equality, `RawTable`/`RawUserdata`, transparent wrappers pointing to the owner type, and single-element
+/// pointers to the owner type.
 ///
 /// Arguments:
 /// - ParamType: The parameter type to check.
@@ -342,10 +329,8 @@ pub fn isSelfParam(comptime ParamType: type, comptime OwnerType: type) bool {
 
 /// Generates an inline alias shape string from a struct type.
 ///
-/// Produces `"{ field: type, field2: type?, ... }"` suitable for use as
-/// an AliasValue type in a docs hook. Each field's type is rendered using
-/// `displayTypeName`, so optionals become `type?`, plain strings become
-/// `string`, etc.
+/// Produces `"{ field: type, field2: type?, ... }"` suitable for use as an AliasValue type in a docs hook. Each field's
+/// type is rendered using `displayTypeName`, so optionals become `type?`, plain strings become `string`, etc.
 ///
 /// Arguments:
 /// - self: The docs generator (for arena allocation).
@@ -369,8 +354,8 @@ pub fn structToAliasShape(self: *Generator, comptime T: type) ![]const u8 {
     return out.toOwnedSlice(self.arena.allocator());
 }
 
-/// Renders a function type (plain Zig fn or ShapeFn) as `fun(arg0: T, ...): R`,
-/// skipping Context and capture pointer parameters.
+/// Renders a function type (plain Zig fn or ShapeFn) as `fun(arg0: T, ...): R`, skipping Context and capture pointer
+/// parameters.
 fn fnTypeToStub(self: *Generator, comptime T: type) ![]const u8 {
     const fn_info: std.builtin.Type.Fn = if (comptime @typeInfo(T) == .@"fn")
         @typeInfo(T).@"fn"
@@ -383,13 +368,17 @@ fn fnTypeToStub(self: *Generator, comptime T: type) ![]const u8 {
 
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "fun(");
+    const is_method = comptime @typeInfo(T) != .@"fn" and ShapeData.isMethod(T);
     comptime var arg_index: usize = 0;
     inline for (fn_info.params) |param| {
         const param_type = param.type orelse continue;
         if (comptime param_type == *Context) continue;
         if (comptime Introspect.isCapturePointer(param_type)) continue;
+        if (comptime is_method and arg_index == 0) {
+            continue;
+        }
         if (arg_index > 0) try out.appendSlice(self.arena.allocator(), ", ");
-        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index});
+        const arg_name = try std.fmt.allocPrint(self.arena.allocator(), "arg{d}", .{arg_index + 1});
         const type_str = try displayTypeName(self, param_type, .parameter);
         try Emit.appendFmt(self.arena.allocator(), &out, "{s}: {s}", .{ arg_name, type_str });
         arg_index += 1;

@@ -1,6 +1,5 @@
-//! Shared helpers used by both the encoder and decoder pipelines.
-//! These are not part of the public API. You can use them if you need
-//! to, but they may change without notice.
+//! Shared helpers used by both the encoder and decoder pipelines. These are not part of the public API. You can use them if
+//! you need to, but they may change without notice.
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
@@ -16,24 +15,23 @@ pub fn optionalChild(comptime T: type) type {
     return @typeInfo(T).optional.child;
 }
 
-/// Reads a Lua integer from the stack at `index` and casts it to `T`.
-/// Fails if the value is not an integer or is out of range for T.
+/// Reads a Lua integer from the stack at `index` and casts it to `T`. Fails if the value is not an integer or is out of
+/// range for T.
 pub fn parseInteger(comptime T: type, ctx: *Context, index: lua.StackIndex) !T {
-    if (!lua.isInteger(ctx.state.luaState, index)) try ctx.fail("expected integer");
-    const value = lua.toInteger(ctx.state.luaState, index) orelse return ctx.failTyped(T, "expected integer");
-    return std.math.cast(T, value) orelse return ctx.failTyped(T, "integer out of range");
+    if (!lua.isInteger(ctx.state.luaState, index)) try ctx.fail(void, error.WrongType, "expected integer", .{});
+    const value = lua.toInteger(ctx.state.luaState, index) orelse return ctx.fail(T, error.NullValue, "expected integer", .{});
+    return std.math.cast(T, value) orelse return ctx.fail(T, error.OutOfRange, "integer out of range", .{});
 }
 
-/// Reads a Lua number from the stack at `index` and casts it to `T`.
-/// Fails if the value is not a number.
+/// Reads a Lua number from the stack at `index` and casts it to `T`. Fails if the value is not a number.
 pub fn parseFloat(comptime T: type, ctx: *Context, index: lua.StackIndex) !T {
-    if (!lua.isNumber(ctx.state.luaState, index)) try ctx.fail("expected number");
-    const value = lua.toNumber(ctx.state.luaState, index) orelse return ctx.failTyped(T, "expected number");
+    if (!lua.isNumber(ctx.state.luaState, index)) try ctx.fail(void, error.WrongType, "expected number", .{});
+    const value = lua.toNumber(ctx.state.luaState, index) orelse return ctx.fail(T, error.NullValue, "expected number", .{});
     return @floatCast(value);
 }
 
-/// Returns true when T is a Zig string type: `[]const u8`, `[:0]const u8`,
-/// or a pointer to a fixed-size byte array (`*const [N]u8`).
+/// Returns true when T is a Zig string type: `[]const u8`, `[:0]const u8`, or a pointer to a fixed-size byte array (`*const
+/// [N]u8`).
 pub fn isStringValueType(comptime T: type) bool {
     if (T == []const u8 or T == [:0]const u8) return true;
     return switch (@typeInfo(T)) {

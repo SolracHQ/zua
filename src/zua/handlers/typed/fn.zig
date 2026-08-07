@@ -1,8 +1,7 @@
 //! Typed function wrappers for raw Lua functions.
 //!
-//! `zua.Fn(ins, outs)` provides a statically typed wrapper around a raw Lua
-//! `Function` handle. It can be stored in Zig values and passed through the Lua
-//! API while preserving the expected argument and return shapes.
+//! `zua.Fn(ins, outs)` provides a statically typed wrapper around a raw Lua `Function` handle. It can be stored in Zig
+//! values and passed through the Lua API while preserving the expected argument and return shapes.
 
 const std = @import("std");
 const Function = @import("../any/function.zig");
@@ -15,7 +14,9 @@ const Trampoline = @import("../../shape/trampoline.zig");
 
 /// Typed wrapper over a raw Lua `Function` handle.
 ///
-/// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while preserving the expected argument and return shapes. The wrapper implements `ZUA_SHAPE` so it can be encoded to and decoded from Lua values using the normal metadata pipeline.
+/// Provides a statically typed callback wrapper that can be stored on Zig values and passed through the Lua API while
+/// preserving the expected argument and return shapes. The wrapper implements `ZUA_SHAPE` so it can be encoded to and
+/// decoded from Lua values using the normal metadata pipeline.
 pub fn Fn(comptime ins: anytype, comptime outs: anytype) type {
     return struct {
         /// Metadata used to encode and decode this typed function wrapper.
@@ -41,7 +42,7 @@ pub fn Fn(comptime ins: anytype, comptime outs: anytype) type {
         fn decode(ctx: *Context, prim: Mapper.Primitive) !?@This() {
             return switch (prim) {
                 .function => |f| @This().from(f),
-                else => ctx.failTyped(?@This(), "expected function"),
+                else => ctx.fail(?@This(), error.WrongType, "expected function", .{}),
             };
         }
 

@@ -1,7 +1,7 @@
 //! Completion helper wrappers for the Zua REPL.
 //!
-//! This module exposes a small completion API for REPL clients while hiding
-//! the raw `isocline` callback state and C interop details.
+//! This module exposes a small completion API for REPL clients while hiding the raw `isocline` callback state and C interop
+//! details.
 
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
@@ -9,6 +9,7 @@ const State = @import("../state.zig").State;
 const Context = @import("../context.zig").Context;
 const Table = @import("../handlers/any/table.zig").Table;
 const Shape = @import("../shape/api.zig");
+const Modifier = Shape.Modifier;
 const Mapper = @import("../mapper/api.zig");
 const Object = @import("../handlers/typed/object.zig").Object;
 const isocline = @import("../../isocline/isocline.zig");
@@ -16,18 +17,17 @@ const Config = @import("config.zig");
 
 /// REPL completion helper.
 ///
-/// This wrapper hides `isocline` internals and provides a safe interface for
-/// completion callbacks. One `Completer` is created as a zua object per REPL
-/// session and reused across tab events by updating `_env` and `_ctx`.
+/// This wrapper hides `isocline` internals and provides a safe interface for completion callbacks. One `Completer` is
+/// created as a zua object per REPL session and reused across tab events by updating `_env` and `_ctx`.
 pub const Completer = struct {
     pub const ZUA_SHAPE = Shape.Object(Completer, .{
-        .add = Shape.Fn(add, .{
+        .add = Modifier.Method(add, .{
             .description = "Add a completion candidate.",
             .args = &.{
                 .{ .name = "candidate", .description = "Completion candidate string." },
             },
         }){},
-        .addEx = Shape.Fn(addEx, .{
+        .addEx = Modifier.Method(addEx, .{
             .description = "Add a completion candidate with display and help text.",
             .args = &.{
                 .{ .name = "candidate", .description = "Completion candidate string." },
@@ -74,11 +74,10 @@ pub const Completer = struct {
 
 /// Completion callback type used by the REPL.
 ///
-/// The callback is invoked on each tab-completion request.
-/// `prefix` is the current token or expression fragment to complete.
+/// The callback is invoked on each tab-completion request. `prefix` is the current token or expression fragment to
+/// complete.
 ///
-/// The callback may call `completer.add(candidate)` or
-/// `completer.addEx(candidate, display, help)` to publish results.
+/// The callback may call `completer.add(candidate)` or `completer.addEx(candidate, display, help)` to publish results.
 pub const CompletionHook = ?*const fn (
     completer: *Completer,
     prefix: []const u8,
@@ -86,8 +85,8 @@ pub const CompletionHook = ?*const fn (
 
 /// Internal completion state forwarded through the isocline opaque callback arg.
 ///
-/// This state carries the shared config, the per-cycle Context, and a
-/// session-scoped `Completer` handle allocated as a zua Object.
+/// This state carries the shared config, the per-cycle Context, and a session-scoped `Completer` handle allocated as a zua
+/// Object.
 pub const CompletionState = struct {
     config: *const Config,
     ctx: *Context,
@@ -96,9 +95,8 @@ pub const CompletionState = struct {
 
 /// Public isocline completion callback wrapper used by Zua.
 ///
-/// When registered as the default completer, this wrapper bridges raw line
-/// editor events into Zua's CompletionState. A stack guard protects the Lua
-/// stack across the callback boundary.
+/// When registered as the default completer, this wrapper bridges raw line editor events into Zua's CompletionState. A
+/// stack guard protects the Lua stack across the callback boundary.
 pub fn completionCallbackC(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
     const cs: *CompletionState = @ptrCast(@alignCast(isocline.completionArg(cenv) orelse return));
     cs.ctx.state.pushTop();
@@ -112,8 +110,8 @@ pub fn completionCallbackC(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8)
 
 /// Completion entry point for isocline.
 ///
-/// Runs runtime Lua completion, the Zig completion hook, and the Lua
-/// completion hook in order. All three contribute candidates.
+/// Runs runtime Lua completion, the Zig completion hook, and the Lua completion hook in order. All three contribute
+/// candidates.
 fn completionWord(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv(.c) void {
     const cs: *CompletionState = @ptrCast(@alignCast(isocline.completionArg(cenv) orelse return));
     const raw_input = std.mem.span(prefix);
@@ -154,8 +152,8 @@ fn completionWord(cenv: ?*isocline.CompletionEnv, prefix: [*c]const u8) callconv
 
 /// Extracts the current completion fragment from a full input prefix.
 ///
-/// For runtime Lua completion, this returns the suffix after the last
-/// non-identifier separator so callers can complete the current token.
+/// For runtime Lua completion, this returns the suffix after the last non-identifier separator so callers can complete the
+/// current token.
 fn extractChainPrefix(prefix: []const u8) []const u8 {
     var i = prefix.len;
     while (i > 0) : (i -= 1) {
@@ -194,8 +192,7 @@ fn luaCompletionWordChar(s: [*c]const u8, len: c_long) callconv(.c) bool {
 
 /// Resolves a chained object prefix against the live Lua runtime.
 ///
-/// Example inputs are `foo.bar` and `foo:method`. The resolved value is left
-/// on the Lua stack for the caller to inspect.
+/// Example inputs are `foo.bar` and `foo:method`. The resolved value is left on the Lua stack for the caller to inspect.
 fn resolveObjectPrefix(
     ctx: *Context,
     object_prefix: []const u8,

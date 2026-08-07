@@ -1,8 +1,6 @@
-//! Runtime scaffolding for the docs generator. Use this when you need
-//! extra flexibility, like inside a docs hook. Most common usecases
-//! (documenting a struct of globals for an embed instance or a dylib
-//! module) are handled by `Docs.generateGlobals` and `Docs.generateModule`
-//! directly.
+//! Runtime scaffolding for the docs generator. Use this when you need extra flexibility, like inside a docs hook. Most
+//! common usecases (documenting a struct of globals for an embed instance or a dylib module) are handled by
+//! `Docs.generateGlobals` and `Docs.generateModule` directly.
 
 const std = @import("std");
 const Context = @import("../context.zig");
@@ -32,8 +30,7 @@ alias_map: std.StringHashMap(void),
 arena: std.heap.ArenaAllocator,
 heap: std.mem.Allocator,
 
-/// Creates a new generator. All output strings are arena-allocated and
-/// freed together in `deinit`.
+/// Creates a new generator. All output strings are arena-allocated and freed together in `deinit`.
 pub fn init(allocator: std.mem.Allocator) Generator {
     return Generator{
         .classes = std.ArrayList(Types.Table).empty,
@@ -57,8 +54,8 @@ pub fn deinit(self: *Generator) void {
     self.arena.deinit();
 }
 
-/// Documents a type. Only `.table`, `.object`, and `.ptr` strategies are
-/// accepted. Functions and closures must use `addBinding` instead.
+/// Documents a type. Only `.table`, `.object`, and `.ptr` strategies are accepted. Functions and closures must use
+/// `addBinding` instead.
 pub fn add(self: *Generator, comptime T: type) !void {
     if (comptime ShapeData.isFunction(T)) {
         @compileError("use addBinding instead of add for Shape.Fn wrappers");
@@ -72,13 +69,12 @@ pub fn add(self: *Generator, comptime T: type) !void {
     }
 }
 
-/// Documents a named binding. Accepts types, `Shape.Fn` wrappers, closures,
-/// and plain Zig functions.
+/// Documents a named binding. Accepts types, `Shape.Fn` wrappers, closures, and plain Zig functions.
 pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     const T = @TypeOf(value);
 
     if (comptime T == type and ShapeData.isFunction(value)) {
-        try Collect.addWrappedFunction(self, value, false, null, name, name);
+        try Collect.addWrappedFunction(self, value, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -87,7 +83,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     }
 
     if (comptime ShapeData.isFunction(T)) {
-        try Collect.addWrappedFunction(self, T, false, null, name, name);
+        try Collect.addWrappedFunction(self, T, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -96,7 +92,7 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     }
 
     if (comptime @typeInfo(T) == .@"struct" and ShapeData.strategyOf(T) == .closure) {
-        try Collect.addWrappedFunction(self, T, false, null, name, name);
+        try Collect.addWrappedFunction(self, T, name, name);
         try self.bindings.append(self.arena.allocator(), .{
             .var_name = try Helpers.persist(self, name),
             .ref = .{ .kind = .function, .key = try Helpers.persist(self, name) },
@@ -112,9 +108,8 @@ pub fn addBinding(self: *Generator, name: []const u8, value: anytype) !void {
     });
 }
 
-/// Produces the full `---@meta _` stub output for all collected entries.
-/// The returned slice is arena-allocated and valid until the generator is
-/// deinitialized.
+/// Produces the full `---@meta _` stub output for all collected entries. The returned slice is arena-allocated and valid
+/// until the generator is deinitialized.
 pub fn generate(self: *Generator) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     try out.appendSlice(self.arena.allocator(), "---@meta _\n\n");
@@ -122,8 +117,7 @@ pub fn generate(self: *Generator) ![]const u8 {
     return out.toOwnedSlice(self.arena.allocator());
 }
 
-/// Emits all collected entries (classes, objects, aliases, functions,
-/// bindings) into the output buffer.
+/// Emits all collected entries (classes, objects, aliases, functions, bindings) into the output buffer.
 pub fn emitAll(self: *Generator, out: *std.ArrayList(u8), use_local: bool, emit_bindings: bool) !void {
     var first = true;
     for (self.classes.items) |doc| {

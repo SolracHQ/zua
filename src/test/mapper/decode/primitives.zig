@@ -7,7 +7,7 @@ const Executor = zua.Executor;
 
 fn safeDivide(ctx: *zua.Context, a: f64, b: f64) !f64 {
     if (b == 0.0) {
-        return ctx.failTyped(f64, "division by zero");
+        return ctx.fail(f64, error.DivisionByZero, "division by zero", .{});
     }
     return a / b;
 }
@@ -83,5 +83,3 @@ test "Primitive.decode boolean" {
     const value = try prim.decode(&test_env.ctx, bool);
     try testing.expectEqual(false, value);
 }
-
-

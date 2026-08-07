@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Process = @import("process.zig").Process;
 const Filter = @import("filter.zig").Filter;
@@ -21,14 +22,14 @@ pub const List = @This();
 const methods = .{
     .__gc = cleanup,
     .__tostring = display,
-    .filter = zua.Shape.Fn(filter, .{
+    .filter = Modifier.Method(filter, .{
         .description = "Keeps only processes matching the given criteria, removing the rest.",
         .args = &.{.{ .name = "filter", .description = "Filter with pid, name, or cmdLine." }},
     }),
-    .clone = zua.Shape.Fn(clone, .{
+    .clone = Modifier.Method(clone, .{
         .description = "Returns a new list with the same processes.",
     }),
-    .scan = zua.Shape.Fn(scan, .{
+    .scan = Modifier.Method(scan, .{
         .description = "Scans all processes for matching values.",
         .args = &.{
             .{ .name = "dataType", .description = "i32 or f32." },

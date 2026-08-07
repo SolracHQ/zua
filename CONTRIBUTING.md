@@ -76,9 +76,13 @@ const Helpers = @import("helpers.zig");     // internal, PascalCase
 
 Lowercase means something I do not control. PascalCase means something internal I create.
 
+### Variable and constants naming
+
+Local variables are `snake_case`. Constants declared inside a container type (struct, enum, union) are `CamelCase` even when they are values, with two exceptions: `Marker` and `Shape` variants remain `SCREAMING_CASE` for compatibility with how Lua expects metatable keys.
+
 ## Documentation style
 
-Doc comments should wrap at around 80 characters. Not a hard limit, just a recomendation since the wrap looks bad on small laptop screens (buy a good screen guys). Code has no width limit, just what `zig fmt` imposes.
+Doc comments should wrap at around 120 characters. Not a hard limit, just a recomendation, 80 was too dificult to see in my desktop and 120 still fits well in the laptop. Code has no width limit, just what `zig fmt` imposes.
 
 Respect visibility level in doc comments. Do not leak internals in public API docs (do not mention which internal functions you use). In internal functions do not spill implementation details (nobody cares if you use two pointers or `.removeAt` to filter, only that this filters). That kind of comment can go inside the function body and only if it is not obvious from the code. In Zig most of the time it is obvious. Doc comments are a soft contract: you are telling the user "I do this in this way", and that means changing internals becomes breaking the contract.
 

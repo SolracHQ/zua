@@ -1,7 +1,6 @@
-//! Shared hook type signatures and generators for the Shape module.
-//! Used internally by `MetaData` to type-check encode, decode, and docs
-//! hooks. Also provides compile-time helpers for merging method sets
-//! and generating list method implementations.
+//! Shared hook type signatures and generators for the Shape module. Used internally by `MetaData` to type-check encode,
+//! decode, and docs hooks. Also provides compile-time helpers for merging method sets and generating list method
+//! implementations.
 
 const std = @import("std");
 const Trampoline = @import("trampoline.zig");
@@ -10,6 +9,10 @@ const Mapper = @import("../mapper/api.zig");
 const Primitive = Mapper.Primitive;
 const Handlers = @import("../handlers/api.zig");
 const Gen = @import("../docs/generator.zig").Generator;
+const Introspect = @import("../introspect.zig");
+const Marker = @import("../marker.zig").Marker;
+const Modifier = @import("modifier.zig");
+
 pub fn EncodeHookType(comptime T: type, comptime ProxyType: type) type {
     const Param = if (comptime @typeInfo(T) == .@"opaque") *T else T;
     return fn (*Context, Param) anyerror!?ProxyType;
@@ -26,8 +29,7 @@ pub fn DocsHookType() type {
 
 /// Builds an encode hook that converts an enum value to its `@tagName` string.
 ///
-/// The returned function pointer is used by `Shape.StrEnum` to push enum
-/// values as Lua strings.
+/// The returned function pointer is used by `Shape.StrEnum` to push enum values as Lua strings.
 ///
 /// Arguments:
 /// - T: The enum type to encode.
@@ -44,8 +46,7 @@ pub fn strEnumEncode(comptime T: type) EncodeHookType(T, []const u8) {
 
 /// Builds a decode hook that parses a Lua string back into an enum value.
 ///
-/// Matches the input string against enum field names. Fails with a typed
-/// error when the string does not match any variant.
+/// Matches the input string against enum field names. Fails with a typed error when the string does not match any variant.
 ///
 /// Arguments:
 /// - T: The enum type to decode into.
@@ -57,20 +58,20 @@ pub fn strEnumDecode(comptime T: type) DecodeHookType(T) {
         fn decode(ctx: *Context, primitive: Primitive) anyerror!?T {
             const str = switch (primitive) {
                 .string => |s| s,
-                else => return ctx.failTyped(?T, "expected string"),
+                else => return ctx.fail(?T, error.WrongType, "expected string", .{}),
             };
             inline for (std.meta.fields(T)) |field| {
                 if (std.mem.eql(u8, str, field.name)) return @field(T, field.name);
             }
-            return ctx.failTyped(?T, "invalid enum value");
+            return ctx.fail(?T, error.InvalidEnumValue, "invalid enum value", .{});
         }
     }.decode;
 }
 
 /// Resolves the element type from a `getElements` accessor function.
 ///
-/// The function must return a slice; the element type is the slice's child
-/// type. Emits a compile error if the return type is not a slice.
+/// The function must return a slice; the element type is the slice's child type. Emits a compile error if the return type
+/// is not a slice.
 ///
 /// Arguments:
 /// - getElements: A function returning `[]const T` or `[]T`.
@@ -86,9 +87,8 @@ pub fn ElementType(comptime getElements: anytype) type {
     return info.pointer.child;
 }
 
-/// Merges two method struct types into a single type containing all fields
-/// from both. Duplicate names are not checked; `b`'s fields are appended
-/// after `a`'s.
+/// Merges two method struct types into a single type containing all fields from both. Duplicate names are not checked;
+/// `b`'s fields are appended after `a`'s.
 ///
 /// Arguments:
 /// - a: First method struct.
@@ -127,8 +127,8 @@ pub fn mergeMethodType(comptime a: anytype, comptime b: anytype) type {
     return @Struct(.auto, null, &names, &types, &attributes);
 }
 
-/// Merges two method struct values into a single value. Fields from `b`
-/// override `a` only when the merge type contains both (struct auto merge).
+/// Merges two method struct values into a single value. Fields from `b` override `a` only when the merge type contains both
+/// (struct auto merge).
 ///
 /// Arguments:
 /// - a: First method set value.
@@ -146,11 +146,10 @@ pub fn mergeMethodSets(comptime a: anytype, comptime b: anytype) mergeMethodType
     return result;
 }
 
-/// Generates a struct type with auto-implemented list methods (`get`,
-/// `__index`, `__len`, `iter`) for a list-object-backed type `L`.
+/// Generates a struct type with auto-implemented list methods (`get`, `__index`, `__len`, `iter`) for a list-object-backed
+/// type `L`.
 ///
-/// The generated methods delegate to `getElements` for element access and
-/// 1-indexed Lua conventions.
+/// The generated methods delegate to `getElements` for element access and 1-indexed Lua conventions.
 ///
 /// Arguments:
 /// - L: The userdata type that owns the list.
@@ -184,7 +183,7 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
         }
 
         pub fn iter(self: Handlers.Typed.Object(L)) struct {
-            Trampoline.ShapeFn(iget, false, .{}),
+            Trampoline.ShapeFn(iget, .{}, .{}),
             Handlers.Typed.Object(L),
             ?usize,
         } {
@@ -193,10 +192,9 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
     };
 }
 
-/// Generates a concrete set of list method values for registration in
-/// `ZUA_SHAPE`. Delegates to `generatedListMethods` and extracts the four
-/// standard list methods (`get`, `__index`, `__len`, `iter`) into a
-/// comptime struct literal, wrapping public-facing methods with documentation.
+/// Generates a concrete set of list method values for registration in `ZUA_SHAPE`. Delegates to `generatedListMethods` and
+/// extracts the four standard list methods (`get`, `__index`, `__len`, `iter`) into a comptime struct literal, wrapping
+/// public-facing methods with documentation.
 ///
 /// Arguments:
 /// - L: The userdata type that owns the list.
@@ -207,33 +205,75 @@ pub fn generatedListMethods(comptime L: type, comptime getElements: anytype) typ
 pub fn generateListMethodsSet(comptime L: type, comptime getElements: anytype) @TypeOf(blk: {
     const ListGen = generatedListMethods(L, getElements);
     break :blk .{
-        .get = Trampoline.ShapeFn(ListGen.get, false, .{
+        .get = Modifier.Method(ListGen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = ListGen.__index,
-        .__len = ListGen.__len,
-        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
+        .__index = Modifier.Method(ListGen.__index, .{}){},
+        .__len = Modifier.Method(ListGen.__len, .{}){},
+        .iter = Modifier.Method(ListGen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
 }) {
     const ListGen = generatedListMethods(L, getElements);
     return .{
-        .get = Trampoline.ShapeFn(ListGen.get, false, .{
+        .get = Modifier.Method(ListGen.get, .{
             .description = "Returns the element at the given 1-based index.",
             .args = &.{
                 .{ .name = "index", .description = "1-based index." },
             },
         }){},
-        .__index = ListGen.__index,
-        .__len = ListGen.__len,
-        .iter = Trampoline.ShapeFn(ListGen.iter, false, .{
+        .__index = Modifier.Method(ListGen.__index, .{}){},
+        .__len = Modifier.Method(ListGen.__len, .{}){},
+        .iter = Modifier.Method(ListGen.iter, .{
             .description = "Returns an iterator compatible with Lua for..in syntax.",
         }){},
     };
+}
+
+/// Wraps a single method value into a valid Method. Accepts bare Zig functions and `Modifier.Method`. 
+fn wrappedMethodType(comptime Owner: type, comptime val: anytype) type {
+    if (comptime @TypeOf(val) != type and @typeInfo(@TypeOf(val)) == .@"fn") {
+        const fn_info = comptime @typeInfo(@TypeOf(val)).@"fn";
+        const has_context = comptime fn_info.params.len > 0 and fn_info.params[0].type == *Context;
+        return Trampoline.ShapeFn(val, .{}, .{ .has_context = has_context, .owner_type = Owner });
+    }
+    if (comptime Introspect.getContainer(val)) |container| {
+        if (comptime Marker.markerOf(container).contains(.method_config)) {
+            return Trampoline.ShapeFn(container.Fn, container.FnOptions, .{
+                .has_context = container.HasContext,
+                .owner_type = Owner,
+            });
+        }
+    }
+    @compileError("unsupported method value type " ++ @typeName(@TypeOf(val)));
+}
+
+fn WrappedMethodsType(comptime Owner: type, comptime methods: anytype) type {
+    const fields = @typeInfo(@TypeOf(methods)).@"struct".fields;
+    var names: [fields.len][]const u8 = undefined;
+    var types: [fields.len]type = undefined;
+    var attributes: [fields.len]std.builtin.Type.StructField.Attributes = undefined;
+    inline for (fields, 0..) |field, i| {
+        names[i] = field.name;
+        types[i] = wrappedMethodType(Owner, @field(methods, field.name));
+        attributes[i] = .{
+            .@"comptime" = false,
+            .@"align" = @alignOf(types[i]),
+            .default_value_ptr = null,
+        };
+    }
+    return @Struct(.auto, null, &names, &types, &attributes);
+}
+
+/// Wraps all values in a methods struct into methods of `Owner`.
+pub fn wrapMethods(comptime Owner: type, comptime methods: anytype) WrappedMethodsType(Owner, methods) {
+    // SAFETY: All ShapeFn / Method types are zero-sized so `undefined` is valid for every field.
+    const result: WrappedMethodsType(Owner, methods) = undefined;
+    return result;
 }
 
 test {

@@ -1,7 +1,6 @@
 //! Tiny Lua lexer for lightweight syntax highlighting.
 //!
-//! This module tokenizes Lua source directly rather than depending on Lua's
-//! internal lexer machinery.
+//! This module tokenizes Lua source directly rather than depending on Lua's internal lexer machinery.
 const std = @import("std");
 
 /// Errors surfaced by the lexer.
@@ -36,8 +35,8 @@ pub const Token = struct {
 
 /// Tokenizes Lua source into a list of lexer tokens.
 ///
-/// This lexer is independent from Lua's internal parser and is designed for
-/// lightweight syntax highlighting and simple source analysis.
+/// This lexer is independent from Lua's internal parser and is designed for lightweight syntax highlighting and simple
+/// source analysis.
 ///
 /// Arguments:
 /// - allocator: Allocator used for the returned token list.

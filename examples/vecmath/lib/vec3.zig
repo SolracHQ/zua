@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 // Vec3 is the same object-strategy pattern as Vec2 with an extra component.
 //
@@ -7,46 +8,44 @@ const zua = @import("zua");
 // is the cross product method (only meaningful in 3D) and the three-field
 // struct.
 //
-// Each function is documented with Shape.Fn so the docs stub generator
+// Each function is documented with Modifier.Method so the docs stub generator
 // produces proper ---@param annotations.
 
 pub const Vec3 = struct {
-    x: zua.Shape.Modifier.Field(f64, .{ .description = "X component." }),
-    y: zua.Shape.Modifier.Field(f64, .{ .description = "Y component." }),
-    z: zua.Shape.Modifier.Field(f64, .{ .description = "Z component." }),
+    x: Modifier.Field(f64, .{ .description = "X component." }),
+    y: Modifier.Field(f64, .{ .description = "Y component." }),
+    z: Modifier.Field(f64, .{ .description = "Z component." }),
 
     pub const ZUA_SHAPE = zua.Shape.Object(Vec3, .{
-        .__add = zua.Shape.Fn(add, .{
+        .__add = Modifier.Method(add, .{
             .description = "Component-wise addition.",
             .args = &.{
-                .{ .name = "a", .description = "First vector." },
                 .{ .name = "b", .description = "Second vector." },
             },
         }),
-        .__sub = zua.Shape.Fn(sub, .{
+        .__sub = Modifier.Method(sub, .{
             .description = "Component-wise subtraction.",
             .args = &.{
-                .{ .name = "a", .description = "First vector." },
                 .{ .name = "b", .description = "Second vector." },
             },
         }),
-        .__mul = zua.Shape.Fn(mul, .{
+        .__mul = Modifier.Method(mul, .{
             .description = "Scalar multiplication.",
             .args = &.{
                 .{ .name = "factor", .description = "Scalar factor." },
             },
         }),
         .__eq = eq,
-        .length = zua.Shape.Fn(length, .{ .description = "Euclidean norm." }),
-        .dot = zua.Shape.Fn(dot, .{
+        .length = Modifier.Method(length, .{ .description = "Euclidean norm." }),
+        .dot = Modifier.Method(dot, .{
             .description = "Dot product.",
             .args = &.{.{ .name = "b", .description = "Right vector." }},
         }),
-        .cross = zua.Shape.Fn(cross, .{
+        .cross = Modifier.Method(cross, .{
             .description = "Cross product.",
             .args = &.{.{ .name = "b", .description = "Right vector." }},
         }),
-        .normalize = zua.Shape.Fn(normalize, .{
+        .normalize = Modifier.Method(normalize, .{
             .description = "Unit vector, returns zeros if length is zero.",
         }),
         .__tostring = toString,
@@ -109,6 +108,6 @@ pub const Vec3 = struct {
     // have ctx as the first parameter if it needs to query the context.
     fn toString(ctx: *zua.Context, self: *const Vec3) ![]const u8 {
         return std.fmt.allocPrint(ctx.arena(), "vec3({d}, {d}, {d})", .{ self.x.value, self.y.value, self.z.value }) catch
-            ctx.failTyped([]const u8, "oom");
+            ctx.fail([]const u8, error.OutOfMemory, "oom", .{});
     }
 };

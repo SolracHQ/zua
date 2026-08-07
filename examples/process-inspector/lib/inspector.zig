@@ -58,13 +58,13 @@ entry: zua.Shape.Modifier.Value(struct {
     fn impl(ctx: *zua.Context, config: EntryConfig) !Entry {
         const store = try Store.get(ctx);
         _ = store.read(ctx, config.address) catch |err| {
-            return ctx.failWithFmtTyped(Entry, "invalid address: {s}", .{@errorName(err)});
+            return ctx.fail(Entry, error.OutOfRange, "invalid address: {s}", .{@errorName(err)});
         };
         const pid = config.address >> 24;
-        if (pid >= PROCESSES.len) return ctx.failTyped(Entry, "invalid pid");
+        if (pid >= PROCESSES.len) return ctx.fail(Entry, error.OutOfRange, "invalid pid", .{});
         const region = (config.address >> 16) & 0xFF;
         const pmeta = &PROCESSES[pid];
-        if (region >= pmeta.regions.len) return ctx.failTyped(Entry, "invalid region");
+        if (region >= pmeta.regions.len) return ctx.fail(Entry, error.OutOfRange, "invalid region", .{});
         const perms = try Permissions.parseString(ctx, pmeta.regions[region].perms_str);
         return Entry{
             .pid = .new(pid),

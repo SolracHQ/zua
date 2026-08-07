@@ -1,8 +1,7 @@
 //! Internal encode helpers for primitive and table-level operations.
 //!
-//! Most callers should use `Mapper.Encoder.push` instead. These functions
-//! are exposed under `Mapper.Encoder.Internals` for manual control over
-//! table construction when the type dispatch in `push` is not appropriate.
+//! Most callers should use `Mapper.Encoder.push` instead. These functions are exposed under `Mapper.Encoder.Internals` for
+//! manual control over table construction when the type dispatch in `push` is not appropriate.
 
 const std = @import("std");
 const lua = @import("../../../lua/lua.zig");
@@ -15,11 +14,12 @@ const Handle = @import("../../handlers/api.zig").Handle;
 
 const Mapper = @import("../api.zig");
 const MapperInternals = @import("../internals.zig");
+const ShapeData = @import("../../shape/shape_data.zig");
+const Marker = @import("../../marker.zig").Marker;
 
 const Primitive = Mapper.Primitive;
 
-/// Pushes a handle (borrowed, stack_owned, or registry_owned) onto the Lua
-/// stack.
+/// Pushes a handle (borrowed, stack_owned, or registry_owned) onto the Lua stack.
 pub fn pushHandle(ctx: *Context, handle: Handle) void {
     switch (handle) {
         .borrowed, .stack_owned => |index| lua.pushValue(ctx.state.luaState, index),
@@ -27,8 +27,7 @@ pub fn pushHandle(ctx: *Context, handle: Handle) void {
     }
 }
 
-/// Pushes a `Primitive` value onto the Lua stack using the appropriate Lua
-/// API call.
+/// Pushes a `Primitive` value onto the Lua stack using the appropriate Lua API call.
 pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
     switch (value) {
         .nil => lua.pushNil(ctx.state.luaState),
@@ -48,8 +47,11 @@ pub fn pushLuaPrimitive(ctx: *Context, value: Primitive) !void {
 pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
     const T = @TypeOf(value);
 
-    switch (@typeInfo(T)) {
+    switch (comptime @typeInfo(T)) {
         .@"struct" => |info| {
+            if (comptime !info.is_tuple and ShapeData.strategyOf(T) != .table)
+                @compileError("fillTable requires a type with .table strategy or a tuple, got " ++ @typeName(T) ++ " (strategy " ++ @tagName(ShapeData.strategyOf(T)) ++ ")");
+
             if (info.is_tuple) {
                 inline for (value, 0..) |item, index| {
                     try table.set(ctx, index + 1, item);
@@ -58,6 +60,7 @@ pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
             }
 
             inline for (info.fields) |field| {
+                if (comptime Marker.markerOf(field.type).contains(.ignore)) continue;
                 try table.set(ctx, field.name, @field(value, field.name));
             }
         },
@@ -89,8 +92,7 @@ pub fn fillTable(ctx: *Context, table: Table, value: anytype) !void {
     }
 }
 
-/// Infers the array portion capacity for a Lua table representation of
-/// `value`.
+/// Infers the array portion capacity for a Lua table representation of `value`.
 pub fn inferArrayCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 
@@ -109,8 +111,7 @@ pub fn inferArrayCapacity(value: anytype) i32 {
     };
 }
 
-/// Infers the record portion capacity for a Lua table representation of
-/// `value`.
+/// Infers the record portion capacity for a Lua table representation of `value`.
 pub fn inferRecordCapacity(value: anytype) i32 {
     const T = @TypeOf(value);
 

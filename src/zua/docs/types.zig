@@ -1,8 +1,7 @@
 //! Doc data types used by the Lua stub generator.
 //!
-//! Each type carries the metadata required to emit a single annotation stanza
-//! (table, function, object, alias, or operator). The emitter walks these
-//! structures to produce `---@` LuaLS annotations.
+//! Each type carries the metadata required to emit a single annotation stanza (table, function, object, alias, or
+//! operator). The emitter walks these structures to produce `---@` LuaLS annotations.
 
 const std = @import("std");
 
@@ -59,9 +58,8 @@ pub const Function = struct {
     field_of: std.ArrayList(FieldOf) = .empty,
 };
 
-/// Records that a function is a `.`-field of a type. Used when a table type
-/// has a function-valued attribute. The `field_name` is the attribute name,
-/// which may differ from the function's `name`.
+/// Records that a function is a `.`-field of a type. Used when a table type has a function-valued attribute. The
+/// `field_name` is the attribute name, which may differ from the function's `name`.
 pub const FieldOf = struct {
     owner: []const u8,
     field_name: []const u8,
@@ -80,8 +78,8 @@ pub const Alias = struct {
     values: std.ArrayList(AliasValue),
 };
 
-/// Doc node for an object or pointer type. Emitted as an `---@class` with
-/// `---@field` annotations for `Shape.Field` / `Shape.Value` marked fields.
+/// Doc node for an object or pointer type. Emitted as an `---@class` with `---@field` annotations for `Shape.Field` /
+/// `Shape.Value` marked fields.
 pub const Object = struct {
     name: []const u8,
     description: []const u8,
@@ -89,19 +87,18 @@ pub const Object = struct {
     operators: std.ArrayList(Operator),
 };
 
-/// Discriminated kind for a `Ref`. Determines how the reference key is emitted
-/// in binding lines.
+/// Discriminated kind for a `Ref`. Determines how the reference key is emitted in binding lines.
 pub const RefKind = enum { class, alias, function };
 
-/// References a previously collected doc entry by its display key.
-/// Used in `Binding` to point to the target type or function.
+/// References a previously collected doc entry by its display key. Used in `Binding` to point to the target type or
+/// function.
 pub const Ref = struct {
     kind: RefKind,
     key: []const u8,
 };
 
-/// A variable-to-type or variable-to-function binding emitted after all type and
-/// function stubs. Emits `var_name = ref_key` (bare global assignment).
+/// A variable-to-type or variable-to-function binding emitted after all type and function stubs. Emits `var_name = ref_key`
+/// (bare global assignment).
 pub const Binding = struct {
     var_name: []const u8,
     ref: Ref,

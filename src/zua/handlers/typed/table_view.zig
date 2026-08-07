@@ -1,12 +1,11 @@
 //! Typed table-backed views for decoding Lua tables into mutable Zig values.
 //!
-//! `TableView(T)` stores a raw `Table` handle alongside a heap-allocated typed
-//! mirror of the table contents. This lets callbacks receive a typed view of a
-//! Lua table, mutate `ref` directly, and optionally synchronize those changes
-//! back into the underlying Lua value.
+//! `TableView(T)` stores a raw `Table` handle alongside a heap-allocated typed mirror of the table contents. This lets
+//! callbacks receive a typed view of a Lua table, mutate `ref` directly, and optionally synchronize those changes back into
+//! the underlying Lua value.
 //!
-//! The view is intended for use with table-strategy types where the table itself
-//! is the Lua representation and a typed copy is convenient for mutation.
+//! The view is intended for use with table-strategy types where the table itself is the Lua representation and a typed copy
+//! is convenient for mutation.
 
 const std = @import("std");
 const Context = @import("../../context.zig");
@@ -19,14 +18,13 @@ const Marker = @import("../../marker.zig").Marker;
 
 /// Typed view over a Lua table for mutable Zig table-backed values.
 ///
-/// `TableView(T)` decodes a Lua table into a heap-allocated typed copy of
-/// `T` while preserving the raw table handle. Callers may mutate `ref` directly
-/// and either return the view or call `sync()` to flush changes back into Lua.
+/// `TableView(T)` decodes a Lua table into a heap-allocated typed copy of `T` while preserving the raw table handle.
+/// Callers may mutate `ref` directly and either return the view or call `sync()` to flush changes back into Lua.
 pub fn TableView(comptime T: type) type {
     return struct {
         pub const ZUA_SHAPE = Shape.Table(@This(), .{}, .{}).withDecode(decode).withEncode(Table, encode);
         pub const __ZUA_MARKER = Marker.table_view;
-        const __ZUA_TABLE_VIEW_TYPE = T;
+        const TableViewType = T;
 
         /// Underlying raw Lua table handle.
         handle: Table,
@@ -43,10 +41,9 @@ pub fn TableView(comptime T: type) type {
         pub fn decode(ctx: *Context, primitive: Primitive) !?@This() {
             const table = switch (primitive) {
                 .table => |tbl| tbl,
-                else => return ctx.failWithFmtTyped(?@This(), "expected table but got {s}", .{@tagName(primitive)}),
+                else => return ctx.fail(?@This(), error.WrongType, "expected table but got {s}", .{@tagName(primitive)}),
             };
-
-            const ptr = ctx.arena().create(T) catch return ctx.failTyped(?@This(), "out of memory");
+            const ptr = ctx.arena().create(T) catch return ctx.fail(?@This(), error.OutOfMemory, "out of memory", .{});
             const index = switch (table.handle) {
                 inline else => |idx| idx,
             };
@@ -107,7 +104,7 @@ pub fn TableView(comptime T: type) type {
 
 /// Returns the inner type `T` if `Wrapper` is a `TableView(T)`, otherwise `null`.
 pub fn tableViewInnerType(comptime Wrapper: type) ?type {
-    if (comptime Marker.isTableView(Wrapper)) return Wrapper.__ZUA_TABLE_VIEW_TYPE;
+    if (comptime Marker.isTableView(Wrapper)) return Wrapper.TableViewType;
     return null;
 }
 

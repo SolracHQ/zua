@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Entry = @import("entry.zig").Entry;
 const Selector = @import("selector.zig").Selector;
@@ -14,13 +15,13 @@ pub const List = @This();
 const methods = .{
     .__gc = cleanup,
     .__tostring = display,
-    .filter = zua.Shape.Fn(filter, .{
+    .filter = Modifier.Method(filter, .{
         .description = "Keeps only entries matching the given predicate.",
         .args = &.{
             .{ .name = "selector", .description = "Comparison predicate." },
         },
     }),
-    .clone = zua.Shape.Fn(clone, .{
+    .clone = Modifier.Method(clone, .{
         .description = "Returns a new list with the same entries.",
     }),
 };

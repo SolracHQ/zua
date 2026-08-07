@@ -1,8 +1,7 @@
 //! ANSI syntax highlighting helpers for the embedded REPL.
 //!
-//! Tokens are classified by the lexer and mapped to bbcode style tags
-//! understood by isocline's ic_highlight_formatted. The output string
-//! must match the raw input character-for-character outside of the tags.
+//! Tokens are classified by the lexer and mapped to bbcode style tags understood by isocline's ic_highlight_formatted. The
+//! output string must match the raw input character-for-character outside of the tags.
 const std = @import("std");
 const lua = @import("../../lua/lua.zig");
 const isocline = @import("../../isocline/isocline.zig");
@@ -27,7 +26,7 @@ pub const TokenKind = enum {
     symbol,
     comment,
 
-    pub const ZUA_SHAPE = Shape.StrAlias(TokenKind, .{}, .{
+    pub const ZUA_SHAPE = Shape.StrAlias(TokenKind, .{
         .name = "TokenKind",
         .description = "Token kinds recognized by the REPL syntax highlighter.",
     });
@@ -37,10 +36,8 @@ pub const TokenKind = enum {
 
 /// An ANSI/RGB color value used by a style.
 ///
-/// .none leaves the channel at the terminal default.
-/// .ansi uses a standard 8/16-color ANSI index.
-/// .ansi256 uses the 256-color xterm palette.
-/// .rgb uses a 24-bit color expressed as separate r/g/b bytes.
+/// .none leaves the channel at the terminal default. .ansi uses a standard 8/16-color ANSI index. .ansi256 uses the
+/// 256-color xterm palette. .rgb uses a 24-bit color expressed as separate r/g/b bytes.
 pub const Rgb = struct {
     pub const ZUA_SHAPE = Shape.Table(Rgb, .{}, .{
         .name = "Rgb",
@@ -106,13 +103,13 @@ fn decodeColor(ctx: *Context, prim: Primitive) !?Color {
         .integer => |n| Color{ .ansi = @intCast(n) },
         .string => |s| {
             if (s.len > 0 and s[0] == '#') {
-                if (s.len != 7) return ctx.failTyped(?Color, "invalid RGB hex color, expected #rrggbb");
+                if (s.len != 7) return ctx.fail(?Color, error.InvalidFormat, "invalid RGB hex color, expected #rrggbb", .{});
                 const r = try std.fmt.parseInt(u8, s[1..3], 16);
                 const g = try std.fmt.parseInt(u8, s[3..5], 16);
                 const b = try std.fmt.parseInt(u8, s[5..7], 16);
                 return Color{ .rgb = .{ .r = r, .g = g, .b = b } };
             }
-            const ansi = ansiFromName(s) orelse return ctx.failTyped(?Color, "unknown color name");
+            const ansi = ansiFromName(s) orelse return ctx.fail(?Color, error.InvalidEnumValue, "unknown color name", .{});
             return Color{ .ansi = ansi };
         },
         .table => |t| {
@@ -215,8 +212,7 @@ pub const HighlightState = struct {
 
 /// C callback wrapper for isocline syntax highlighting.
 ///
-/// The callback delegates to `process` and forwards the formatted bbcode
-/// result back to isocline.
+/// The callback delegates to `process` and forwards the formatted bbcode result back to isocline.
 pub fn highlightCallbackC(
     henv: ?*isocline.HighlightEnv,
     input: [*c]const u8,
@@ -281,9 +277,8 @@ fn resolveStyle(
     return defaultStyle(kind);
 }
 
-/// Appends `text` to `out`, escaping `[` as `\[` and `\` as `\\` so that the
-/// bbcode parser in isocline does not misinterpret them as tag delimiters or
-/// escape sequences.
+/// Appends `text` to `out`, escaping `[` as `\[` and `\` as `\\` so that the bbcode parser in isocline does not
+/// misinterpret them as tag delimiters or escape sequences.
 fn appendBbcodeEscaped(out: *std.ArrayList(u8), allocator: std.mem.Allocator, text: []const u8) !void {
     if (std.mem.indexOfAny(u8, text, "[\\") == null) {
         return out.appendSlice(allocator, text);
@@ -299,8 +294,8 @@ fn appendBbcodeEscaped(out: *std.ArrayList(u8), allocator: std.mem.Allocator, te
 
 /// Build a bbcode-annotated copy of `source` suitable for ic_highlight_formatted.
 ///
-/// The returned slice is null-terminated and owned by the caller (allocated with
-/// `allocator`). Returns null on allocation failure or lexer error.
+/// The returned slice is null-terminated and owned by the caller (allocated with `allocator`). Returns null on allocation
+/// failure or lexer error.
 pub fn process(
     ctx: *Context,
     source: []const u8,

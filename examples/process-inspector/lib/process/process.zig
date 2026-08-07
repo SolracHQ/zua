@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Permissions = @import("../region/perms.zig").Permissions;
 const DataType = @import("../mem/types.zig").DataType;
@@ -20,11 +21,11 @@ pub const Process = @This();
 // pub for zua to see it; methods can stay private.
 const methods = .{
     .__tostring = display,
-    .regions = zua.Shape.Fn(getRegions, .{
+    .regions = Modifier.Method(getRegions, .{
         .description = "Returns regions, optionally filtered by permissions.",
         .args = &.{.{ .name = "filter", .description = "Optional permission filter." }},
     }),
-    .scan = zua.Shape.Fn(scan, .{
+    .scan = Modifier.Method(scan, .{
         .description = "Scans process memory for matching values.",
         .args = &.{
             .{ .name = "dataType", .description = "i32 or f32." },
@@ -42,9 +43,9 @@ pub const ZUA_SHAPE = zua.Shape.Object(Process, methods, .{
 // Modifier.Value on Object fields exposes them as read-only Lua properties.
 // Lua reads p.pid, p.name, p.cmdLine as values but cannot write them.
 // The writable counterpart is Modifier.Field (not used here).
-pid: zua.Shape.Modifier.Value(usize, .{ .description = "Process ID." }),
-name: zua.Shape.Modifier.Value([]const u8, .{ .description = "Process name." }),
-cmdLine: zua.Shape.Modifier.Value([]const u8, .{ .description = "Command line." }),
+pid: Modifier.Value(usize, .{ .description = "Process ID." }),
+name: Modifier.Value([]const u8, .{ .description = "Process name." }),
+cmdLine: Modifier.Value([]const u8, .{ .description = "Command line." }),
 
 fn display(ctx: *zua.Context, self: *Process) ![]const u8 {
     return std.fmt.allocPrint(ctx.arena(), "Process({d}, {s})", .{ self.pid.value, self.name.value });

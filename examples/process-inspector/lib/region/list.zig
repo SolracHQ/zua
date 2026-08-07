@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Region = @import("region.zig").Region;
 const Entry = @import("../mem/entry.zig").Entry;
@@ -17,10 +18,10 @@ pub const List = @This();
 const methods = .{
     .__gc = cleanup,
     .__tostring = display,
-    .clone = zua.Shape.Fn(clone, .{
+    .clone = Modifier.Method(clone, .{
         .description = "Returns a new list with the same regions.",
     }),
-    .scan = zua.Shape.Fn(scan, .{
+    .scan = Modifier.Method(scan, .{
         .description = "Scans all regions for matching values.",
         .args = &.{
             .{ .name = "dataType", .description = "i32 or f32." },

@@ -1,5 +1,6 @@
 const std = @import("std");
 const zua = @import("zua");
+const Modifier = zua.Shape.Modifier;
 
 const Permissions = @import("../region/perms.zig").Permissions;
 const DataType = @import("types.zig").DataType;
@@ -18,10 +19,10 @@ pub const Entry = @This();
 // pub for zua to see it; methods can stay private.
 const methods = .{
     .__tostring = display,
-    .get = zua.Shape.Fn(getValue, .{
+    .get = Modifier.Method(getValue, .{
         .description = "Reads the live value from memory.",
     }),
-    .set = zua.Shape.Fn(setValue, .{
+    .set = Modifier.Method(setValue, .{
         .description = "Writes a new value to this address.",
         .args = &.{.{ .name = "value", .description = "Value to write." }},
     }),
@@ -32,9 +33,9 @@ pub const ZUA_SHAPE = zua.Shape.Object(Entry, methods, .{
     .description = "A typed memory value at a fixed address.",
 });
 
-pid: zua.Shape.Modifier.Value(usize, .{ .description = "Process ID." }),
-address: zua.Shape.Modifier.Value(usize, .{ .description = "Memory address." }),
-perms: zua.Shape.Modifier.Value(Permissions, .{ .description = "Access permissions." }),
+pid: Modifier.Value(usize, .{ .description = "Process ID." }),
+address: Modifier.Value(usize, .{ .description = "Memory address." }),
+perms: Modifier.Value(Permissions, .{ .description = "Access permissions." }),
 data_type: DataType,
 
 fn display(ctx: *zua.Context, self: *Entry) ![]const u8 {
@@ -56,7 +57,7 @@ fn getValue(ctx: *zua.Context, self: *Entry) !zua.Mapper.Primitive {
 
 fn setValue(ctx: *zua.Context, self: *Entry, value: zua.Mapper.Primitive) !void {
     if (!self.perms.value.has(.write)) {
-        return ctx.failWithFmt("address 0x{x} is not writable", .{self.address.value});
+        return ctx.fail(void, error.OutOfRange, "address 0x{x} is not writable", .{self.address.value});
     }
     const store = try Store.get(ctx);
     switch (self.data_type) {

@@ -1,7 +1,6 @@
-//! Generates the Lua CFunction trampolines that bridge Zig functions
-//! and closures into callable Lua values. Each trampoline is a compiled
-//! C closure that decodes arguments from the Lua stack, calls back into
-//! Zig, and pushes return values. Used by `Shape.Fn` and `Shape.Closure`.
+//! Generates the Lua CFunction trampolines that bridge Zig functions and closures into callable Lua values. Each trampoline
+//! is a compiled C closure that decodes arguments from the Lua stack, calls back into Zig, and pushes return values. Used
+//! by `Shape.Fn` and `Shape.Closure`.
 
 const std = @import("std");
 pub const lua = @import("../../lua/lua.zig");
@@ -16,12 +15,12 @@ const HookTypes = @import("helpers.zig");
 const Primitive = @import("../mapper/api.zig").Primitive;
 const Marker = @import("../marker.zig").Marker;
 const UpValue = @import("../handlers/any/upvalue.zig");
+const ObjectGuard = @import("../mapper/object_guard.zig");
 
 /// Describes one parameter of a Zig function for Lua annotation generation.
 ///
-/// Attach these to `FnOptions.args` so the docs generator produces
-/// `---@param name description` lines with proper parameter names instead
-/// of generic `arg1`, `arg2`, etc.
+/// Attach these to `FnOptions.args` so the docs generator produces `---@param name description` lines with proper parameter
+/// names instead of generic `arg1`, `arg2`, etc.
 pub const ArgInfo = struct {
     /// The parameter name as it appears in the Lua annotation.
     name: []const u8,
@@ -59,21 +58,35 @@ pub const FnOptions = struct {
     parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = null,
 };
 
+pub const FnConfig = struct {
+    has_context: bool = false,
+    owner_type: ?type = null,
+};
+
 /// ShapeData variant for `.function` strategy.
 ///
-/// Produces a zero-sized type that IS the function value. The returned type
-/// declares `ZUA_SHAPE = @This()` so the encoder can push it via the
-/// trampoline shortcut. Since all parameters are comptime, no runtime state
-/// is needed, the type encodes itself.
-pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime options: FnOptions) type {
+/// Produces a zero-sized type that IS the function value. The returned type declares `ZUA_SHAPE = @This()` so the encoder
+/// can push it via the trampoline shortcut. Since all parameters are comptime, no runtime state is needed, the type encodes
+/// itself.
+pub fn ShapeFn(comptime function: anytype, comptime options: FnOptions, comptime config: FnConfig) type {
     const FunctionType = @TypeOf(function);
     const function_info = @typeInfo(FunctionType).@"fn";
     const ReturnType = function_info.return_type orelse
         @compileError("Zig native functions must have an explicit return type (use void if none)");
     const ActualReturnType = Introspect.unwrapErrorUnion(ReturnType);
 
-    comptime validateKind(hasContext, function_info);
+    comptime validateKind(config.has_context, function_info);
     comptime validateVarArgs(function_info);
+    comptime validateContextPosition(function_info);
+    comptime {
+        const count = Introspect.actualArgCount(function_info, .{
+            .has_context = config.has_context,
+            .is_method = config.owner_type != null,
+        });
+        if (options.args.len != 0 and options.args.len != count) {
+            @compileError(std.fmt.comptimePrint("expected 0 or {d} args in documentation, got {d}", .{ count, options.args.len }));
+        }
+    }
 
     return struct {
         pub const ZUA_SHAPE = @This();
@@ -85,13 +98,16 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
         pub const EncodeHook: ?HookTypes.EncodeHookType(FunctionType, void) = null;
         pub const DecodeHook: ?HookTypes.DecodeHookType(FunctionType) = null;
 
-        pub const description: []const u8 = options.description;
-        pub const args: []const ArgInfo = options.args;
-        pub const parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = options.parse_err_hook;
-        const decode_depth = Tracing.maxDecodeDepth(decodedParameterTypes());
+        const DecodeDepth = Tracing.maxDecodeDepth(decodedParameterTypes());
 
-        const __ZuaFnTypeInfo = function_info;
-        const __ZuaNativeReturnType = ActualReturnType;
+        pub const Fn = function;
+
+        pub const Config = struct {
+            pub const HasContext = config.has_context;
+            pub const OwnerType = config.owner_type;
+            pub const FnTypeInfo = function_info;
+            pub const NativeReturnType = ActualReturnType;
+        };
 
         pub fn trampoline() lua.CFunction {
             return struct {
@@ -102,7 +118,7 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
                         return lua.raiseError(state);
                     };
                     var ctx = Context.init(vm);
-                    var segs: [decode_depth]Tracing.Segment = @splat(.empty);
+                    var segs: [DecodeDepth]Tracing.Segment = @splat(.empty);
                     var decode_err: Tracing.DecodeError = .{ .tag = .custom };
                     const trace = Tracing.Trace{ .path = &segs, .deep = 0, .err = &decode_err };
                     execute(&ctx, trace) catch |err| {
@@ -131,10 +147,10 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
             else
                 total;
             return Decoder.parseArgsDepth(ctx, 1, effective_count, types, trace) catch {
-                if (parse_err_hook) |hook| {
+                if (Options.parse_err_hook) |hook| {
                     hook(ctx, &trace);
                 } else {
-                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, args) catch "";
+                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, Options.args) catch "";
                     const err_msg = trace.err.format(ctx.arena()) catch "decode failed";
                     ctx.err = if (fmt.len > 0)
                         std.fmt.allocPrint(ctx.arena(), "{s}: {s}", .{ fmt, err_msg }) catch err_msg
@@ -148,9 +164,9 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
         fn callFunction(ctx: *Context, decoded: Decoder.ParseResult(decodedParameterTypes())) !ActualReturnType {
             const types = comptime decodedParameterTypes();
             var call_args: std.meta.ArgsTuple(FunctionType) = undefined;
-            if (comptime hasContext) call_args[0] = ctx;
+            if (comptime Config.HasContext) call_args[0] = ctx;
             inline for (types, 0..) |_, i| {
-                call_args[comptime @as(usize, @intFromBool(hasContext)) + i] = decoded[i];
+                call_args[comptime @as(usize, @intFromBool(Config.HasContext)) + i] = decoded[i];
             }
             if (comptime hasVarArgs(function_info)) {
                 call_args[function_info.params.len - 1] = try buildVarArgsFor(ctx, function_info, decodedParameterCount());
@@ -167,7 +183,7 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
             comptime var types: [decodedParameterCount()]type = undefined;
             comptime var out: usize = 0;
             inline for (function_info.params, 0..) |param, i| {
-                if (comptime hasContext and i == 0) continue;
+                if (comptime Config.HasContext and i == 0) continue;
                 if (comptime hasVarArgs(function_info) and i == function_info.params.len - 1) continue;
                 types[out] = param.type orelse @compileError("param #{d} has no type");
                 out += 1;
@@ -176,7 +192,7 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
         }
 
         fn decodedParameterCount() usize {
-            const base: usize = function_info.params.len - @as(usize, @intFromBool(hasContext));
+            const base: usize = function_info.params.len - @as(usize, @intFromBool(Config.HasContext));
             return if (comptime hasVarArgs(function_info)) base - 1 else base;
         }
     };
@@ -187,18 +203,19 @@ pub fn ShapeFn(comptime function: anytype, comptime hasContext: bool, comptime o
 /// Produces a ShapeData type describing how `T` maps to a Lua closure.
 pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: anytype, comptime options: FnOptions) type {
     const CallbackType = @TypeOf(callback);
-    const cb_info = @typeInfo(CallbackType).@"fn";
-    const ReturnType = cb_info.return_type orelse
+    const callback_info = @typeInfo(CallbackType).@"fn";
+    const ReturnType = callback_info.return_type orelse
         @compileError("Closure callback must have an explicit return type (use void if none)");
     const ActualReturnType = Introspect.unwrapErrorUnion(ReturnType);
 
-    const has_context = comptime cb_info.params.len > 0 and
-        cb_info.params[0].type != null and
-        cb_info.params[0].type.? == *Context;
+    const has_context = comptime callback_info.params.len > 0 and
+        callback_info.params[0].type != null and
+        callback_info.params[0].type.? == *Context;
     const upvalue_param_index: usize = if (has_context) 1 else 0;
 
-    comptime validateClosureCallback(T, cb_info, has_context);
-    comptime validateVarArgs(cb_info);
+    comptime validateClosureCallback(T, callback_info, has_context);
+    comptime validateVarArgs(callback_info);
+    comptime validateContextPosition(callback_info);
 
     const gc_methods = if (gc == null or gc == void) .{} else .{ .__gc = gc };
 
@@ -211,13 +228,12 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
         pub const EncodeHook: ?HookTypes.EncodeHookType(T, void) = null;
         pub const DecodeHook: ?HookTypes.DecodeHookType(T) = null;
 
-        pub const description: []const u8 = options.description;
-        pub const args: []const ArgInfo = options.args;
-        pub const parse_err_hook: ?fn (*Context, *const Tracing.Trace) void = options.parse_err_hook;
-        const decode_depth = Tracing.maxDecodeDepth(decodedParameterTypes());
+        const DecodeDepth = Tracing.maxDecodeDepth(decodedParameterTypes());
 
-        const __ZuaFnTypeInfo = cb_info;
-        const __ZuaNativeReturnType = ActualReturnType;
+        pub const Config = struct {
+            pub const FnTypeInfo = callback_info;
+            pub const NativeReturnType = ActualReturnType;
+        };
 
         pub fn trampoline() lua.CFunction {
             return struct {
@@ -228,7 +244,7 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
                         return lua.raiseError(state);
                     };
                     var ctx = Context.init(vm);
-                    var segs: [decode_depth]Tracing.Segment = @splat(.empty);
+                    var segs: [DecodeDepth]Tracing.Segment = @splat(.empty);
                     var decode_err: Tracing.DecodeError = .{ .tag = .custom };
                     const trace = Tracing.Trace{ .path = &segs, .deep = 0, .err = &decode_err };
                     execute(&ctx, trace) catch |err| {
@@ -252,15 +268,15 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
         fn decodeArgs(ctx: *Context, trace: Tracing.Trace) !Decoder.ParseResult(decodedParameterTypes()) {
             const types = comptime decodedParameterTypes();
             const total = lua.getTop(ctx.state.luaState);
-            const effective_count: lua.StackCount = if (comptime hasVarArgs(cb_info))
+            const effective_count: lua.StackCount = if (comptime hasVarArgs(callback_info))
                 @min(total, @as(lua.StackCount, @intCast(decodedParameterCount())))
             else
                 total;
             return Decoder.parseArgsDepth(ctx, 1, effective_count, types, trace) catch {
-                if (parse_err_hook) |hook| {
+                if (Options.parse_err_hook) |hook| {
                     hook(ctx, &trace);
                 } else {
-                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, args) catch "";
+                    const fmt = Tracing.formatDecodePathArg(ctx.arena(), trace.path, Options.args) catch "";
                     const err_msg = trace.err.format(ctx.arena()) catch "decode failed";
                     ctx.err = if (fmt.len > 0)
                         std.fmt.allocPrint(ctx.arena(), "{s}: {s}", .{ fmt, err_msg }) catch err_msg
@@ -277,19 +293,20 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
             if (comptime has_context) call_args[0] = ctx;
             const raw_ptr = lua.toUserdata(ctx.state.luaState, lua.upvalueIndex(1)) orelse
                 @panic("closure upvalue 1 is nil, capture was not pushed");
-            const UpvalueParam = comptime cb_info.params[upvalue_param_index].type.?;
+            const UpvalueParam = comptime callback_info.params[upvalue_param_index].type.?;
             if (comptime Marker.isClosureWrapper(UpvalueParam)) {
+                const guard_ptr = try ObjectGuard.ObjectGuard(T).from(ctx, raw_ptr);
                 lua.pushValue(ctx.state.luaState, lua.upvalueIndex(1));
                 const uv = UpValue.fromStack(ctx.state, -1, comptime ShapeData.getShape(T).trampoline());
-                call_args[comptime upvalue_param_index] = UpvalueParam{ .handle = uv };
+                call_args[comptime upvalue_param_index] = UpvalueParam{ .handle = uv, .ptr = .new(guard_ptr) };
             } else {
-                call_args[comptime upvalue_param_index] = @ptrCast(@alignCast(raw_ptr));
+                call_args[comptime upvalue_param_index] = try ObjectGuard.ObjectGuard(T).from(ctx, raw_ptr);
             }
             inline for (types, 0..) |_, i| {
                 call_args[comptime @as(usize, @intFromBool(has_context)) + 1 + i] = decoded[i];
             }
-            if (comptime hasVarArgs(cb_info)) {
-                call_args[cb_info.params.len - 1] = try buildVarArgsFor(ctx, cb_info, decodedParameterCount());
+            if (comptime hasVarArgs(callback_info)) {
+                call_args[callback_info.params.len - 1] = try buildVarArgsFor(ctx, callback_info, decodedParameterCount());
             }
             const raw = @call(.auto, callback, call_args);
             return if (comptime Introspect.isErrorUnion(ReturnType)) try raw else raw;
@@ -302,10 +319,10 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
         pub fn decodedParameterTypes() [decodedParameterCount()]type {
             comptime var types: [decodedParameterCount()]type = undefined;
             comptime var out: usize = 0;
-            inline for (cb_info.params, 0..) |param, i| {
+            inline for (callback_info.params, 0..) |param, i| {
                 if (comptime has_context and i == 0) continue;
                 if (comptime i == upvalue_param_index) continue;
-                if (comptime hasVarArgs(cb_info) and i == cb_info.params.len - 1) continue;
+                if (comptime hasVarArgs(callback_info) and i == callback_info.params.len - 1) continue;
                 types[out] = param.type orelse @compileError("closure param #{d} has no type");
                 out += 1;
             }
@@ -313,8 +330,8 @@ pub fn ShapeClosure(comptime T: type, comptime callback: anytype, comptime gc: a
         }
 
         fn decodedParameterCount() usize {
-            const base: usize = cb_info.params.len - (@as(usize, @intFromBool(has_context)) + 1);
-            return if (comptime hasVarArgs(cb_info)) base - 1 else base;
+            const base: usize = callback_info.params.len - (@as(usize, @intFromBool(has_context)) + 1);
+            return if (comptime hasVarArgs(callback_info)) base - 1 else base;
         }
     };
 }
@@ -344,6 +361,15 @@ fn validateVarArgs(comptime info: std.builtin.Type.Fn) void {
         const T = param.type orelse continue;
         if (T == Mapper.VarArgs and i != info.params.len - 1) {
             @compileError(std.fmt.comptimePrint("VarArgs must be the last parameter of the zig native function, found at position #{d}", .{i}));
+        }
+    }
+}
+
+fn validateContextPosition(comptime fn_info: std.builtin.Type.Fn) void {
+    inline for (fn_info.params, 0..) |param, i| {
+        const T = param.type orelse continue;
+        if (T == *Context and i != 0) {
+            @compileError(std.fmt.comptimePrint("*Context must be the first parameter, found at position #{d}", .{i}));
         }
     }
 }
@@ -396,7 +422,7 @@ pub fn nativeReturnType(comptime T: type) type {
     if (comptime !isCallable(T)) {
         @compileError(@typeName(T) ++ " is not a NativeFn/Closure wrapper, cannot query nativeReturnType");
     }
-    return Shape.__ZuaNativeReturnType;
+    return Shape.Config.NativeReturnType;
 }
 
 pub fn fnTypeInfo(comptime T: type) std.builtin.Type.Fn {
@@ -404,7 +430,7 @@ pub fn fnTypeInfo(comptime T: type) std.builtin.Type.Fn {
     if (comptime !isCallable(T)) {
         @compileError(@typeName(T) ++ " is not a NativeFn/Closure wrapper, cannot query fnTypeInfo");
     }
-    return Shape.__ZuaFnTypeInfo;
+    return Shape.Config.FnTypeInfo;
 }
 
 test {

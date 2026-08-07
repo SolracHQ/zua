@@ -1,8 +1,7 @@
 //! Lua stub emission functions.
 //!
-//! Converts collected doc entries into Lua-language-server annotation strings
-//! (`---@class`, `---@field`, `---@param`, `---@return`,
-//! `---@alias`, `---|`). Each emitter appends to a shared `ArrayList(u8)`.
+//! Converts collected doc entries into Lua-language-server annotation strings (`---@class`, `---@field`, `---@param`,
+//! `---@return`, `---@alias`, `---|`). Each emitter appends to a shared `ArrayList(u8)`.
 
 const std = @import("std");
 const Types = @import("types.zig");
@@ -18,8 +17,7 @@ pub fn appendFmt(allocator: std.mem.Allocator, out: *std.ArrayList(u8), comptime
     try out.appendSlice(allocator, text);
 }
 
-/// Emits a description as one or more `-- {line}` lines.
-/// Newlines in the description become separate comment lines.
+/// Emits a description as one or more `-- {line}` lines. Newlines in the description become separate comment lines.
 fn emitDescription(allocator: std.mem.Allocator, out: *std.ArrayList(u8), description: []const u8) !void {
     if (description.len == 0) return;
     var it = std.mem.splitScalar(u8, description, '\n');
@@ -28,8 +26,8 @@ fn emitDescription(allocator: std.mem.Allocator, out: *std.ArrayList(u8), descri
     }
 }
 
-/// Emits a Lua table stub as an `---@class` declaration with `---@field` lines.
-/// The class binding always emits `local Name = {}`.
+/// Emits a Lua table stub as an `---@class` declaration with `---@field` lines. The class binding always emits `local Name
+/// = {}`.
 pub fn emitTableStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Table) !void {
     try appendFmt(allocator, out, "---@class {s}\n", .{doc.name});
     for (doc.operators.items) |op| {
@@ -52,8 +50,8 @@ pub fn emitTableStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc:
     try appendFmt(allocator, out, "local {s} = {{}}\n", .{doc.name});
 }
 
-/// Emits an object stub as an `---@class` declaration with `---@field`
-/// annotations for `Shape.Modifier.Field` / `Shape.Modifier.Value` marked fields.
+/// Emits an object stub as an `---@class` declaration with `---@field` annotations for `Shape.Modifier.Field` /
+/// `Shape.Modifier.Value` marked fields.
 pub fn emitObjectStub(allocator: std.mem.Allocator, out: *std.ArrayList(u8), doc: Object) !void {
     try emitDescription(allocator, out, doc.description);
     try appendFmt(allocator, out, "---@class {s}\n", .{doc.name});

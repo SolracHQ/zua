@@ -3,7 +3,9 @@ const testing = std.testing;
 const helpers = @import("../helpers.zig");
 const zua = @import("../../root.zig");
 
-fn increment(x: i32) i32 { return x + 1; }
+fn increment(x: i32) i32 {
+    return x + 1;
+}
 
 test "Any.Function.create and ownership lifecycle" {
     var test_env = try helpers.setup();

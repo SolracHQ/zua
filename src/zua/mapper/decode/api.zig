@@ -1,18 +1,14 @@
 //! Converts Lua values into typed Zig values.
 //!
-//! Call `pop` to read and consume a value from the top of the Lua stack,
-//! `decode` to convert a `Primitive` you already hold, or `decodeType` to
-//! map a Lua table's fields onto a Zig struct or union by name. Use
-//! `parseTuple` when a Lua call returns multiple values.
+//! Call `pop` to read and consume a value from the top of the Lua stack, `decode` to convert a `Primitive` you already
+//! hold, or `decodeType` to map a Lua table's fields onto a Zig struct or union by name. Use `parseTuple` when a Lua call
+//! returns multiple values.
 //!
-//! Every decode function reports structured errors with path traces
-//! that point to the exact field or index that failed.
+//! Every decode function reports structured errors with path traces that point to the exact field or index that failed.
 //!
-//! `pop` and `popResult` own any handler types in the returned value
-//! before removing the Lua stack slot. Other functions (`decode`,
-//! `decodeType`, `parseTuple`) return borrowed handles that stay valid
-//! only during the caller's stack frame. Call `.owned()` first if you
-//! need to keep them.
+//! `pop` and `popResult` own any handler types in the returned value before removing the Lua stack slot. Other functions
+//! (`decode`, `decodeType`, `parseTuple`) return borrowed handles that stay valid only during the caller's stack frame.
+//! Call `.owned()` first if you need to keep them.
 
 const lua = @import("../../../lua/lua.zig");
 const Context = @import("../../context.zig");
@@ -24,8 +20,8 @@ pub const Tracing = @import("tracing.zig");
 pub const Internals = @import("internals.zig");
 pub const ParseResult = Internals.ParseResult;
 
-/// Tagged union that carries either a decoded value or a structured error
-/// trace pointing to the exact field or index that failed.
+/// Tagged union that carries either a decoded value or a structured error trace pointing to the exact field or index that
+/// failed.
 pub fn DecodeResult(comptime T: type) type {
     const depth = Tracing.maxDecodeDepth(T);
     return union(enum) {
@@ -52,8 +48,7 @@ fn formatTrace(arena: *Context, path: []const Tracing.Segment, err: Tracing.Deco
 
 /// Parses a sequence of Lua stack values into a typed Zig tuple.
 ///
-/// Supports optional trailing arguments. Used by `Executor.eval` and
-/// `Function.call` to decode return values.
+/// Supports optional trailing arguments. Used by `Executor.eval` and `Function.call` to decode return values.
 pub fn parseTuple(
     ctx: *Context,
     start_index: lua.StackIndex,
@@ -70,9 +65,8 @@ pub fn parseTuple(
 
 /// Reads a value from the top of the Lua stack as type `T` and pops it.
 ///
-/// Any handler types (`Table`, `Function`, `Userdata`) embedded in the
-/// returned value are converted to owned (registry) handles before the
-/// stack slot is removed. Call `.release()` on them when you are done.
+/// Any handler types (`Table`, `Function`, `Userdata`) embedded in the returned value are converted to owned (registry)
+/// handles before the stack slot is removed. Call `.release()` on them when you are done.
 pub fn pop(ctx: *Context, comptime T: type) !T {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -87,9 +81,8 @@ pub fn pop(ctx: *Context, comptime T: type) !T {
 
 /// Decodes a Primitive into a Zig type `T`.
 ///
-/// This is the core decode operation. Given a Primitive, decode it as T.
-/// Does not touch the Lua stack. Use `pop` to read and remove a value from
-/// the stack, use `decodeType` when you have a Lua table handle.
+/// This is the core decode operation. Given a Primitive, decode it as T. Does not touch the Lua stack. Use `pop` to read
+/// and remove a value from the stack, use `decodeType` when you have a Lua table handle.
 pub fn decode(ctx: *Context, prim: Primitive, comptime T: type) !T {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -101,9 +94,8 @@ pub fn decode(ctx: *Context, prim: Primitive, comptime T: type) !T {
 
 /// Decodes a Lua table into a Zig struct/union/enum by field mapping.
 ///
-/// Reads each field from the table using the type's `ZUA_SHAPE` strategy.
-/// Struct fields use their field names as keys. Unions match the active variant.
-/// Fields with defaults preserve Lua's missing-key semantics.
+/// Reads each field from the table using the type's `ZUA_SHAPE` strategy. Struct fields use their field names as keys.
+/// Unions match the active variant. Fields with defaults preserve Lua's missing-key semantics.
 pub fn decodeType(ctx: *Context, table: Table, comptime T: type) !T {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -113,8 +105,8 @@ pub fn decodeType(ctx: *Context, table: Table, comptime T: type) !T {
     };
 }
 
-/// Decodes a Primitive as `T`, returning a tagged union with the value
-/// or structured error information including the decode trace.
+/// Decodes a Primitive as `T`, returning a tagged union with the value or structured error information including the decode
+/// trace.
 pub fn decodeResult(ctx: *Context, prim: Primitive, comptime T: type) DecodeResult(T) {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -123,8 +115,8 @@ pub fn decodeResult(ctx: *Context, prim: Primitive, comptime T: type) DecodeResu
     };
 }
 
-/// Decodes a Lua table as `T`, returning a tagged union with the value
-/// or structured error information including the decode trace.
+/// Decodes a Lua table as `T`, returning a tagged union with the value or structured error information including the decode
+/// trace.
 pub fn decodeTypeResult(ctx: *Context, table: Table, comptime T: type) DecodeResult(T) {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -133,12 +125,11 @@ pub fn decodeTypeResult(ctx: *Context, table: Table, comptime T: type) DecodeRes
     };
 }
 
-/// Pops a value from the stack as `T`, returning a tagged union with
-/// the value or structured error information including the decode trace.
-/// The Lua stack slot is always removed, even on failure.
+/// Pops a value from the stack as `T`, returning a tagged union with the value or structured error information including
+/// the decode trace. The Lua stack slot is always removed, even on failure.
 ///
-/// On success any handler types embedded in the value are converted to
-/// owned handles. Call `.release()` on them when you are done.
+/// On success any handler types embedded in the value are converted to owned handles. Call `.release()` on them when you
+/// are done.
 pub fn popResult(ctx: *Context, comptime T: type) DecodeResult(T) {
     var arena = makeTrace(T);
     const trace = Tracing.Trace{ .path = &arena.path, .deep = 0, .err = &arena.err };
@@ -152,4 +143,3 @@ pub fn popResult(ctx: *Context, comptime T: type) DecodeResult(T) {
 }
 
 const std = @import("std");
-

@@ -1,15 +1,11 @@
 //! Declares how a Zig type maps to its Lua representation.
 //!
-//! Attach a `pub const ZUA_SHAPE` to your type using one of the
-//! constructors here. Each constructor picks a strategy: table,
-//! alias, typed alias, object, ptr, or closure.
+//! Attach a `pub const ZUA_SHAPE` to your type using one of the constructors here. Each constructor picks a strategy:
+//! table, alias, typed alias, object, ptr, or closure.
 //!
-//! When no `ZUA_SHAPE` is present, the encoder falls back to a
-//! default strategy based on the Zig type: structs become tables,
-//! enums become aliases, tagged unions become typed aliases, and
-//! untagged unions and opaque types become objects. Attach a shape
-//! when you need to override that default or add methods and
-//! lifecycle hooks.
+//! When no `ZUA_SHAPE` is present, the encoder falls back to a default strategy based on the Zig type: structs become
+//! tables, enums become aliases, tagged unions become typed aliases, and untagged unions and opaque types become objects.
+//! Attach a shape when you need to override that default or add methods and lifecycle hooks.
 
 const std = @import("std");
 const Context = @import("../context.zig");
@@ -26,9 +22,10 @@ pub const Modifier = @import("modifier.zig");
 
 /// Declare `T` as an `.object` shape.
 ///
-/// Object types are represented as full userdata in Lua and expose
-/// methods through a metatable. Use this for Zig values that need
-/// identity, mutability, and controlled behavior from Lua.
+/// Object types are represented as full userdata in Lua and expose methods through a metatable. Use this for Zig values
+/// that need identity, mutability, and controlled behavior from Lua.
+///
+/// Methods accept bare functions (auto-wrapped as methods of `T`) or `Shape.Modifier.Method(func, opts)`.
 ///
 /// Example:
 /// ```zig
@@ -47,14 +44,16 @@ pub inline fn Object(comptime T: type, comptime methods: anytype, comptime opts:
     comptime Internals.Assertions.assertContainerType(T);
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as a `.table` shape.
 ///
-/// Table types are represented as Lua tables with fields mapped from
-/// Zig struct members. Only struct types can use this strategy. For
-/// tagged unions see `TypedAlias`, for enums see `Alias`.
+/// Table types are represented as Lua tables with fields mapped from Zig struct members. Only struct types can use this
+/// strategy. For tagged unions see `TypedAlias`, for enums see `Alias`.
+///
+/// Methods accept bare functions (auto-wrapped as methods of `T`) or `Shape.Modifier.Method(func, opts)`.
 ///
 /// Example:
 /// ```zig
@@ -77,13 +76,14 @@ pub inline fn Table(comptime T: type, comptime methods: anytype, comptime opts: 
     }
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .table, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .table, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as a `.ptr` shape.
 ///
-/// Ptr types are represented as Lua light userdata, with no metatable or
-/// field access. Use this for opaque handles that Lua should not inspect.
+/// Ptr types are represented as Lua light userdata, with no metatable or field access. Use this for opaque handles that Lua
+/// should not inspect.
 pub inline fn Ptr(comptime T: type, comptime opts: Options.PtrOptions) type {
     comptime Internals.Assertions.assertContainerType(T);
     return comptime Internals.ShapeData.Shape(T, void, .ptr, null, null, null, opts, null);
@@ -91,16 +91,15 @@ pub inline fn Ptr(comptime T: type, comptime opts: Options.PtrOptions) type {
 
 /// Declare `T` as a callable closure shape.
 ///
-/// The struct is stored as the closure's captured state. Each call from
-/// Lua invokes `callback` with `*T` as the first parameter (or second
-/// if `*Context` comes first). Remaining parameters are decoded from Lua.
+/// The struct is stored as the closure's captured state. Each call from Lua invokes `callback` with `*T` as the first
+/// parameter (or second if `*Context` comes first). Remaining parameters are decoded from Lua.
 ///
 /// Arguments:
 /// - T: The struct type that holds the closure state.
 /// - callback: A function `fn (*T, args...)` or `fn (*Context, *T, args...)`.
 /// - gc: Optional cleanup. Pass `null` or `void` for none, or a
 ///       `fn (*Context, *T) void` that follows the normal method path.
-/// - options: `FnOptions` with optional `description`, `args`.
+/// - options: `Options` with optional `description`, `args`.
 pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc: anytype, comptime opts: Options.Fn) type {
     comptime Internals.Assertions.assertContainerType(T);
     if (comptime @typeInfo(T) != .@"struct")
@@ -110,39 +109,34 @@ pub inline fn Closure(comptime T: type, comptime callback: anytype, comptime gc:
 
 /// Declare `T` as a string-backed alias (enum with string representation).
 ///
-/// Attaches encode and decode hooks so the enum is pushed as a Lua string
-/// and parsed from string values.
+/// Attaches encode and decode hooks so the enum is pushed as a Lua string and parsed from string values.
 ///
 /// Example:
 /// ```zig
 /// const Priority = enum {
-///     pub const ZUA_SHAPE = zua.Shape.StrAlias(Priority, .{}, .{
+///     pub const ZUA_SHAPE = zua.Shape.StrAlias(Priority, .{
 ///         .name = "Priority",
 ///         .description = "Task priority level.",
 ///     });
 ///     low, normal, high
 /// };
 /// ```
-pub inline fn StrAlias(comptime T: type, comptime methods: anytype, comptime opts: Options.AliasOptions(T)) type {
+pub inline fn StrAlias(comptime T: type, comptime opts: Options.AliasOptions(T)) type {
     if (comptime @typeInfo(T) != .@"enum")
         @compileError("StrAlias requires an enum type, got " ++ @typeName(T));
-    comptime Internals.Assertions.assertMethodsIsStruct(methods);
-    comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, []const u8, .alias, Internals.Helpers.strEnumEncode(T), Internals.Helpers.strEnumDecode(T), methods, opts, null);
+    return comptime Internals.ShapeData.Shape(T, []const u8, .alias, Internals.Helpers.strEnumEncode(T), Internals.Helpers.strEnumDecode(T), null, opts, null);
 }
 
 /// Declare `T` as a list-type `.object` shape.
 ///
-/// This builds a userdata-backed list object that supports Lua indexing,
-/// length queries, and iterator semantics. The `getElements` accessor is
-/// used to derive element values and implement the generated methods:
-/// `get`, `__index`, `__len`, and `iter`.
+/// This builds a userdata-backed list object that supports Lua indexing, length queries, and iterator semantics. The
+/// `getElements` accessor is used to derive element values and implement the generated methods: `get`, `__index`, `__len`,
+/// and `iter`.
 ///
-/// User-provided `methods` are merged with the generated list methods, and
-/// compile-time collisions are rejected so generated names stay stable.
+/// User-provided `methods` are merged with the generated list methods, and compile-time collisions are rejected so
+/// generated names stay stable.
 ///
-/// `getElements` must be a comptime function taking `*T` and returning a
-/// slice of element values.
+/// `getElements` must be a comptime function taking `*T` and returning a slice of element values.
 ///
 /// Example:
 /// ```zig
@@ -165,39 +159,38 @@ pub inline fn List(comptime T: type, comptime getElements: anytype, comptime met
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
     comptime Internals.Assertions.assertNoListCollisions(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, Internals.Helpers.mergeMethodSets(Internals.Helpers.generateListMethodsSet(T, getElements), methods), opts, null);
+    const merged = comptime Internals.Helpers.mergeMethodSets(Internals.Helpers.generateListMethodsSet(T, getElements), methods);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, merged);
+    return comptime Internals.ShapeData.Shape(T, void, .object, null, null, wrapped, opts, null);
 }
 
 /// Declare `T` as an alias (enum with integer representation).
 ///
-/// This is the default shape for enums. Each variant maps to its integer
-/// tag value. Use `StrAlias` to push enums as strings instead.
+/// This is the default shape for enums. Each variant maps to its integer tag value. Use `StrAlias` to push enums as strings
+/// instead.
 ///
 /// Example:
 /// ```zig
 /// const Color = enum { red, green, blue };
 /// const MyColor = enum {
-///     pub const ZUA_SHAPE = zua.Shape.Alias(MyColor, .{}, .{
+///     pub const ZUA_SHAPE = zua.Shape.Alias(MyColor, .{
 ///         .name = "MyColor",
 ///         .description = "A color enum with a custom alias.",
 ///     });
 ///     red, green, blue
 /// };
 /// ```
-pub inline fn Alias(comptime T: type, comptime methods: anytype, comptime opts: Options.AliasOptions(T)) type {
+pub inline fn Alias(comptime T: type, comptime opts: Options.AliasOptions(T)) type {
     comptime {
         if (@typeInfo(T) != .@"enum")
             @compileError(@typeName(T) ++ " must be an enum to use Alias strategy");
     }
-    comptime Internals.Assertions.assertMethodsIsStruct(methods);
-    comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .alias, null, null, methods, opts, null);
+    return comptime Internals.ShapeData.Shape(T, void, .alias, null, null, null, opts, null);
 }
 
 /// Declare `T` as a typed alias (tagged union).
 ///
-/// Tagged unions are represented as Lua tables with a single
-/// variant-name key. Use this for discriminated union types where
+/// Tagged unions are represented as Lua tables with a single variant-name key. Use this for discriminated union types where
 /// each variant carries typed payload data.
 ///
 /// Example:
@@ -230,20 +223,18 @@ pub inline fn TypedAlias(comptime T: type, comptime methods: anytype, comptime o
     }
     comptime Internals.Assertions.assertMethodsIsStruct(methods);
     comptime Internals.Assertions.assertValidMethods(methods);
-    return comptime Internals.ShapeData.Shape(T, void, .typed_alias, null, null, methods, opts, null);
+    const wrapped = comptime Internals.Helpers.wrapMethods(T, methods);
+    return comptime Internals.ShapeData.Shape(T, void, .typed_alias, null, null, wrapped, opts, null);
 }
 
 /// Wraps a Zig function so it can be called from Lua.
 ///
-/// `Shape.Fn(fn, options)` returns a type. The type IS the value. Assign
-/// it directly to a struct field or pass it to `addBinding` without
-/// creating an instance.
+/// `Shape.Fn(fn, options)` returns a type. The type IS the value. Assign it directly to a struct field or pass it to
+/// `addBinding` without creating an instance.
 ///
-/// The wrapper auto-detects `*Context` as the first parameter and injects
-/// the current call context. Parameters after context (or the first param
-/// if context is absent) are decoded from Lua arguments in order. VarArgs
-/// as the last parameter captures remaining Lua values. The return value
-/// is pushed back to Lua: single values directly, tuples as multiple
+/// The wrapper auto-detects `*Context` as the first parameter and injects the current call context. Parameters after
+/// context (or the first param if context is absent) are decoded from Lua arguments in order. VarArgs as the last parameter
+/// captures remaining Lua values. The return value is pushed back to Lua: single values directly, tuples as multiple
 /// returns, `void` as no return.
 ///
 /// Example:
@@ -263,7 +254,7 @@ pub fn Fn(comptime function: anytype, comptime opts: Options.Fn) type {
     const has_context = comptime fn_info.params.len > 0 and
         fn_info.params[0].type != null and
         fn_info.params[0].type.? == *Context;
-    return Internals.Trampoline.ShapeFn(function, has_context, opts);
+    return Internals.Trampoline.ShapeFn(function, opts, .{ .has_context = has_context });
 }
 
 test {

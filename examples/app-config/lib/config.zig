@@ -34,7 +34,7 @@ pub const Address = struct {
                 const host = try std.fmt.allocPrint(ctx.arena(), "{d}.{d}.{d}.{d}", .{ parts[0], parts[1], parts[2], parts[3] });
                 return Address{ .host = host, .port = 8080 };
             },
-            else => return ctx.failTyped(?Address, "expected string or table of octets for address"),
+            else => return ctx.fail(?Address, error.WrongType, "expected string or table of octets for address", .{}),
         };
     }
 };

@@ -1,9 +1,8 @@
 //! Zig-friendly Lua 5.4 wrapper over the system C headers.
 //!
-//! This module stays close to Lua's C API, but smooths over the parts that are
-//! awkward from Zig: integer-as-boolean results become `bool`, a few common C
-//! types get semantic aliases, constants follow Zig's constant naming style, and
-//! the public surface is documented for LSP hover.
+//! This module stays close to Lua's C API, but smooths over the parts that are awkward from Zig: integer-as-boolean results
+//! become `bool`, a few common C types get semantic aliases, constants follow Zig's constant naming style, and the public
+//! surface is documented for LSP hover.
 const std = @import("std");
 
 pub const lua_c = @import("lua");
@@ -409,17 +408,15 @@ pub fn pushCFunction(state: *State, function: CFunction) void {
 
 /// Pushes a C closure onto the stack.
 ///
-/// Pops `upvalue_count` values from the stack and bundles them as upvalues of
-/// the new closure. Inside the trampoline, use `upvalueIndex` to get the stack
-/// pseudo-index for each upvalue.
+/// Pops `upvalue_count` values from the stack and bundles them as upvalues of the new closure. Inside the trampoline, use
+/// `upvalueIndex` to get the stack pseudo-index for each upvalue.
 pub fn pushCClosure(state: *State, function: CFunction, upvalue_count: c_int) void {
     lua_c.lua_pushcclosure(state, function, upvalue_count);
 }
 
 /// Returns the pseudo-index for upvalue `n` of the currently running closure.
 ///
-/// `n` is 1-based: upvalue 1 is the first value that was bundled when the
-/// closure was created with `pushCClosure`.
+/// `n` is 1-based: upvalue 1 is the first value that was bundled when the closure was created with `pushCClosure`.
 pub fn upvalueIndex(n: c_int) StackIndex {
     return lua_c.lua_upvalueindex(n);
 }
@@ -458,8 +455,8 @@ pub fn toNumber(state: *State, index: StackIndex) ?Number {
 
 /// Returns a borrowed Lua string slice for the value at `index`.
 ///
-/// The returned memory is owned by Lua and must not outlive the underlying Lua
-/// value or the state that holds it on the stack.
+/// The returned memory is owned by Lua and must not outlive the underlying Lua value or the state that holds it on the
+/// stack.
 pub fn toString(state: *State, index: StackIndex) ?[:0]const u8 {
     var len: usize = 0;
     const ptr = lua_c.lua_tolstring(state, index, &len) orelse return null;
@@ -468,8 +465,7 @@ pub fn toString(state: *State, index: StackIndex) ?[:0]const u8 {
 
 /// Coerces the value at `index` to a display string and pushes that string.
 ///
-/// The returned slice is borrowed from Lua and remains valid while the pushed
-/// string remains on the stack.
+/// The returned slice is borrowed from Lua and remains valid while the pushed string remains on the stack.
 pub fn toDisplayString(state: *State, index: StackIndex) ?[]const u8 {
     var len: usize = 0;
     const ptr = lua_c.luaL_tolstring(state, index, &len) orelse return null;

@@ -1,13 +1,11 @@
 //! Generates Lua annotation stubs for Zig types exposed through zua.
 //!
-//! Produces `---@meta` stubs that Lua language servers consume so users
-//! get autocompletion and type checking on their Lua code that calls
-//! into zua-wrapped APIs. Use `generateGlobals` for a full module of
-//! globals or `generateModule` for a single value as a require-able
-//! module.
+//! Produces `---@meta` stubs that Lua language servers consume so users get autocompletion and type checking on their Lua
+//! code that calls into zua-wrapped APIs. Use `generateGlobals` for a full module of globals or `generateModule` for a
+//! single value as a require-able module.
 //!
-//! Inside docs hooks you receive a `*Generator` and push entries using
-//! `Generator.add`, `addBinding`, and the `Entry` namespace types.
+//! Inside docs hooks you receive a `*Generator` and push entries using `Generator.add`, `addBinding`, and the `Entry`
+//! namespace types.
 
 const std = @import("std");
 const ShapeData = @import("../shape/shape_data.zig");
@@ -21,10 +19,8 @@ pub const Internals = @import("internals.zig");
 
 /// Generates Lua annotation stubs for all entries in the globals struct.
 ///
-/// Walks the fields of `globals` and calls `addBinding` for each one.
-/// `Generator.addBinding` handles types, native function wrappers,
-/// closures, and plain functions. Nested struct literals are recursed
-/// into as sub-modules.
+/// Walks the fields of `globals` and calls `addBinding` for each one. `Generator.addBinding` handles types, native function
+/// wrappers, closures, and plain functions. Nested struct literals are recursed into as sub-modules.
 pub fn generateGlobals(allocator: std.mem.Allocator, comptime globals: anytype) ![]const u8 {
     var gen = Generator.init(allocator);
     defer gen.deinit();
@@ -44,9 +40,8 @@ pub fn generateGlobals(allocator: std.mem.Allocator, comptime globals: anytype) 
 
 /// Generates Lua annotation stubs for a single value as a require-able module.
 ///
-/// The value is treated as a normal table/object/alias type. Struct literal fields
-/// become opaque `---@field` annotations. The output has `---@meta <module_name>`
-/// and ends with `return TypeName`.
+/// The value is treated as a normal table/object/alias type. Struct literal fields become opaque `---@field` annotations.
+/// The output has `---@meta <module_name>` and ends with `return TypeName`.
 ///
 /// Arguments:
 /// - allocator: Allocator for the returned slice. The returned slice is heap-allocated

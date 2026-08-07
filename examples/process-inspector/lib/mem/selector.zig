@@ -59,7 +59,7 @@ fn decode(ctx: *zua.Context, primitive: zua.Mapper.Primitive) !?Selector {
         },
         .integer, .float => Selector{ .eq = primitive },
         .function => |f| Selector{ .custom = CustomFn.from(f).takeOwnership() },
-        else => ctx.failTyped(?Selector, "expected table, number, or function"),
+        else => ctx.fail(?Selector, error.WrongType, "expected table, number, or function", .{}),
     };
 }
 

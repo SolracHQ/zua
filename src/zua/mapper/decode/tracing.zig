@@ -1,13 +1,11 @@
 //! Structured path tracing for decode errors.
 //!
-//! When a decode operation fails, the trace records exactly where the failure
-//! happened (which argument, field, or index) and why (wrong type, out of
-//! range, etc.). The formatted message looks like
-//! `config.metadata.version: expected i32, got string`.
+//! When a decode operation fails, the trace records exactly where the failure happened (which argument, field, or index)
+//! and why (wrong type, out of range, etc.). The formatted message looks like `config.metadata.version: expected i32, got
+//! string`.
 //!
-//! Hook implementations receive a `Trace` and can inspect `trace.err.tag`
-//! directly instead of parsing error strings. Use `formatDecodePath` to turn
-//! the path into a readable string and `DecodeError.format` for the message.
+//! Hook implementations receive a `Trace` and can inspect `trace.err.tag` directly instead of parsing error strings. Use
+//! `formatDecodePath` to turn the path into a readable string and `DecodeError.format` for the message.
 
 const std = @import("std");
 const Internals = @import("../internals.zig");
@@ -15,12 +13,10 @@ const ArgInfo = @import("../../shape/trampoline.zig").ArgInfo;
 const PrimitiveTag = @import("../api.zig").PrimitiveTag;
 const ShapeData = @import("../../shape/shape_data.zig");
 
-
 /// One step in a decode trace path.
 ///
-/// A path is an array of segments terminated by `empty`. The formatter
-/// walks the array until it hits `empty` and joins the segments into a
-/// string like `arg0.metadata.version` or `config[3].name`.
+/// A path is an array of segments terminated by `empty`. The formatter walks the array until it hits `empty` and joins the
+/// segments into a string like `arg0.metadata.version` or `config[3].name`.
 ///
 /// - `arg(n)`: the n-th function parameter.
 /// - `field(name)`: a struct or union field accessed by name.
@@ -35,10 +31,9 @@ pub const Segment = union(enum) {
 
 /// Structured information about why a decode operation failed.
 ///
-/// The `tag` discriminates the failure category. Optional fields carry
-/// additional context such as the expected type name, the Lua type that
-/// was received, or a human-readable detail string. Hooks receive this
-/// struct and can branch on `.tag` instead of parsing error messages.
+/// The `tag` discriminates the failure category. Optional fields carry additional context such as the expected type name,
+/// the Lua type that was received, or a human-readable detail string. Hooks receive this struct and can branch on `.tag`
+/// instead of parsing error messages.
 pub const DecodeError = struct {
     /// The category of failure.
     tag: Tag,
@@ -109,11 +104,9 @@ pub const DecodeError = struct {
 
 /// Active decode position and error target.
 ///
-/// Carries the path buffer, the current nesting depth, and a pointer to
-/// the `DecodeError` that will be populated if decoding fails.
-/// Passed by value through the pipeline. The path slice and error pointer
-/// are shared with the original, so writes to either are visible to the
-/// caller regardless of how many times `Trace` is copied.
+/// Carries the path buffer, the current nesting depth, and a pointer to the `DecodeError` that will be populated if
+/// decoding fails. Passed by value through the pipeline. The path slice and error pointer are shared with the original, so
+/// writes to either are visible to the caller regardless of how many times `Trace` is copied.
 pub const Trace = struct {
     /// Decode path buffer shared with the original allocation.
     path: []Segment,
@@ -139,14 +132,12 @@ pub const Trace = struct {
 
 /// Maximum decode nesting depth for a type or tuple of types.
 ///
-/// Walks struct fields, union variants, and pointer types at compile time
-/// to determine the largest path that could be produced when decoding a
-/// value of the given type. The result is used to size the path buffer on
-/// the caller's stack (no heap allocation).
+/// Walks struct fields, union variants, and pointer types at compile time to determine the largest path that could be
+/// produced when decoding a value of the given type. The result is used to size the path buffer on the caller's stack (no
+/// heap allocation).
 ///
-/// Only `.table`, `.alias`, and `.typed_alias` strategy types contribute
-/// depth. `.object`, `.ptr`, `.closure`, and `.function` types
-/// are opaque to the decoder and counted as 0.
+/// Only `.table`, `.alias`, and `.typed_alias` strategy types contribute depth. `.object`, `.ptr`, `.closure`, and
+/// `.function` types are opaque to the decoder and counted as 0.
 pub fn maxDecodeDepth(comptime types: anytype) usize {
     const Ty = @TypeOf(types);
     if (Ty == type) return depthOf(types) + 1;
@@ -160,17 +151,16 @@ pub fn maxDecodeDepth(comptime types: anytype) usize {
 
 /// Formats a path array into a string like `arg0.metadata.version`.
 ///
-/// Walks `path` from the start until `.empty` and joins the human-readable
-/// form of each segment. No parameter names are substituted. Use
-/// `formatDecodePathArg` when `FnOptions.args` are available.
+/// Walks `path` from the start until `.empty` and joins the human-readable form of each segment. No parameter names are
+/// substituted. Use `formatDecodePathArg` when `FnOptions.args` are available.
 pub fn formatDecodePath(arena: std.mem.Allocator, path: []const Segment) ![]const u8 {
     return formatDecodePathArg(arena, path, null);
 }
 
 /// Formats a path array into a string, using parameter names from `args`.
 ///
-/// Like `formatDecodePath`, but replaces `arg(n)` segments with the
-/// parameter name from `args[n].name` when the name is non-empty.
+/// Like `formatDecodePath`, but replaces `arg(n)` segments with the parameter name from `args[n].name` when the name is
+/// non-empty.
 pub fn formatDecodePathArg(arena: std.mem.Allocator, path: []const Segment, args: ?[]const ArgInfo) ![]const u8 {
     var parts = std.ArrayList([]const u8).empty;
     for (path) |seg| {

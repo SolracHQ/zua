@@ -9,12 +9,16 @@ const Color = enum {
     red,
     green,
     blue,
-    pub const ZUA_SHAPE = Shape.StrAlias(Color, .{}, .{});
+    pub const ZUA_SHAPE = Shape.StrAlias(Color, .{});
 };
 
-fn returnColor() Color { return .green; }
+fn returnColor() Color {
+    return .green;
+}
 
-fn takeColor(_: *zua.Context, c: Color) []const u8 { return @tagName(c); }
+fn takeColor(_: *zua.Context, c: Color) []const u8 {
+    return @tagName(c);
+}
 
 test "StrAlias round-trips through Lua as string" {
     var test_env = try helpers.setup();
@@ -35,7 +39,7 @@ const Priority = enum(u8) {
     low = 0,
     normal = 1,
     high = 2,
-    pub const ZUA_SHAPE = Shape.Alias(Priority, .{}, .{})
+    pub const ZUA_SHAPE = Shape.Alias(Priority, .{})
         .withEncode([]const u8, encodeStr)
         .withDecode(decodeStrOrInt);
 
@@ -49,25 +53,27 @@ const Priority = enum(u8) {
                 inline for (std.meta.fields(Priority)) |field| {
                     if (std.mem.eql(u8, s, field.name)) return @field(Priority, field.name);
                 }
-                return ctx.failTyped(?Priority, "unknown priority name");
+                return ctx.fail(?Priority, error.InvalidEnumValue, "unknown priority name", .{});
             },
             .integer => |n| {
                 const byte = std.math.cast(u8, n) orelse
-                    return ctx.failTyped(?Priority, "priority out of range");
+                    return ctx.fail(?Priority, error.OutOfRange, "priority out of range", .{});
                 if (byte > @intFromEnum(Priority.high))
-                    return ctx.failTyped(?Priority, "invalid priority");
+                    return ctx.fail(?Priority, error.InvalidEnumValue, "invalid priority", .{});
                 return @enumFromInt(byte);
             },
-            else => return ctx.failTyped(?Priority, "expected string or integer"),
+            else => return ctx.fail(?Priority, error.WrongType, "expected string or integer", .{}),
         }
     }
 };
 
-fn returnPriority() Priority { return .normal; }
+fn returnPriority() Priority {
+    return .normal;
+}
 
 fn describePriority(ctx: *zua.Context, p: Priority) ![]const u8 {
     return std.fmt.allocPrint(ctx.arena(), "priority={s} ({})", .{ @tagName(p), @intFromEnum(p) }) catch
-        try ctx.failTyped([]const u8, "out of memory");
+        try ctx.fail([]const u8, error.OutOfMemory, "out of memory", .{});
 }
 
 test "Alias with custom encode/decode hooks" {
@@ -94,7 +100,9 @@ const Condition = union(enum) {
     pub const ZUA_SHAPE = Shape.TypedAlias(Condition, .{}, .{});
 };
 
-fn makeEqCondition(value: f64) Condition { return .{ .eq = value }; }
+fn makeEqCondition(value: f64) Condition {
+    return .{ .eq = value };
+}
 
 fn describeCondition(ctx: *zua.Context, cond: Condition) ![]const u8 {
     return switch (cond) {
